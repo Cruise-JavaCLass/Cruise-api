@@ -4,6 +4,7 @@
 > **Jira Tasks:**  
 > - [KAN-38](https://huytran20052022.atlassian.net/browse/KAN-38) - *Initialize Backend Project — Khởi tạo dự án backend*  
 > - [KAN-39](https://huytran20052022.atlassian.net/browse/KAN-39) - *Implement Basic Application Entry Point — Tạo điểm khởi chạy backend*  
+> - [KAN-41](https://huytran20052022.atlassian.net/browse/KAN-41) - *Configure Database Connection Settings — Thiết lập thông tin kết nối cơ sở dữ liệu*  
 
 ---
 
@@ -64,6 +65,31 @@ Sau khi khởi chạy `cruise-gateway` (Port `8080`), các endpoint sẵn sàng 
 
 ---
 
-## 5. Tài liệu đặc tả nghiệp vụ
+## 5. Cấu hình Cơ sở dữ liệu (Database Connection Settings)
+
+Hệ thống hỗ trợ cả 2 môi trường: **PostgreSQL (Production/Default)** và **H2 In-Memory (Dev/Offline fallback)**:
+
+### 5.1. PostgreSQL (Mặc định):
+* **Host:** `localhost` | **Port:** `5432`
+* **Database:** `cruise_db`
+* **Username:** `cruise_admin` | **Password:** `cruise_password`
+* **Connection Pool:** HikariCP (`maximum-pool-size: 10`, `minimum-idle: 2`)
+* **Schemas:** Tự động tạo `auth_schema`, `itinerary_schema`, `activity_schema`, `pos_schema`.
+* **Khởi chạy container PostgreSQL qua Docker Compose:**
+  ```bash
+  docker compose up -d
+  ```
+
+### 5.2. Chế độ Phát triển / Test Offline (H2 In-Memory):
+Khi chưa bật Docker PostgreSQL, bạn có thể chạy service với profile `dev`:
+```bash
+.\mvnw -pl cruise-auth-service spring-boot:run -Dspring-boot.run.profiles=dev
+```
+Console H2 truy cập tại: `http://localhost:<port>/h2-console` (JDBC URL: `jdbc:h2:mem:cruise_<service>_db`)
+
+---
+
+## 6. Tài liệu đặc tả nghiệp vụ
 Xem chi tiết toàn bộ đề bài và yêu cầu tại: [PROJECT_SPECIFICATION.md](PROJECT_SPECIFICATION.md)
+
 

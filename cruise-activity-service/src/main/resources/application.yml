@@ -4,3 +4,26 @@ server:
 spring:
   application:
     name: cruise-activity-service
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:postgres}
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:cruise_db}}
+    username: ${DB_USERNAME:cruise_admin}
+    password: ${DB_PASSWORD:cruise_password}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: ActivityHikariPool
+      minimum-idle: 2
+      maximum-pool-size: 10
+      idle-timeout: 300000
+      max-lifetime: 1800000
+      connection-timeout: 20000
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false

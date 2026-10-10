@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: cruise-postgres
+    restart: always
     environment:
       POSTGRES_USER: cruise_admin
       POSTGRES_PASSWORD: cruise_password
@@ -10,6 +11,12 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cruise_admin -d cruise_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
