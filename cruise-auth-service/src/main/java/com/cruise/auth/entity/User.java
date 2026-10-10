@@ -20,6 +20,10 @@ public class User extends BaseEntity {
     @Column(nullable = false, unique = true, length = 50)
     private String username;
 
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.WRITE_ONLY)
+    @Column(name = "password_hash", length = 100)
+    private String password;
+
     @Column(name = "full_name", nullable = false, length = 100)
     private String fullName;
 
