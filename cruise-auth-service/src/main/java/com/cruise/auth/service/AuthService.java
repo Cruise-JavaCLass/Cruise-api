@@ -1,9 +1,6 @@
 package com.cruise.auth.service;
 
-import com.cruise.auth.dto.ChangePasswordRequest;
-import com.cruise.auth.dto.LoginRequest;
-import com.cruise.auth.dto.LoginResponse;
-import com.cruise.auth.dto.VerifyPasswordRequest;
+import com.cruise.auth.dto.*;
 import com.cruise.auth.entity.User;
 import com.cruise.auth.repository.UserRepository;
 import org.springframework.stereotype.Service;
@@ -11,7 +8,10 @@ import org.springframework.stereotype.Service;
 import java.util.Optional;
 
 /**
- * Service xử lý nghiệp vụ xác thực người dùng (Login, Logout, Change Password, Verify Password, Current User)
+ * Service xử lý nghiệp vụ xác thực người dùng:
+ * - Đăng nhập, Đăng xuất, Cấp phát token (Access Token & Refresh Token)
+ * - Xác minh token (Token Introspection RFC 7662), Làm mới token (Refresh Token Rotation)
+ * - Đổi mật khẩu, Thu hồi token (Token Revocation & Blacklist)
  */
 @Service
 public class AuthService {
@@ -27,7 +27,7 @@ public class AuthService {
     }
 
     /**
-     * Xác thực thông tin đăng nhập và cấp phát JWT Access Token
+     * Xác thực thông tin đăng nhập và cấp phát cặp token (Access Token + Refresh Token)
      */
     public LoginResponse login(LoginRequest request) {
         String identifier = request.getUsernameOrEmail().trim();
@@ -56,18 +56,79 @@ public class AuthService {
             throw new IllegalArgumentException("Invalid username or password");
         }
 
-        String token = jwtService.generateToken(user);
+        TokenPair tokenPair = jwtService.generateTokenPair(user);
 
         return LoginResponse.builder()
-                .accessToken(token)
-                .tokenType("Bearer")
-                .expiresIn(jwtService.getExpirationSeconds())
+                .accessToken(tokenPair.getAccessToken())
+                .refreshToken(tokenPair.getRefreshToken())
+                .tokenType(tokenPair.getTokenType())
+                .expiresIn(tokenPair.getExpiresIn())
+                .refreshExpiresIn(tokenPair.getRefreshExpiresIn())
                 .user(user)
                 .build();
     }
 
     /**
-     * Đổi mật khẩu người dùng với cơ chế xác minh mật khẩu cũ và chính sách an toàn
+     * Làm mới Access Token sử dụng Refresh Token hợp lệ (hỗ trợ Token Rotation)
+     */
+    public LoginResponse refreshToken(RefreshTokenRequest request) {
+        String refreshToken = request.getRefreshToken();
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new IllegalArgumentException("Refresh token must not be blank");
+        }
+
+        VerifyTokenResponse verification = jwtService.introspectToken(refreshToken);
+        if (!verification.isValid()) {
+            throw new IllegalArgumentException("Invalid refresh token: " + verification.getMessage());
+        }
+
+        if (!JwtService.TOKEN_TYPE_REFRESH.equalsIgnoreCase(verification.getTokenType())) {
+            throw new IllegalArgumentException("Provided token is not a valid refresh token");
+        }
+
+        String username = verification.getUsername();
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + username));
+
+        if (!Boolean.TRUE.equals(user.getActive())) {
+            throw new IllegalStateException("Account is inactive or disabled");
+        }
+
+        // Token Rotation: Thu hồi Refresh Token cũ nhằm ngăn chặn Replay Attack
+        jwtService.invalidateToken(refreshToken);
+
+        // Phát hành cặp token mới
+        TokenPair newPair = jwtService.generateTokenPair(user);
+
+        return LoginResponse.builder()
+                .accessToken(newPair.getAccessToken())
+                .refreshToken(newPair.getRefreshToken())
+                .tokenType(newPair.getTokenType())
+                .expiresIn(newPair.getExpiresIn())
+                .refreshExpiresIn(newPair.getRefreshExpiresIn())
+                .user(user)
+                .build();
+    }
+
+    /**
+     * Xác minh và phân tích chi tiết thông tin token (Introspection)
+     */
+    public VerifyTokenResponse verifyToken(String token) {
+        return jwtService.introspectToken(token);
+    }
+
+    /**
+     * Thu hồi token (đăng xuất hoặc vô hiệu hóa theo yêu cầu)
+     */
+    public void revokeToken(RevokeTokenRequest request) {
+        if (request != null && request.getToken() != null) {
+            jwtService.invalidateToken(request.getToken());
+        }
+    }
+
+    /**
+     * Đổi mật khẩu người dùng với cơ chế xác minh mật khẩu cũ, chính sách an toàn,
+     * và tự động thu hồi toàn bộ token đã cấp trước đó (User-level revocation)
      */
     public void changePassword(String username, ChangePasswordRequest request) {
         User user = userRepository.findByUsername(username)
@@ -100,6 +161,9 @@ public class AuthService {
         String newHashedPassword = passwordService.hashPassword(request.getNewPassword());
         user.setPassword(newHashedPassword);
         userRepository.save(user);
+
+        // 5. Vô hiệu hóa toàn bộ token cũ đã cấp của người dùng để bảo mật tối đa
+        jwtService.revokeAllUserTokens(username);
     }
 
     /**
@@ -135,13 +199,26 @@ public class AuthService {
     }
 
     /**
+     * Cấp phát cặp token mới cho người dùng đã xác thực
+     */
+    public TokenPair issueTokenPair(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + username));
+        if (!Boolean.TRUE.equals(user.getActive())) {
+            throw new IllegalStateException("Account is inactive or disabled");
+        }
+        return jwtService.generateTokenPair(user);
+    }
+
+    /**
      * Lấy thông tin người dùng từ token xác thực
      */
     public Optional<User> getCurrentUser(String token) {
-        if (!jwtService.validateToken(token)) {
+        VerifyTokenResponse verification = jwtService.introspectToken(token);
+        if (!verification.isValid()) {
             return Optional.empty();
         }
-        String username = jwtService.extractUsername(token);
+        String username = verification.getUsername();
         if (username == null) {
             return Optional.empty();
         }
