@@ -5,6 +5,7 @@
 > - [KAN-38](https://huytran20052022.atlassian.net/browse/KAN-38) - *Initialize Backend Project — Khởi tạo dự án backend*  
 > - [KAN-39](https://huytran20052022.atlassian.net/browse/KAN-39) - *Implement Basic Application Entry Point — Tạo điểm khởi chạy backend*  
 > - [KAN-41](https://huytran20052022.atlassian.net/browse/KAN-41) - *Configure Database Connection Settings — Thiết lập thông tin kết nối cơ sở dữ liệu*  
+> - [KAN-51](https://huytran20052022.atlassian.net/browse/KAN-51) - *Configure Backend Testing Tools — Thiết lập công cụ kiểm thử backend*  
 
 ---
 
@@ -89,7 +90,36 @@ Console H2 truy cập tại: `http://localhost:<port>/h2-console` (JDBC URL: `jd
 
 ---
 
-## 6. Tài liệu đặc tả nghiệp vụ
+## 6. Công cụ kiểm thử tự động (Backend Testing Tools)
+
+Hệ thống được thiết lập bộ công cụ kiểm thử chuẩn doanh nghiệp cho mô hình Spring Boot Microservices:
+
+* **Testing Frameworks:**
+  * **JUnit 5 (Jupiter):** Test runner, lifecycle callbacks, assertions.
+  * **Spring Boot Test & WebMvc Test:** MockMvc, slice testing, ApplicationContext verification.
+  * **AssertJ & Hamcrest:** Fluent assertions cho API payloads.
+  * **Mockito:** Giả lập hành vi dependencies và service layer.
+* **Test Isolation Database:** H2 In-Memory Database cho test suites (chạy độc lập 100% không cần cài đặt hay bật PostgreSQL).
+* **Code Coverage:** **JaCoCo Plugin** tự động tính toán tỷ lệ bao phủ mã nguồn và xuất báo cáo HTML.
+
+### Chạy kiểm thử:
+```powershell
+# Chạy toàn bộ test suites của tất cả các microservices
+.\mvnw test
+
+# Chạy test riêng cho một module (ví dụ cruise-gateway)
+.\mvnw test -pl cruise-gateway
+
+# Đóng gói và chạy test kèm báo cáo coverage JaCoCo
+.\mvnw verify
+```
+
+Báo cáo kiểm thử độ bao phủ (Coverage Report) được xuất tại:
+`<module>/target/site/jacoco/index.html`
+
+---
+
+## 7. Tài liệu đặc tả nghiệp vụ
 Xem chi tiết toàn bộ đề bài và yêu cầu tại: [PROJECT_SPECIFICATION.md](PROJECT_SPECIFICATION.md)
 
 
