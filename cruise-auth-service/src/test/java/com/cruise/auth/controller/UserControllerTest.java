@@ -122,4 +122,16 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("User not found: unknown.user"));
     }
+
+    @Test
+    @DisplayName("Direct test for handleIllegalArgument exception handler")
+    void shouldHandleIllegalArgumentDirectly() {
+        UserController controller = new UserController(userService);
+        org.springframework.http.ResponseEntity<com.cruise.common.dto.ApiResponse<Void>> response =
+                controller.handleIllegalArgument(new IllegalArgumentException("Custom bad request message"));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                org.springframework.http.HttpStatus.BAD_REQUEST, response.getStatusCode());
+        org.junit.jupiter.api.Assertions.assertEquals(
+                "Custom bad request message", response.getBody().getMessage());
+    }
 }
