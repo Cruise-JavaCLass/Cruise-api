@@ -1,0 +1,54 @@
+name: Backend CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & Test (Java 21 / Maven)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Grant Execute Permission for Maven Wrapper
+        run: chmod +x ./mvnw
+
+      - name: Verify Build & Run All Microservice Test Suites
+        run: ./mvnw -B verify --file pom.xml
+        env:
+          CI: true
+
+      - name: Upload JaCoCo Code Coverage Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-jacoco-reports
+          path: '**/target/site/jacoco/'
+          retention-days: 14
+
+      - name: Upload Surefire Test Result XMLs
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: surefire-test-results
+          path: '**/target/surefire-reports/'
+          retention-days: 7
