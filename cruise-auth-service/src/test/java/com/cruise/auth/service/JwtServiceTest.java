@@ -228,4 +228,16 @@ class JwtServiceTest {
         String refreshToken = jwtService.generateRefreshToken(testUser);
         assertThat(jwtService.validateAccessToken(refreshToken)).isFalse();
     }
+
+    @Test
+    @DisplayName("Should clear all revocations and reset cache")
+    void shouldClearRevocations() {
+        String token = jwtService.generateAccessToken(testUser);
+        jwtService.invalidateToken(token);
+        jwtService.revokeAllUserTokens(testUser.getUsername());
+        assertThat(jwtService.isTokenInvalidated(token)).isTrue();
+
+        jwtService.clearRevocations();
+        assertThat(jwtService.isTokenInvalidated(token)).isFalse();
+    }
 }
