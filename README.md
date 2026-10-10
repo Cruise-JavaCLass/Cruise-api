@@ -1,7 +1,9 @@
 # Cruise Activity and Service Management System - Backend API
 
 > **Jira Story:** [KAN-37](https://huytran20052022.atlassian.net/browse/KAN-37)  
-> **Jira Task:** [KAN-38](https://huytran20052022.atlassian.net/browse/KAN-38) - *Initialize Backend Project — Khởi tạo dự án backend*
+> **Jira Tasks:**  
+> - [KAN-38](https://huytran20052022.atlassian.net/browse/KAN-38) - *Initialize Backend Project — Khởi tạo dự án backend*  
+> - [KAN-39](https://huytran20052022.atlassian.net/browse/KAN-39) - *Implement Basic Application Entry Point — Tạo điểm khởi chạy backend*  
 
 ---
 
@@ -51,5 +53,17 @@ Hoặc trong **VS Code**:
 
 ---
 
-## 4. Tài liệu đặc tả nghiệp vụ
+## 4. Các Endpoint kiểm tra điểm khởi chạy (Gateway Entry Points)
+
+Sau khi khởi chạy `cruise-gateway` (Port `8080`), các endpoint sẵn sàng phục vụ:
+
+* **`GET /api/ping`**: Kiểm tra kết nối nhanh (trả về `"pong"`).
+* **`GET /api/health`**: Kiểm tra trạng thái sức khỏe, thời gian hoạt động (uptime), dung lượng bộ nhớ JVM.
+* **`GET /api/info`**: Thông tin metadata hệ thống, phiên bản Java, Jira Story & Task.
+* **`GET /api/services`**: Bản đồ topology các Microservices đăng ký trong hệ sinh thái.
+
+---
+
+## 5. Tài liệu đặc tả nghiệp vụ
 Xem chi tiết toàn bộ đề bài và yêu cầu tại: [PROJECT_SPECIFICATION.md](PROJECT_SPECIFICATION.md)
+
