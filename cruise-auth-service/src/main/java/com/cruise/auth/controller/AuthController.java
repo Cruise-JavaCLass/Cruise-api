@@ -102,4 +102,57 @@ public class AuthController {
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body(ApiResponse.error("Invalid or expired session token")));
     }
+
+    /**
+     * Endpoint đổi mật khẩu người dùng (yêu cầu Authorization Header)
+     * POST /api/auth/change-password
+     */
+    @PostMapping("/change-password")
+    public ResponseEntity<ApiResponse<Void>> changePassword(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @Valid @RequestBody com.cruise.auth.dto.ChangePasswordRequest request) {
+
+        if (authService == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(ApiResponse.error("Auth service unavailable"));
+        }
+
+        if (authHeader == null || authHeader.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("Missing or invalid Authorization header"));
+        }
+
+        Optional<User> currentUser = authService.getCurrentUser(authHeader);
+        if (currentUser.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("Invalid or expired session token"));
+        }
+
+        try {
+            authService.changePassword(currentUser.get().getUsername(), request);
+            return ResponseEntity.ok(ApiResponse.ok("Password changed successfully", null));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage()));
+        } catch (IllegalStateException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(ex.getMessage()));
+        }
+    }
+
+    /**
+     * Endpoint xác minh mật khẩu của người dùng (dùng cho các hành động nhạy cảm / thanh toán)
+     * POST /api/auth/verify-password
+     */
+    @PostMapping("/verify-password")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Boolean>>> verifyPassword(
+            @Valid @RequestBody com.cruise.auth.dto.VerifyPasswordRequest request) {
+
+        if (authService == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(ApiResponse.error("Auth service unavailable"));
+        }
+
+        boolean isValid = authService.verifyPassword(request);
+        return ResponseEntity.ok(ApiResponse.ok(
+                isValid ? "Password verified successfully" : "Password verification failed",
+                java.util.Map.of("valid", isValid)
+        ));
+    }
 }

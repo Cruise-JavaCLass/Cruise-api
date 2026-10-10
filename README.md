@@ -10,6 +10,7 @@
 > - [KAN-54](https://huytran20052022.atlassian.net/browse/KAN-54) - *Configure Test Execution Commands — Thiết lập lệnh chạy test*  
 > - [KAN-57](https://huytran20052022.atlassian.net/browse/KAN-57) - *Configure Git Workflow and CI — Thiết lập quy trình Git và luồng CI*  
 > - [KAN-60](https://huytran20052022.atlassian.net/browse/KAN-60) - *Implement Login and Logout Endpoints — Tạo API đăng nhập và đăng xuất*  
+> - [KAN-61](https://huytran20052022.atlassian.net/browse/KAN-61) - *Implement Password Hashing and Verification — Xử lý mật khẩu an toàn*  
 
 ---
 
@@ -84,6 +85,20 @@ Sau khi khởi chạy `cruise-gateway` (Port `8080`), các endpoint sẵn sàng 
   * Hỗ trợ nhận token qua Header `Authorization: Bearer <token>` hoặc Request Body `{"token": "<token>"}`.
   * Token được đưa vào danh sách thu hồi (Token Invalidation Cache) để ngăn chặn tái sử dụng.
 * **`GET /api/auth/me`**: Lấy thông tin người dùng từ phiên đăng nhập hiện tại (`Authorization: Bearer <token>`).
+
+### 4.2. Xử lý Mật khẩu An toàn (Password Hashing & Verification — KAN-61):
+Hệ thống tích hợp giải pháp quản lý mật khẩu an toàn chuẩn OWASP:
+
+* **Mã hóa băm (BCrypt Hashing):** Sử dụng `BCryptPasswordEncoder` với salt rounds chuẩn, lưu trữ mật khẩu an toàn trong cơ sở dữ liệu (`password_hash`), không bao giờ lưu trữ mật khẩu dưới dạng văn bản thuần (plain text).
+* **Kiểm tra độ mạnh mật khẩu (`PasswordValidator`):**
+  * Tối thiểu 8 ký tự, tối đa 100 ký tự.
+  * Bắt buộc có: chữ in hoa (`A-Z`), chữ thường (`a-z`), số (`0-9`), ký tự đặc biệt (`!@#$%^&*...`).
+  * Tự động từ chối danh sách mật khẩu yếu thông dụng (`password`, `12345678`, `admin123`,...).
+* **Endpoints bổ sung:**
+  * **`POST /api/auth/change-password`**: Đổi mật khẩu người dùng.
+    * Yêu cầu Header `Authorization: Bearer <token>`.
+    * Kiểm tra mật khẩu cũ, đảm bảo mật khẩu mới tuân thủ chính sách và không trùng mật khẩu cũ.
+  * **`POST /api/auth/verify-password`**: Xác minh mật khẩu thô của tài khoản (dành cho các thao tác phê duyệt nhạy cảm hoặc thanh toán POS).
 
 ---
 
