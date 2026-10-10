@@ -126,3 +126,22 @@ Mỗi khi có code mới được `push` hoặc `pull_request` vào `main`, pipe
 4. Tự động tải lên artifact:
    * **Báo cáo JaCoCo coverage:** lưu 14 ngày.
    * **Báo cáo kết quả kiểm thử Surefire XML:** lưu 7 ngày khi có lỗi.
+5. **Kiểm tra SonarCloud Quality Gate:**
+   * Quét toàn bộ mã nguồn, bugs, vulnerabilities, code smells.
+   * Đọc báo cáo JaCoCo XML để tính toán code coverage.
+   * Kiểm tra tiêu chí Quality Gate (`-Dsonar.qualitygate.wait=true`). Nếu không đạt, pipeline sẽ báo đỏ và khóa nút Merge PR.
+
+---
+
+## 6. Thiết lập SonarCloud Quality Gate
+
+* **Tổ chức SonarCloud:** `cruise-javaclass`
+* **Project Key:** `Cruise-JavaCLass_Cruise-api`
+* **Secret yêu cầu trong GitHub Actions:** `SONAR_TOKEN` (trong *Settings > Secrets and variables > Actions*).
+* **Tiêu chí Quality Gate mặc định (Sonar way):**
+  * Coverage trên mã mới >= 80%.
+  * Tỷ lệ trùng lặp mã <= 3%.
+  * Xếp hạng Bảo mật (Security Rating): A.
+  * Xếp hạng Độ tin cậy (Reliability Rating): A.
+  * Xếp hạng Khả năng bảo trì (Maintainability Rating): A.
+  * 100% Security Hotspots đã được đánh giá.
