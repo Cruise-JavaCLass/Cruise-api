@@ -104,6 +104,53 @@ class AuthControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/auth/login returns 400 BAD REQUEST when username is blank")
+    void testLoginEndpoint_BlankUsername() throws Exception {
+        String jsonBody = "{\"usernameOrEmail\":\"   \",\"password\":\"Admin@1234\"}";
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /api/auth/login returns 400 BAD REQUEST when password is blank")
+    void testLoginEndpoint_BlankPassword() throws Exception {
+        String jsonBody = "{\"usernameOrEmail\":\"admin\",\"password\":\"\"}";
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /api/auth/login returns 400 BAD REQUEST when body is empty")
+    void testLoginEndpoint_EmptyBody() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /api/auth/login returns 400 BAD REQUEST on malformed JSON")
+    void testLoginEndpoint_MalformedJson() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{invalid-json"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("GET /api/auth/login returns 405 METHOD NOT ALLOWED")
+    void testLoginEndpoint_MethodNotAllowed() throws Exception {
+        mockMvc.perform(get("/api/auth/login"))
+                .andExpect(status().isMethodNotAllowed());
+    }
+
+    @Test
     @DisplayName("POST /api/auth/logout returns 200 OK")
     void testLogoutEndpoint() throws Exception {
         doNothing().when(authService).logout(any());
@@ -251,6 +298,22 @@ class AuthControllerTest {
         mockMvc.perform(post("/api/auth/logout"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    @DisplayName("POST /api/auth/logout with blank Authorization header returns 200 OK")
+    void testLogoutEndpoint_WithBlankHeader() throws Exception {
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "   "))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    @DisplayName("GET /api/auth/logout returns 405 METHOD NOT ALLOWED")
+    void testLogoutEndpoint_MethodNotAllowed() throws Exception {
+        mockMvc.perform(get("/api/auth/logout"))
+                .andExpect(status().isMethodNotAllowed());
     }
 
     @Test
