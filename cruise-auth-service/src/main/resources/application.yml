@@ -27,3 +27,12 @@ spring:
       hibernate:
         format_sql: true
     open-in-view: false
+
+jwt:
+  secret: ${JWT_SECRET:cruise-secret-key-super-secure-token-2026-auth-jwt-system}
+  issuer: ${JWT_ISSUER:cruise-auth-service}
+  expiration-millis: ${JWT_EXPIRATION_MILLIS:86400000}
+  access-token:
+    expiration-millis: ${JWT_ACCESS_EXPIRATION_MILLIS:86400000} # 24 giờ
+  refresh-token:
+    expiration-millis: ${JWT_REFRESH_EXPIRATION_MILLIS:604800000} # 7 ngày

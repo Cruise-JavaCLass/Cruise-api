@@ -11,6 +11,7 @@
 > - [KAN-57](https://huytran20052022.atlassian.net/browse/KAN-57) - *Configure Git Workflow and CI — Thiết lập quy trình Git và luồng CI*  
 > - [KAN-60](https://huytran20052022.atlassian.net/browse/KAN-60) - *Implement Login and Logout Endpoints — Tạo API đăng nhập và đăng xuất*  
 > - [KAN-61](https://huytran20052022.atlassian.net/browse/KAN-61) - *Implement Password Hashing and Verification — Xử lý mật khẩu an toàn*  
+> - [KAN-62](https://huytran20052022.atlassian.net/browse/KAN-62) - *Implement Authentication Token Handling — Phát hành và xác minh token*  
 
 ---
 
@@ -99,6 +100,27 @@ Hệ thống tích hợp giải pháp quản lý mật khẩu an toàn chuẩn O
     * Yêu cầu Header `Authorization: Bearer <token>`.
     * Kiểm tra mật khẩu cũ, đảm bảo mật khẩu mới tuân thủ chính sách và không trùng mật khẩu cũ.
   * **`POST /api/auth/verify-password`**: Xác minh mật khẩu thô của tài khoản (dành cho các thao tác phê duyệt nhạy cảm hoặc thanh toán POS).
+
+### 4.3. Quản lý và Xác minh Token (Authentication Token Handling — KAN-62):
+Hệ thống cung cấp cơ chế toàn diện về phát hành, xác minh, làm mới và thu hồi Token chuẩn bảo mật doanh nghiệp:
+
+* **Phát hành Cặp Token (Access Token & Refresh Token):**
+  * **Access Token:** JWT ngắn hạn (mặc định 24h) chứa đầy đủ claims định danh (`sub`, `userId`, `email`, `fullName`, `role`, `cabinNumber`, `rfidTag`, `jti`, `iat`, `exp`, `iss`).
+  * **Refresh Token:** JWT dài hạn (mặc định 7 ngày) dùng để cấp mới Access Token mà không cần đăng nhập lại.
+* **Xác minh Token & Introspection (RFC 7662):**
+  * **`POST /api/auth/verify-token`** (hoặc `/api/auth/validate-token`):
+    * Hỗ trợ nhận token qua Header `Authorization: Bearer <token>` hoặc Request Body `{"token": "..."}`.
+    * Kiểm tra chữ ký mật mã HMAC-SHA256, thời hạn hết hạn, và danh sách đen.
+    * Trả về kết quả phân tích: `valid` (true/false), `status` (`VALID`, `EXPIRED`, `REVOKED`, `INVALID_SIGNATURE`, `MALFORMED`), thời gian còn lại `remainingSeconds`, thông tin user và claims.
+* **Làm mới Token (Refresh Token Rotation):**
+  * **`POST /api/auth/refresh-token`** (hoặc `/api/auth/refresh`):
+    * Nhận `refreshToken`, xác minh tính hợp lệ và loại token `REFRESH`.
+    * Áp dụng **Token Rotation**: Thu hồi refresh token cũ ngay lập tức để phòng chống Replay Attack và cấp phát cặp token mới.
+* **Thu hồi Token (Token Revocation & Blacklist):**
+  * **`POST /api/auth/revoke-token`** (hoặc `/api/auth/token/revoke`): Thu hồi tức thời một token.
+  * **User-level Token Revocation:** Tự động vô hiệu hóa toàn bộ token cũ của người dùng khi đổi mật khẩu (`change-password`) hoặc reset phiên làm việc.
+* **Cấp phát lại Token Pair:**
+  * **`POST /api/auth/token/pair`**: Cấp mới cặp token cho phiên làm việc hiện tại (`Authorization: Bearer <token>`).
 
 ---
 
