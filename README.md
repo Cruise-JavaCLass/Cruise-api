@@ -7,6 +7,7 @@
 > - [KAN-41](https://huytran20052022.atlassian.net/browse/KAN-41) - *Configure Database Connection Settings — Thiết lập thông tin kết nối cơ sở dữ liệu*  
 > - [KAN-51](https://huytran20052022.atlassian.net/browse/KAN-51) - *Configure Backend Testing Tools — Thiết lập công cụ kiểm thử backend*  
 > - [KAN-53](https://huytran20052022.atlassian.net/browse/KAN-53) - *Add Sample Backend Test — Tạo một test mẫu cho backend*  
+> - [KAN-54](https://huytran20052022.atlassian.net/browse/KAN-54) - *Configure Test Execution Commands — Thiết lập lệnh chạy test*  
 
 ---
 
@@ -91,7 +92,7 @@ Console H2 truy cập tại: `http://localhost:<port>/h2-console` (JDBC URL: `jd
 
 ---
 
-## 6. Công cụ kiểm thử tự động (Backend Testing Tools)
+## 6. Công cụ kiểm thử và Thiết lập lệnh chạy test (Test Execution Commands)
 
 Hệ thống được thiết lập bộ công cụ kiểm thử chuẩn doanh nghiệp cho mô hình Spring Boot Microservices:
 
@@ -99,26 +100,65 @@ Hệ thống được thiết lập bộ công cụ kiểm thử chuẩn doanh n
   * **JUnit 5 (Jupiter):** Test runner, lifecycle callbacks, assertions.
   * **Spring Boot Test & WebMvc Test:** MockMvc, slice testing, ApplicationContext verification.
   * **AssertJ & Hamcrest:** Fluent assertions cho API payloads.
-  * **Mockito:** Giả lập hành vi dependencies và service layer.
+  * **Mockito:** Giả lập hành vi dependencies và service layer (`@MockitoBean`, `@Mock`, `@InjectMocks`).
 * **Test Isolation Database:** H2 In-Memory Database cho test suites (chạy độc lập 100% không cần cài đặt hay bật PostgreSQL).
 * **Code Coverage:** **JaCoCo Plugin** tự động tính toán tỷ lệ bao phủ mã nguồn và xuất báo cáo HTML.
 
-### Chạy kiểm thử:
-```powershell
-# Chạy toàn bộ test suites của tất cả các microservices
-.\mvnw test
+---
 
-# Chạy test riêng cho một module (ví dụ cruise-auth-service)
-.\mvnw test -pl cruise-auth-service
+### 6.1. Bảng lệnh chạy kiểm thử qua Maven Wrapper (`.\mvnw.cmd` / `./mvnw`):
 
-# Đóng gói và chạy test kèm báo cáo coverage JaCoCo
-.\mvnw verify
-```
+| Lệnh thực thi | Mô tả chi tiết |
+| :--- | :--- |
+| `.\mvnw test` | Chạy toàn bộ test suites của tất cả các microservices |
+| `.\mvnw test -pl cruise-auth-service` | Chạy test riêng cho một module (ví dụ `cruise-auth-service`, `cruise-gateway`,...) |
+| `.\mvnw test -Dtest=UserRepositoryTest` | Chạy riêng một Test Class cụ thể |
+| `.\mvnw test -Dtest=UserControllerTest#testRegisterUser_Success` | Chạy riêng một method test cụ thể |
+| `.\mvnw test -Pquick` | Chế độ chạy test nhanh (bỏ qua agent JaCoCo để tăng tốc độ lặp khi dev) |
+| `.\mvnw verify` | Đóng gói, chạy toàn bộ test và xuất báo cáo độ bao phủ JaCoCo HTML |
 
 Báo cáo kiểm thử độ bao phủ (Coverage Report) được xuất tại:
 `<module>/target/site/jacoco/index.html`
 
-### 6.1. Cấu trúc Test mẫu (Sample Backend Tests):
+---
+
+### 6.2. Script chạy test tự động (`scripts/run-tests`):
+Dự án cung cấp sẵn bộ script tiện ích đa nền tảng cho lập trình viên:
+
+#### Trên Windows (PowerShell):
+```powershell
+# Chạy toàn bộ test tất cả services
+.\scripts\run-tests.ps1
+
+# Chạy test riêng cho module auth
+.\scripts\run-tests.ps1 -Module auth
+
+# Chạy nhanh (bỏ qua JaCoCo)
+.\scripts\run-tests.ps1 -Module auth -Quick
+
+# Chạy test kèm xuất báo cáo coverage
+.\scripts\run-tests.ps1 -Module auth -Coverage
+
+# Chạy một test class cụ thể
+.\scripts\run-tests.ps1 -Test UserRepositoryTest
+```
+
+#### Trên Linux / macOS / CI Runner (Bash):
+```bash
+# Cấp quyền thực thi và chạy
+chmod +x ./scripts/run-tests.sh
+
+# Chạy toàn bộ test
+./scripts/run-tests.sh all
+
+# Chạy module cụ thể
+./scripts/run-tests.sh auth
+
+# Chạy test class cụ thể
+./scripts/run-tests.sh auth UserRepositoryTest
+```
+
+### 6.3. Cấu trúc Test mẫu (Sample Backend Tests):
 Dự án cung cấp bộ test mẫu 3 tầng kiến trúc chuẩn (trong module `cruise-auth-service`):
 1. **Repository Layer (`@DataJpaTest`):**
    - File: `UserRepositoryTest.java`
