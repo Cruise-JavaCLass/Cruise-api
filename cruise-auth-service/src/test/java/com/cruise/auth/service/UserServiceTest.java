@@ -108,4 +108,38 @@ class UserServiceTest {
         assertThat(passengers.get(0).getRole()).isEqualTo(Role.PASSENGER);
         verify(userRepository, times(1)).findByRole(Role.PASSENGER);
     }
+
+    @Test
+    @DisplayName("Should instantiate UserService with single repository argument")
+    void shouldConstructWithSingleRepoArg() {
+        UserService service = new UserService(userRepository);
+        assertThat(service).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Should not re-hash password if it already starts with $2a$")
+    void shouldNotRehashBCryptPassword() {
+        sampleUser.setPassword("$2a$10$alreadyHashedBCryptValue123456789012345678901234");
+        when(userRepository.existsByUsername("thao.tran")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenReturn(sampleUser);
+
+        User registered = userService.registerUser(sampleUser);
+
+        assertThat(registered.getPassword()).isEqualTo("$2a$10$alreadyHashedBCryptValue123456789012345678901234");
+    }
+
+    @Test
+    @DisplayName("Should handle registerUser when password is null or blank")
+    void shouldHandleNullOrBlankPasswordOnRegister() {
+        sampleUser.setPassword(null);
+        when(userRepository.existsByUsername("thao.tran")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenReturn(sampleUser);
+
+        User registered1 = userService.registerUser(sampleUser);
+        assertThat(registered1.getPassword()).isNull();
+
+        sampleUser.setPassword("   ");
+        User registered2 = userService.registerUser(sampleUser);
+        assertThat(registered2.getPassword()).isEqualTo("   ");
+    }
 }

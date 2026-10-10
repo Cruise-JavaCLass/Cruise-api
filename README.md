@@ -12,6 +12,7 @@
 > - [KAN-60](https://huytran20052022.atlassian.net/browse/KAN-60) - *Implement Login and Logout Endpoints — Tạo API đăng nhập và đăng xuất*  
 > - [KAN-61](https://huytran20052022.atlassian.net/browse/KAN-61) - *Implement Password Hashing and Verification — Xử lý mật khẩu an toàn*  
 > - [KAN-62](https://huytran20052022.atlassian.net/browse/KAN-62) - *Implement Authentication Token Handling — Phát hành và xác minh token*  
+> - [KAN-63](https://huytran20052022.atlassian.net/browse/KAN-63) - *Write Unit Tests for Authentication Logic — Test logic xác thực*  
 
 ---
 
@@ -225,6 +226,22 @@ Dự án cung cấp bộ test mẫu 3 tầng kiến trúc chuẩn (trong module 
 3. **Controller / Web Layer (`@WebMvcTest`):**
    - File: `UserControllerTest.java`
    - Kiểm thử tầng REST API qua `MockMvc` và `@MockitoBean`: endpoints `POST /api/auth/users` (201 Created, 400 Bad Request khi trùng lặp), `GET /api/auth/users/{username}` (200 OK, 404 Not Found).
+
+### 6.4. Unit Test Suite cho Tầng Xác thực (Authentication Logic Unit Tests — KAN-63):
+Module `cruise-auth-service` được trang bị bộ kiểm thử chuyên sâu (78/78 tests pass) bảo đảm logic xác thực an toàn tuyệt đối:
+1. **`PasswordValidatorTest` (19 tests):**
+   - Kiểm thử chính sách độ mạnh mật khẩu chuẩn OWASP: độ dài tối thiểu/tối đa, chữ in hoa, chữ thường, chữ số, ký tự đặc biệt.
+   - Kiểm thử từ chối danh sách mật khẩu yếu thông dụng (`password`, `12345678`, `admin123`,...).
+2. **`PasswordServiceTest` (5 tests):**
+   - Kiểm thử băm BCrypt, so khớp mật khẩu và nhận diện định dạng hash BCrypt.
+3. **`JwtServiceTest` (10 tests):**
+   - Kiểm thử cấp phát Access Token, Refresh Token, Token Pair với đầy đủ claims định danh.
+   - Kiểm thử xác minh chữ ký mã hóa HMAC-SHA256, xử lý token hết hạn, thu hồi token (Blacklist) và thu hồi toàn bộ token người dùng (User cutoff revocation).
+4. **`AuthServiceTest` (17 tests):**
+   - Kiểm thử toàn diện quy trình đăng nhập (username & email), kiểm tra tài khoản vô hiệu hóa, sai mật khẩu.
+   - Kiểm thử làm mới token với cơ chế xoay vòng (Refresh Token Rotation), đổi mật khẩu an toàn, xác minh mật khẩu cho POS và lấy thông tin người dùng.
+5. **`AuthControllerTest` (12 tests):**
+   - Kiểm thử toàn bộ các endpoint RESTful qua `MockMvc` và `@MockitoBean`: `/login`, `/logout`, `/me`, `/refresh-token`, `/verify-token`, `/change-password`, `/verify-password`, `/token/pair`, `/health`.
 
 ---
 
