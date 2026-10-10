@@ -13,6 +13,8 @@
 > - [KAN-61](https://huytran20052022.atlassian.net/browse/KAN-61) - *Implement Password Hashing and Verification — Xử lý mật khẩu an toàn*  
 > - [KAN-62](https://huytran20052022.atlassian.net/browse/KAN-62) - *Implement Authentication Token Handling — Phát hành và xác minh token*  
 > - [KAN-63](https://huytran20052022.atlassian.net/browse/KAN-63) - *Write Unit Tests for Authentication Logic — Test logic xác thực*  
+> - [KAN-64](https://huytran20052022.atlassian.net/browse/KAN-64) - *Write API Tests for Login and Logout — Test API đăng nhập và đăng xuất*  
+> - [KAN-65](https://huytran20052022.atlassian.net/browse/KAN-65) - *Test Invalid Credentials and Expired Tokens — Test thông tin sai và token hết hạn*  
 
 ---
 
@@ -242,6 +244,37 @@ Module `cruise-auth-service` được trang bị bộ kiểm thử chuyên sâu 
    - Kiểm thử làm mới token với cơ chế xoay vòng (Refresh Token Rotation), đổi mật khẩu an toàn, xác minh mật khẩu cho POS và lấy thông tin người dùng.
 5. **`AuthControllerTest` (12 tests):**
    - Kiểm thử toàn bộ các endpoint RESTful qua `MockMvc` và `@MockitoBean`: `/login`, `/logout`, `/me`, `/refresh-token`, `/verify-token`, `/change-password`, `/verify-password`, `/token/pair`, `/health`.
+
+### 6.5. Kiểm thử Thông tin sai & Token hết hạn (Invalid Credentials & Expired Tokens — KAN-65):
+Bộ kiểm thử chuyên biệt tập trung vào các tình huống bảo mật biên, lỗi xác thực và phòng chống tấn công (Total 59 tests pass 100%):
+
+1. **`InvalidCredentialsAndExpiredTokensIntegrationTest` (37 tests):**
+   - **Invalid Credentials (18 tests):**
+     - Đăng nhập sai mật khẩu với username / email hợp lệ trả về `401 Unauthorized` (`Invalid username or password`).
+     - Đăng nhập với username / email không tồn tại trả về `401 Unauthorized`.
+     - Đăng nhập tài khoản bị khóa / vô hiệu hóa (`active = false`) trả về `403 Forbidden`.
+     - Đăng nhập tài khoản có mật khẩu null trong DB trả về `401 Unauthorized`.
+     - Ngăn chặn tấn công SQL Injection (`' OR '1'='1`) và mã độc XSS vào username/password.
+     - DTO Validation trả về `400 Bad Request` khi để trống username, password hoặc gửi body rỗng.
+     - Xác minh mật khẩu (`/verify-password`) trả về `{ "valid": false }` khi sai mật khẩu hoặc user không tồn tại.
+     - Đổi mật khẩu (`/change-password`) trả về `400 Bad Request` khi sai mật khẩu hiện tại, trùng mật khẩu cũ, xác nhận không khớp, hoặc mật khẩu mới yếu.
+   - **Expired Tokens (7 tests):**
+     - Xác minh Access Token / Refresh Token hết hạn qua body hoặc header `Authorization` trả về `valid: false` và `status: "EXPIRED"`.
+     - Endpoint `/refresh-token` từ chối `401 Unauthorized` khi Refresh Token đã hết hạn.
+     - Endpoint `/me`, `/change-password`, `/token/pair` từ chối `401 Unauthorized` khi phiên đăng nhập hết hạn.
+   - **Tampered, Malformed & Revoked Tokens (12 tests):**
+     - Phát hiện và từ chối token bị sửa chữ ký (`INVALID_SIGNATURE`) hoặc sửa payload giả mạo quyền hạn (`SUPER_HACKER`).
+     - Từ chối token ký bởi khóa bí mật lạ hoặc chuỗi JWT dị dạng (`MALFORMED`).
+     - Kiểm tra vô hiệu hóa token sau khi đăng xuất (`/logout`) và thu hồi tức thời (`/revoke-token`).
+     - **Phòng chống Replay Attack:** Thu hồi Refresh Token cũ ngay sau khi làm mới (Token Rotation), từ chối `401 Unauthorized` khi token cũ bị sử dụng lại lần 2.
+     - Ngăn chặn dùng Access Token cho endpoint `/refresh-token` và ngược lại.
+     - **User Cutoff Revocation:** Tự động thu hồi toàn bộ token cũ đã cấp trước thời điểm đổi mật khẩu.
+     - Kiểm tra từ chối `401 Unauthorized` khi thiếu hoặc định dạng sai Authorization Header.
+
+2. **`InvalidCredentialsAndExpiredTokensUnitTest` (22 tests):**
+   - Kiểm thử độc lập tầng Service (`AuthService`) và tầng mã hóa (`JwtService`).
+   - Kiểm thử thuật toán băm BCrypt, so khớp, xử lý trường hợp user null/inactive, và ngoại lệ nghiệp vụ.
+   - Kiểm thử cơ chế giải mã payload, tính toán timestamp `iat`, `exp`, `remainingSeconds`, phát hiện hết hạn và cô lập cache (`clearRevocations`).
 
 ---
 
