@@ -9,6 +9,7 @@
 > - [KAN-53](https://huytran20052022.atlassian.net/browse/KAN-53) - *Add Sample Backend Test — Tạo một test mẫu cho backend*  
 > - [KAN-54](https://huytran20052022.atlassian.net/browse/KAN-54) - *Configure Test Execution Commands — Thiết lập lệnh chạy test*  
 > - [KAN-57](https://huytran20052022.atlassian.net/browse/KAN-57) - *Configure Git Workflow and CI — Thiết lập quy trình Git và luồng CI*  
+> - [KAN-60](https://huytran20052022.atlassian.net/browse/KAN-60) - *Implement Login and Logout Endpoints — Tạo API đăng nhập và đăng xuất*  
 
 ---
 
@@ -66,6 +67,23 @@ Sau khi khởi chạy `cruise-gateway` (Port `8080`), các endpoint sẵn sàng 
 * **`GET /api/health`**: Kiểm tra trạng thái sức khỏe, thời gian hoạt động (uptime), dung lượng bộ nhớ JVM.
 * **`GET /api/info`**: Thông tin metadata hệ thống, phiên bản Java, Jira Story & Task.
 * **`GET /api/services`**: Bản đồ topology các Microservices đăng ký trong hệ sinh thái.
+
+### 4.1. API Xác thực (Authentication Endpoints — Login & Logout):
+Được cung cấp bởi `cruise-auth-service` (Port `8081`):
+
+* **`POST /api/auth/login`**: Đăng nhập bằng `usernameOrEmail` và `password`.
+  * **Request Body:**
+    ```json
+    {
+      "usernameOrEmail": "admin",
+      "password": "password123"
+    }
+    ```
+  * **Response:** Trả về `200 OK` kèm `accessToken` (JWT), `tokenType` (`Bearer`), `expiresIn` (86400s) và thông tin đối tượng `user` (`role`, `cabinNumber`, `rfidTag`).
+* **`POST /api/auth/logout`**: Đăng xuất an toàn.
+  * Hỗ trợ nhận token qua Header `Authorization: Bearer <token>` hoặc Request Body `{"token": "<token>"}`.
+  * Token được đưa vào danh sách thu hồi (Token Invalidation Cache) để ngăn chặn tái sử dụng.
+* **`GET /api/auth/me`**: Lấy thông tin người dùng từ phiên đăng nhập hiện tại (`Authorization: Bearer <token>`).
 
 ---
 
