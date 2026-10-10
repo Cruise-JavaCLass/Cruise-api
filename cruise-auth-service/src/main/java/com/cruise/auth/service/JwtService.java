@@ -262,14 +262,6 @@ public class JwtService {
         return invalidatedTokens.containsKey(cleanToken(token));
     }
 
-    /**
-     * Xóa sạch toàn bộ danh sách blacklist và mốc thời gian thu hồi (phục vụ reset cache & test isolation)
-     */
-    public void clearRevocations() {
-        invalidatedTokens.clear();
-        userRevocationTimestamps.clear();
-    }
-
     public long getExpirationSeconds() {
         return accessExpirationMillis / 1000;
     }
