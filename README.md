@@ -8,6 +8,7 @@
 > - [KAN-51](https://huytran20052022.atlassian.net/browse/KAN-51) - *Configure Backend Testing Tools — Thiết lập công cụ kiểm thử backend*  
 > - [KAN-53](https://huytran20052022.atlassian.net/browse/KAN-53) - *Add Sample Backend Test — Tạo một test mẫu cho backend*  
 > - [KAN-54](https://huytran20052022.atlassian.net/browse/KAN-54) - *Configure Test Execution Commands — Thiết lập lệnh chạy test*  
+> - [KAN-57](https://huytran20052022.atlassian.net/browse/KAN-57) - *Configure Git Workflow and CI — Thiết lập quy trình Git và luồng CI*  
 
 ---
 
@@ -174,5 +175,16 @@ Dự án cung cấp bộ test mẫu 3 tầng kiến trúc chuẩn (trong module 
 
 ## 7. Tài liệu đặc tả nghiệp vụ
 Xem chi tiết toàn bộ đề bài và yêu cầu tại: [PROJECT_SPECIFICATION.md](PROJECT_SPECIFICATION.md)
+
+---
+
+## 8. Quy trình Git Workflow & CI/CD Pipeline
+
+Dự án áp dụng mô hình **GitHub Flow** và kiểm thử tự động qua **GitHub Actions**:
+* **Chi tiết quy chuẩn:** Xem hướng dẫn đầy đủ tại [GIT_WORKFLOW.md](GIT_WORKFLOW.md).
+* **Quy ước nhánh:** `feature/<JIRA-KEY>-<ten-tinh-nang>`, `bugfix/...`, `hotfix/...`.
+* **Quy ước Commit:** `[<JIRA-KEY>] <type>: <description>` (theo chuẩn Conventional Commits).
+* **Bảo vệ nhánh `main`:** Cấm push trực tiếp, bắt buộc tạo Pull Request và pass 100% CI checks trước khi merge.
+* **GitHub Actions Pipeline (`.github/workflows/ci.yml`):** Tự động kích hoạt khi có Push hoặc PR vào `main`, khởi tạo Java 21, chạy `./mvnw -B verify`, và lưu trữ báo cáo JaCoCo coverage report.
 
 
