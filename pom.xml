@@ -20,6 +20,21 @@
 	<properties>
 		<java.version>21</java.version>
 		<jacoco.version>0.8.12</jacoco.version>
+		<sonar.version>5.0.0.4389</sonar.version>
+
+		<!-- SonarCloud Quality Gate Configuration -->
+		<sonar.organization>cruise-javaclass</sonar.organization>
+		<sonar.projectKey>Cruise-JavaCLass_Cruise-api</sonar.projectKey>
+		<sonar.host.url>https://sonarcloud.io</sonar.host.url>
+		<sonar.coverage.jacoco.xmlReportPaths>
+			${project.basedir}/../cruise-common/target/site/jacoco/jacoco.xml,
+			${project.basedir}/../cruise-gateway/target/site/jacoco/jacoco.xml,
+			${project.basedir}/../cruise-auth-service/target/site/jacoco/jacoco.xml,
+			${project.basedir}/../cruise-itinerary-service/target/site/jacoco/jacoco.xml,
+			${project.basedir}/../cruise-activity-service/target/site/jacoco/jacoco.xml,
+			${project.basedir}/../cruise-pos-service/target/site/jacoco/jacoco.xml,
+			${project.basedir}/target/site/jacoco/jacoco.xml
+		</sonar.coverage.jacoco.xmlReportPaths>
 	</properties>
 
 	<modules>
@@ -81,6 +96,11 @@
 						</execution>
 					</executions>
 				</plugin>
+				<plugin>
+					<groupId>org.sonarsource.scanner.maven</groupId>
+					<artifactId>sonar-maven-plugin</artifactId>
+					<version>${sonar.version}</version>
+				</plugin>
 			</plugins>
 		</pluginManagement>
 		<plugins>
@@ -91,6 +111,10 @@
 			<plugin>
 				<groupId>org.jacoco</groupId>
 				<artifactId>jacoco-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>org.sonarsource.scanner.maven</groupId>
+				<artifactId>sonar-maven-plugin</artifactId>
 			</plugin>
 		</plugins>
 	</build>

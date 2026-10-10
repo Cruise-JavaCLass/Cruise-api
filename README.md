@@ -240,6 +240,7 @@ Dự án áp dụng mô hình **GitHub Flow** và kiểm thử tự động qua 
 * **Quy ước nhánh:** `feature/<JIRA-KEY>-<ten-tinh-nang>`, `bugfix/...`, `hotfix/...`.
 * **Quy ước Commit:** `[<JIRA-KEY>] <type>: <description>` (theo chuẩn Conventional Commits).
 * **Bảo vệ nhánh `main`:** Cấm push trực tiếp, bắt buộc tạo Pull Request và pass 100% CI checks trước khi merge.
-* **GitHub Actions Pipeline (`.github/workflows/ci.yml`):** Tự động kích hoạt khi có Push hoặc PR vào `main`, khởi tạo Java 21, chạy `./mvnw -B verify`, và lưu trữ báo cáo JaCoCo coverage report.
+* **GitHub Actions Pipeline (`.github/workflows/ci.yml`):** Tự động kích hoạt khi có Push hoặc PR vào `main`, khởi tạo Java 21, chạy `./mvnw -B verify`, lưu trữ báo cáo JaCoCo coverage report, và kiểm tra **SonarCloud Quality Gate** (`-Dsonar.qualitygate.wait=true`).
+* **SonarCloud Quality Gate:** Tổ chức `cruise-javaclass`, Project `Cruise-JavaCLass_Cruise-api`, giám sát toàn diện Code Coverage (ngưỡng >= 80%), Bugs (0), Vulnerabilities (0), và Code Smells (Rating A).
 
 
