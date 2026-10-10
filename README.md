@@ -6,6 +6,7 @@
 > - [KAN-39](https://huytran20052022.atlassian.net/browse/KAN-39) - *Implement Basic Application Entry Point — Tạo điểm khởi chạy backend*  
 > - [KAN-41](https://huytran20052022.atlassian.net/browse/KAN-41) - *Configure Database Connection Settings — Thiết lập thông tin kết nối cơ sở dữ liệu*  
 > - [KAN-51](https://huytran20052022.atlassian.net/browse/KAN-51) - *Configure Backend Testing Tools — Thiết lập công cụ kiểm thử backend*  
+> - [KAN-53](https://huytran20052022.atlassian.net/browse/KAN-53) - *Add Sample Backend Test — Tạo một test mẫu cho backend*  
 
 ---
 
@@ -107,8 +108,8 @@ Hệ thống được thiết lập bộ công cụ kiểm thử chuẩn doanh n
 # Chạy toàn bộ test suites của tất cả các microservices
 .\mvnw test
 
-# Chạy test riêng cho một module (ví dụ cruise-gateway)
-.\mvnw test -pl cruise-gateway
+# Chạy test riêng cho một module (ví dụ cruise-auth-service)
+.\mvnw test -pl cruise-auth-service
 
 # Đóng gói và chạy test kèm báo cáo coverage JaCoCo
 .\mvnw verify
@@ -116,6 +117,18 @@ Hệ thống được thiết lập bộ công cụ kiểm thử chuẩn doanh n
 
 Báo cáo kiểm thử độ bao phủ (Coverage Report) được xuất tại:
 `<module>/target/site/jacoco/index.html`
+
+### 6.1. Cấu trúc Test mẫu (Sample Backend Tests):
+Dự án cung cấp bộ test mẫu 3 tầng kiến trúc chuẩn (trong module `cruise-auth-service`):
+1. **Repository Layer (`@DataJpaTest`):**
+   - File: `UserRepositoryTest.java`
+   - Kiểm thử thao tác cơ sở dữ liệu in-memory H2: CRUD, query methods (`findByUsername`, `findByRfidTag`, `findByRole`, `existsByUsername`), tự động ghi nhận auditing timestamps (`createdAt`, `updatedAt`).
+2. **Service Layer (Unit Test with Mockito):**
+   - File: `UserServiceTest.java`
+   - Độc lập hoàn toàn với Spring Context và DB bằng `@ExtendWith(MockitoExtension.class)`, `@Mock`, `@InjectMocks`. Kiểm thử nghiệp vụ đăng ký người dùng, xử lý ngoại lệ khi username đã tồn tại, và tìm kiếm thông tin theo vai trò / RFID.
+3. **Controller / Web Layer (`@WebMvcTest`):**
+   - File: `UserControllerTest.java`
+   - Kiểm thử tầng REST API qua `MockMvc` và `@MockitoBean`: endpoints `POST /api/auth/users` (201 Created, 400 Bad Request khi trùng lặp), `GET /api/auth/users/{username}` (200 OK, 404 Not Found).
 
 ---
 
