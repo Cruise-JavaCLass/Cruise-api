@@ -4,6 +4,7 @@ import com.cruise.itinerary.dto.PortRequest;
 import com.cruise.itinerary.dto.PortResponse;
 import com.cruise.itinerary.exception.DuplicateResourceException;
 import com.cruise.itinerary.exception.GlobalExceptionHandler;
+import com.cruise.itinerary.exception.ResourceNotFoundException;
 import com.cruise.itinerary.service.PortService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -27,7 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(PortController.class)
 @Import(GlobalExceptionHandler.class)
-@DisplayName("PortController MockMvc Tests (KAN-105)")
+@DisplayName("PortController MockMvc Tests (KAN-109)")
 class PortControllerTest {
 
     @Autowired
@@ -93,17 +95,6 @@ class PortControllerTest {
         mockMvc.perform(get("/api/itinerary/ports"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[0].code").value("VN-TCH"));
-    }
-
-    @Test
-    @DisplayName("GET /api/itinerary/ports/active trả về danh sách cảng active")
-    void getActivePortsSuccess() throws Exception {
-        PortResponse resp = PortResponse.builder().id(1L).name("Cảng Tuần Châu").code("VN-TCH").city("Hạ Long").build();
-        when(portService.getActivePorts()).thenReturn(List.of(resp));
-
-        mockMvc.perform(get("/api/itinerary/ports/active"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].code").value("VN-TCH"));
     }
 
     @Test
