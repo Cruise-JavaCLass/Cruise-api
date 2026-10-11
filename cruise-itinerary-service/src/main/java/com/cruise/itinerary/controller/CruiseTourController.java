@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * Controller cung cấp RESTful API quản lý Tour du thuyền nhiều ngày (Cruise Tour Management - KAN-96)
@@ -62,6 +63,24 @@ public class CruiseTourController {
     ) {
         CruiseTourResponse response = tourService.updateTourStatus(id, request);
         return ResponseEntity.ok(ApiResponse.ok("Cập nhật trạng thái tour thành công", response));
+    }
+
+    /**
+     * Lấy danh sách các trạng thái được phép chuyển đến từ trạng thái hiện tại của tour (KAN-97)
+     */
+    @GetMapping("/{id}/status/allowed-transitions")
+    public ResponseEntity<ApiResponse<Set<TourStatus>>> getAllowedStatusTransitions(@PathVariable Long id) {
+        Set<TourStatus> transitions = tourService.getAllowedStatusTransitions(id);
+        return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách trạng thái cho phép chuyển đổi thành công", transitions));
+    }
+
+    /**
+     * Lấy danh sách tour theo trạng thái hoạt động cụ thể (KAN-97)
+     */
+    @GetMapping("/status/{status}")
+    public ResponseEntity<ApiResponse<List<CruiseTourResponse>>> getToursByStatus(@PathVariable TourStatus status) {
+        List<CruiseTourResponse> tours = tourService.getToursByStatus(status);
+        return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách tour theo trạng thái thành công", tours));
     }
 
     /**

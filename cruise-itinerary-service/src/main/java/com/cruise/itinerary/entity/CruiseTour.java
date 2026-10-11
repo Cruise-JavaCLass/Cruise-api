@@ -126,4 +126,10 @@ public class CruiseTour extends BaseEntity {
     @Column(nullable = false)
     @Builder.Default
     private Boolean active = true;
+
+    /**
+     * Lý do hủy tour hoặc ghi chú khi thay đổi trạng thái
+     */
+    @Column(name = "cancellation_reason", length = 500)
+    private String cancellationReason;
 }

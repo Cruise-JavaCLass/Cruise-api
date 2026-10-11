@@ -39,6 +39,7 @@ public class CruiseTourResponse {
     private String itineraryOverview;
     private String imageUrl;
     private TourStatus status;
+    private String cancellationReason;
     private Boolean active;
     private Instant createdAt;
     private Instant updatedAt;
@@ -78,6 +79,7 @@ public class CruiseTourResponse {
                 .itineraryOverview(tour.getItineraryOverview())
                 .imageUrl(tour.getImageUrl())
                 .status(tour.getStatus())
+                .cancellationReason(tour.getCancellationReason())
                 .active(tour.getActive())
                 .createdAt(tour.getCreatedAt())
                 .updatedAt(tour.getUpdatedAt())
