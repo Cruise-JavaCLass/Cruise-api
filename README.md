@@ -18,6 +18,8 @@
 > - [KAN-87](https://huytran20052022.atlassian.net/browse/KAN-87) - *Create Cruise Ship API — Tạo API quản lý tàu du lịch*  
 > - [KAN-88](https://huytran20052022.atlassian.net/browse/KAN-88) - *Implement Ship Information Validation — Kiểm tra tính hợp lệ của thông tin tàu*  
 > - [KAN-89](https://huytran20052022.atlassian.net/browse/KAN-89) - *Write Unit Tests for Ship Business Rules — Test các quy tắc nghiệp vụ tàu du lịch*  
+> - [KAN-90](https://huytran20052022.atlassian.net/browse/KAN-90) - *Write API Tests for Ship CRUD Operations — Test các API CRUD tàu du lịch*  
+> - [KAN-96](https://huytran20052022.atlassian.net/browse/KAN-96) - *Create and Update Cruise Tour API — Tạo và cập nhật API tour du lịch*  
 
 ---
 
@@ -178,6 +180,53 @@ Hệ thống quản lý toàn diện thông tin tàu du lịch, đặc tính k�
   * Kiểm thử toàn diện MockMvc Web Layer và Spring Boot Integration Test với cơ sở dữ liệu in-memory H2.
   * Bao phủ 100% các luồng thành công (200 OK, 201 Created) và các kịch bản lỗi biên: 400 Bad Request (vi phạm validation dữ liệu), 404 Not Found (ID/mã tàu không tồn tại), 409 Conflict (trùng lặp mã hoặc tên tàu khi tạo mới hoặc cập nhật).
   * Kiểm thử vòng đời trọn vẹn (Lifecycle), phân trang, lọc từ khóa, sắp xếp và cơ chế Soft Delete / Hard Delete.
+
+### 4.5. Quản lý Tour Du Lịch Nhiều Ngày (Cruise Tour Management Endpoints — KAN-96):
+Được cung cấp bởi `cruise-itinerary-service` (Port `8082`):
+
+Hệ thống quản lý toàn diện các tour du thuyền nhiều ngày, gắn liền với tàu được chỉ định, lịch trình xuất bến/cập bến, sức chứa và chính sách giá:
+
+* **`POST /api/itinerary/tours`**: Tạo mới tour du thuyền trong hệ thống.
+  * **Status:** `201 Created` (hoặc `400 Bad Request`, `404 Not Found` nếu tàu không tồn tại, `409 Conflict` nếu trùng mã hoặc tên tour).
+  * **Request Body:**
+    ```json
+    {
+      "shipId": 1,
+      "code": "TOUR-HL-3N2D",
+      "name": "Hành trình Di sản Vịnh Hạ Long 3N2Đ",
+      "description": "Tour khám phá vẻ đẹp hang Sửng Sốt và đảo Ti Tốp",
+      "durationDays": 3,
+      "durationNights": 2,
+      "startDate": "2026-11-01",
+      "endDate": "2026-11-03",
+      "departurePort": "Cảng tàu khách quốc tế Hạ Long",
+      "destinationPort": "Cảng tàu khách quốc tế Hạ Long",
+      "maxCapacity": 1500,
+      "basePrice": 5500000,
+      "currency": "VND",
+      "status": "DRAFT"
+    }
+    ```
+* **`GET /api/itinerary/tours`**: Lấy danh sách tour với phân trang, lọc từ khóa, lọc theo tàu, lọc theo trạng thái (`DRAFT`, `PUBLISHED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`).
+  * **Query Params:** `keyword`, `shipId`, `status`, `activeOnly` (mặc định `true`), `page`, `size`, `sortBy`, `direction`.
+* **`GET /api/itinerary/tours/active`**: Lấy toàn bộ danh sách các tour đang kích hoạt (không phân trang).
+* **`GET /api/itinerary/tours/{id}`**: Lấy chi tiết tour theo ID (`200 OK` / `404 Not Found`).
+* **`GET /api/itinerary/tours/code/{code}`**: Lấy chi tiết tour theo mã định danh `code` (`200 OK` / `404 Not Found`).
+* **`PUT /api/itinerary/tours/{id}`**: Cập nhật thông tin chi tiết tour (`200 OK` / `400 Bad Request` / `404 Not Found` / `409 Conflict`).
+* **`PATCH /api/itinerary/tours/{id}/status`**: Cập nhật nhanh trạng thái tour (`DRAFT`, `PUBLISHED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`).
+* **`DELETE /api/itinerary/tours/{id}`**: Hủy kích hoạt tour (Soft Delete mặc định, tự động chuyển status sang `CANCELLED`; hoặc thêm `?hard=true` để xóa vĩnh viễn khỏi DB).
+
+* **Kiểm tra tính hợp lệ của thông tin tour (`TourValidator`):**
+  * Mã tour: Định dạng chữ hoa, chữ số, gạch nối hoặc gạch dưới từ 3-30 ký tự (`^[A-Z0-9_-]{3,30}$`).
+  * Thời lượng tour: `durationDays >= 1`, `durationNights >= 0` và số đêm không vượt quá số ngày (`durationNights <= durationDays`).
+  * Khung thời gian: `endDate` phải bằng hoặc sau `startDate`.
+  * Sức chứa tương thích: Sức chứa tối đa của tour không được vượt quá sức chứa thiết kế của tàu phục vụ (`maxCapacity <= ship.capacity`).
+  * Trạng thái tàu: Tàu phục vụ tour bắt buộc phải đang ở trạng thái hoạt động (`ship.active = true`).
+  * Giá cơ bản: Giá tour cơ bản không được âm (`basePrice >= 0`).
+
+* **Kiểm thử toàn diện Tour API (`TourValidatorTest`, `CruiseTourServiceTest`, `CruiseTourControllerTest`, `CruiseTourIntegrationTest`):**
+  * Bao phủ 100% các tầng: Unit Validator, Service Mockito Unit Test, MockMvc Web Layer Test và Spring Boot Integration Test với H2 in-memory.
+  * Kiểm tra đầy đủ lifecycle: Tạo tàu $\to$ Tạo tour $\to$ Tra cứu theo ID/Code $\to$ Tìm kiếm & phân trang $\to$ Cập nhật thông tin $\to$ Đổi trạng thái $\to$ Soft delete $\to$ Hard delete.
 
 ---
 
