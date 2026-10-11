@@ -138,15 +138,52 @@ public class CruiseTourService {
     }
 
     /**
-     * Cập nhật trạng thái hoạt động của tour
+     * Cập nhật trạng thái hoạt động của tour theo quy tắc chuyển đổi trạng thái (Tour Status Management - KAN-97)
      */
     public CruiseTourResponse updateTourStatus(Long id, UpdateTourStatusRequest request) {
         CruiseTour tour = tourRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tour du lịch với ID: " + id));
 
-        tour.setStatus(request.getStatus());
+        TourStatus currentStatus = tour.getStatus();
+        TourStatus newStatus = request.getStatus();
+
+        if (!currentStatus.canTransitionTo(newStatus)) {
+            throw new IllegalArgumentException(
+                    "Không thể chuyển trạng thái tour từ " + currentStatus + " sang " + newStatus
+            );
+        }
+
+        if (newStatus == TourStatus.IN_PROGRESS && tour.getShip() != null && Boolean.FALSE.equals(tour.getShip().getActive())) {
+            throw new IllegalArgumentException("Không thể khởi hành tour vì tàu du lịch được chỉ định hiện đang ngừng hoạt động");
+        }
+
+        if (newStatus == TourStatus.CANCELLED && request.getReason() != null && !request.getReason().trim().isEmpty()) {
+            tour.setCancellationReason(request.getReason().trim());
+        }
+
+        tour.setStatus(newStatus);
         CruiseTour updatedTour = tourRepository.save(tour);
         return CruiseTourResponse.fromEntity(updatedTour);
+    }
+
+    /**
+     * Lấy danh sách các trạng thái được phép chuyển đến từ trạng thái hiện tại của tour
+     */
+    @Transactional(readOnly = true)
+    public java.util.Set<TourStatus> getAllowedStatusTransitions(Long id) {
+        CruiseTour tour = tourRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tour du lịch với ID: " + id));
+        return tour.getStatus().getAllowedTransitions();
+    }
+
+    /**
+     * Lấy danh sách các tour theo trạng thái hoạt động cụ thể
+     */
+    @Transactional(readOnly = true)
+    public List<CruiseTourResponse> getToursByStatus(TourStatus status) {
+        return tourRepository.findByStatusAndActiveTrue(status).stream()
+                .map(CruiseTourResponse::fromEntity)
+                .toList();
     }
 
     /**

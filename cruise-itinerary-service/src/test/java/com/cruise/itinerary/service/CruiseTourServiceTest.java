@@ -252,6 +252,7 @@ class CruiseTourServiceTest {
     @Test
     @DisplayName("updateTourStatus should change tour status successfully")
     void shouldUpdateTourStatusSuccessfully() {
+        sampleTour.setStatus(TourStatus.PUBLISHED);
         when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
         when(tourRepository.save(any(CruiseTour.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -261,6 +262,76 @@ class CruiseTourServiceTest {
         assertThat(response).isNotNull();
         assertThat(response.getStatus()).isEqualTo(TourStatus.IN_PROGRESS);
         verify(tourRepository).save(sampleTour);
+    }
+
+    @Test
+    @DisplayName("updateTourStatus should throw IllegalArgumentException on invalid status transition")
+    void shouldThrowWhenTransitionIsInvalid() {
+        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
+
+        UpdateTourStatusRequest statusRequest = new UpdateTourStatusRequest(TourStatus.COMPLETED);
+
+        assertThatThrownBy(() -> tourService.updateTourStatus(10L, statusRequest))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Không thể chuyển trạng thái tour từ DRAFT sang COMPLETED");
+
+        verify(tourRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("updateTourStatus should throw IllegalArgumentException when starting tour with inactive ship")
+    void shouldThrowWhenStartingTourWithInactiveShip() {
+        sampleTour.setStatus(TourStatus.PUBLISHED);
+        sampleShip.setActive(false);
+        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
+
+        UpdateTourStatusRequest statusRequest = new UpdateTourStatusRequest(TourStatus.IN_PROGRESS);
+
+        assertThatThrownBy(() -> tourService.updateTourStatus(10L, statusRequest))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("tàu du lịch được chỉ định hiện đang ngừng hoạt động");
+
+        verify(tourRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("updateTourStatus should record cancellation reason when tour is cancelled")
+    void shouldRecordCancellationReasonWhenCancelled() {
+        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
+        when(tourRepository.save(any(CruiseTour.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UpdateTourStatusRequest statusRequest = UpdateTourStatusRequest.builder()
+                .status(TourStatus.CANCELLED)
+                .reason("Bão biển cấp 12 không thể xuất bến")
+                .build();
+
+        CruiseTourResponse response = tourService.updateTourStatus(10L, statusRequest);
+
+        assertThat(response.getStatus()).isEqualTo(TourStatus.CANCELLED);
+        assertThat(response.getCancellationReason()).isEqualTo("Bão biển cấp 12 không thể xuất bến");
+        verify(tourRepository).save(sampleTour);
+    }
+
+    @Test
+    @DisplayName("getAllowedStatusTransitions should return allowed transitions for current tour status")
+    void shouldGetAllowedStatusTransitionsSuccessfully() {
+        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
+
+        var allowed = tourService.getAllowedStatusTransitions(10L);
+
+        assertThat(allowed).containsExactlyInAnyOrder(TourStatus.PUBLISHED, TourStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("getToursByStatus should return tours matching given status")
+    void shouldGetToursByStatusSuccessfully() {
+        when(tourRepository.findByStatusAndActiveTrue(TourStatus.DRAFT)).thenReturn(List.of(sampleTour));
+
+        List<CruiseTourResponse> results = tourService.getToursByStatus(TourStatus.DRAFT);
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).getStatus()).isEqualTo(TourStatus.DRAFT);
+        verify(tourRepository).findByStatusAndActiveTrue(TourStatus.DRAFT);
     }
 
     // =========================================================================

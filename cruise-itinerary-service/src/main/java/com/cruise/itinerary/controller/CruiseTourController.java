@@ -65,6 +65,24 @@ public class CruiseTourController {
     }
 
     /**
+     * Lấy danh sách các trạng thái được phép chuyển đến từ trạng thái hiện tại của tour (KAN-97)
+     */
+    @GetMapping("/{id}/status/allowed-transitions")
+    public ResponseEntity<ApiResponse<java.util.Set<TourStatus>>> getAllowedStatusTransitions(@PathVariable Long id) {
+        java.util.Set<TourStatus> transitions = tourService.getAllowedStatusTransitions(id);
+        return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách trạng thái cho phép chuyển đổi thành công", transitions));
+    }
+
+    /**
+     * Lấy danh sách tour theo trạng thái hoạt động cụ thể (KAN-97)
+     */
+    @GetMapping("/status/{status}")
+    public ResponseEntity<ApiResponse<List<CruiseTourResponse>>> getToursByStatus(@PathVariable TourStatus status) {
+        List<CruiseTourResponse> tours = tourService.getToursByStatus(status);
+        return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách tour theo trạng thái thành công", tours));
+    }
+
+    /**
      * Lấy thông tin chi tiết tour theo ID
      */
     @GetMapping("/{id}")

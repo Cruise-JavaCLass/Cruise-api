@@ -20,6 +20,7 @@
 > - [KAN-89](https://huytran20052022.atlassian.net/browse/KAN-89) - *Write Unit Tests for Ship Business Rules — Test các quy tắc nghiệp vụ tàu du lịch*  
 > - [KAN-90](https://huytran20052022.atlassian.net/browse/KAN-90) - *Write API Tests for Ship CRUD Operations — Test các API CRUD tàu du lịch*  
 > - [KAN-96](https://huytran20052022.atlassian.net/browse/KAN-96) - *Create and Update Cruise Tour API — Tạo và cập nhật API tour du lịch*  
+> - [KAN-97](https://huytran20052022.atlassian.net/browse/KAN-97) - *Implement Tour Status Management — Quản lý trạng thái tour du lịch*  
 
 ---
 
@@ -212,9 +213,20 @@ Hệ thống quản lý toàn diện các tour du thuyền nhiều ngày, gắn 
 * **`GET /api/itinerary/tours/active`**: Lấy toàn bộ danh sách các tour đang kích hoạt (không phân trang).
 * **`GET /api/itinerary/tours/{id}`**: Lấy chi tiết tour theo ID (`200 OK` / `404 Not Found`).
 * **`GET /api/itinerary/tours/code/{code}`**: Lấy chi tiết tour theo mã định danh `code` (`200 OK` / `404 Not Found`).
+* **`GET /api/itinerary/tours/{id}/status/allowed-transitions`**: Tra cứu danh sách các trạng thái hợp lệ có thể chuyển tiếp từ trạng thái hiện tại (`200 OK` / `404 Not Found`).
+* **`GET /api/itinerary/tours/status/{status}`**: Lấy danh sách tour theo trạng thái cụ thể (`DRAFT`, `PUBLISHED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`).
 * **`PUT /api/itinerary/tours/{id}`**: Cập nhật thông tin chi tiết tour (`200 OK` / `400 Bad Request` / `404 Not Found` / `409 Conflict`).
-* **`PATCH /api/itinerary/tours/{id}/status`**: Cập nhật nhanh trạng thái tour (`DRAFT`, `PUBLISHED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`).
+* **`PATCH /api/itinerary/tours/{id}/status`**: Chuyển trạng thái tour với kiểm tra quy tắc ma trận chuyển đổi (State Machine), kiểm tra tàu sẵn sàng và ghi nhận lý do hủy (`reason`).
 * **`DELETE /api/itinerary/tours/{id}`**: Hủy kích hoạt tour (Soft Delete mặc định, tự động chuyển status sang `CANCELLED`; hoặc thêm `?hard=true` để xóa vĩnh viễn khỏi DB).
+
+* **Quản lý vòng đời và ma trận chuyển đổi trạng thái Tour (`TourStatus` - KAN-97):**
+  * `DRAFT` $\to$ `PUBLISHED`, `CANCELLED`
+  * `PUBLISHED` $\to$ `IN_PROGRESS`, `DRAFT`, `CANCELLED`
+  * `IN_PROGRESS` $\to$ `COMPLETED`, `CANCELLED`
+  * `COMPLETED` $\to$ Trạng thái kết thúc (không thể chuyển đổi tiếp)
+  * `CANCELLED` $\to$ `DRAFT` (cho phép khôi phục về bản nháp để điều chỉnh)
+  * **Ràng buộc xuất bến:** Không cho phép chuyển tour sang `IN_PROGRESS` nếu tàu được chỉ định đang ở trạng thái ngừng hoạt động (`ship.active = false`).
+  * **Ghi nhận lý do hủy:** Hỗ trợ lưu trữ `cancellationReason` khi tour bị hủy.
 
 * **Kiểm tra tính hợp lệ của thông tin tour (`TourValidator`):**
   * Mã tour: Định dạng chữ hoa, chữ số, gạch nối hoặc gạch dưới từ 3-30 ký tự (`^[A-Z0-9_-]{3,30}$`).

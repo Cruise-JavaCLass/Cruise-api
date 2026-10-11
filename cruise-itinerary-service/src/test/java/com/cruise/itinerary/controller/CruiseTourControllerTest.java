@@ -25,6 +25,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -289,6 +290,30 @@ class CruiseTourControllerTest {
                         .content(patchPayload))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("GET /api/itinerary/tours/{id}/status/allowed-transitions returns allowed transitions")
+    void shouldGetAllowedStatusTransitionsSuccessfully() throws Exception {
+        when(tourService.getAllowedStatusTransitions(10L))
+                .thenReturn(Set.of(TourStatus.PUBLISHED, TourStatus.CANCELLED));
+
+        mockMvc.perform(get("/api/itinerary/tours/10/status/allowed-transitions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data").isArray());
+    }
+
+    @Test
+    @DisplayName("GET /api/itinerary/tours/status/{status} returns tours matching status")
+    void shouldGetToursByStatusSuccessfully() throws Exception {
+        when(tourService.getToursByStatus(TourStatus.PUBLISHED))
+                .thenReturn(List.of(sampleResponse));
+
+        mockMvc.perform(get("/api/itinerary/tours/status/PUBLISHED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].code").value("TOUR-HL-01"));
     }
 
     // =========================================================================
