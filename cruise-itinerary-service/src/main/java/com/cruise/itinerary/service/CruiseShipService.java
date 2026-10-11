@@ -21,15 +21,19 @@ import java.util.List;
 public class CruiseShipService {
 
     private final CruiseShipRepository shipRepository;
+    private final ShipValidator shipValidator;
 
-    public CruiseShipService(CruiseShipRepository shipRepository) {
+    public CruiseShipService(CruiseShipRepository shipRepository, ShipValidator shipValidator) {
         this.shipRepository = shipRepository;
+        this.shipValidator = shipValidator;
     }
 
     /**
      * Tạo mới một tàu du lịch trong hệ thống
      */
     public CruiseShipResponse createShip(CreateCruiseShipRequest request) {
+        shipValidator.validate(request);
+
         if (shipRepository.existsByCode(request.getCode().trim())) {
             throw new DuplicateResourceException("Mã tàu '" + request.getCode() + "' đã tồn tại trong hệ thống");
         }
@@ -106,6 +110,8 @@ public class CruiseShipService {
      * Cập nhật thông tin chi tiết của tàu du lịch
      */
     public CruiseShipResponse updateShip(Long id, UpdateCruiseShipRequest request) {
+        shipValidator.validate(request);
+
         CruiseShip ship = shipRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tàu du lịch với ID: " + id));
 
