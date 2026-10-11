@@ -174,6 +174,11 @@ Hệ thống quản lý toàn diện thông tin tàu du lịch, đặc tính k�
 * **Kiểm thử quy tắc nghiệp vụ tàu du lịch (`ShipBusinessRulesTest` — KAN-89):**
   * Kiểm thử phân tầng 5 nhóm quy tắc nghiệp vụ: Mã hiệu & tính duy nhất (Uniqueness), Sức chứa & tỷ lệ buồng phòng, Kích thước kỹ thuật hàng hải, Năm sản xuất & biên độ tương lai, Vòng đời & chuyển đổi trạng thái (Soft/Hard delete, đổi trạng thái tàu).
 
+* **Kiểm thử API CRUD tàu du lịch (`CruiseShipControllerTest` & `CruiseShipIntegrationTest` — KAN-90):**
+  * Kiểm thử toàn diện MockMvc Web Layer và Spring Boot Integration Test với cơ sở dữ liệu in-memory H2.
+  * Bao phủ 100% các luồng thành công (200 OK, 201 Created) và các kịch bản lỗi biên: 400 Bad Request (vi phạm validation dữ liệu), 404 Not Found (ID/mã tàu không tồn tại), 409 Conflict (trùng lặp mã hoặc tên tàu khi tạo mới hoặc cập nhật).
+  * Kiểm thử vòng đời trọn vẹn (Lifecycle), phân trang, lọc từ khóa, sắp xếp và cơ chế Soft Delete / Hard Delete.
+
 ---
 
 ## 5. Cấu hình Cơ sở dữ liệu (Database Connection Settings)

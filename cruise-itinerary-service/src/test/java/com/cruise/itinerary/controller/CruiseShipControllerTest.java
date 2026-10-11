@@ -289,4 +289,163 @@ class CruiseShipControllerTest {
 
         verify(shipService).deleteShip(1L, true);
     }
+
+    @Test
+    @DisplayName("GET /api/itinerary/ships/code/{code} returns 404 when code does not exist")
+    void shouldReturnNotFoundWhenShipCodeDoesNotExist() throws Exception {
+        when(shipService.getShipByCode("NON-EXISTENT"))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy tàu du lịch với mã: NON-EXISTENT"));
+
+        mockMvc.perform(get("/api/itinerary/ships/code/NON-EXISTENT"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Không tìm thấy tàu du lịch với mã: NON-EXISTENT"));
+    }
+
+    @Test
+    @DisplayName("GET /api/itinerary/ships supports ascending sort")
+    void shouldGetAllShipsWithAscendingSort() throws Exception {
+        when(shipService.getAllShips(any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(sampleResponse)));
+
+        mockMvc.perform(get("/api/itinerary/ships")
+                        .param("direction", "asc")
+                        .param("sortBy", "name"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(shipService).getAllShips(isNull(), isNull(), eq(true), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("GET /api/itinerary/ships with activeOnly=false retrieves all ships including inactive")
+    void shouldGetAllShipsWithActiveOnlyFalse() throws Exception {
+        when(shipService.getAllShips(any(), any(), eq(false), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(sampleResponse)));
+
+        mockMvc.perform(get("/api/itinerary/ships")
+                        .param("activeOnly", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(shipService).getAllShips(isNull(), isNull(), eq(false), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("PUT /api/itinerary/ships/{id} returns 404 Not Found when ID does not exist")
+    void shouldReturnNotFoundWhenUpdatingNonExistentShip() throws Exception {
+        when(shipService.updateShip(eq(999L), any(UpdateCruiseShipRequest.class)))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy tàu du lịch với ID: 999"));
+
+        String jsonPayload = """
+                {
+                    "name": "Halong Grand Harmony Luxury",
+                    "code": "SHIP-001",
+                    "operator": "Paradise Vietnam Cruises",
+                    "capacity": 2500,
+                    "crewCapacity": 800,
+                    "totalCabins": 1150,
+                    "totalDecks": 15
+                }
+                """;
+
+        mockMvc.perform(put("/api/itinerary/ships/999")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Không tìm thấy tàu du lịch với ID: 999"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/itinerary/ships/{id} returns 409 Conflict when duplicate name or code occurs")
+    void shouldReturnConflictWhenUpdatingShipWithDuplicateCodeOrName() throws Exception {
+        when(shipService.updateShip(eq(1L), any(UpdateCruiseShipRequest.class)))
+                .thenThrow(new DuplicateResourceException("Mã tàu 'SHIP-002' đã được sử dụng bởi tàu khác"));
+
+        String jsonPayload = """
+                {
+                    "name": "Halong Grand Harmony Luxury",
+                    "code": "SHIP-002",
+                    "operator": "Paradise Vietnam Cruises",
+                    "capacity": 2500,
+                    "crewCapacity": 800,
+                    "totalCabins": 1150,
+                    "totalDecks": 15
+                }
+                """;
+
+        mockMvc.perform(put("/api/itinerary/ships/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Mã tàu 'SHIP-002' đã được sử dụng bởi tàu khác"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/itinerary/ships/{id} returns 400 Bad Request when validation fails")
+    void shouldReturnBadRequestWhenUpdatingShipWithInvalidPayload() throws Exception {
+        String invalidPayload = """
+                {
+                    "name": "",
+                    "code": "",
+                    "capacity": -100
+                }
+                """;
+
+        mockMvc.perform(put("/api/itinerary/ships/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidPayload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/itinerary/ships/{id}/status returns 404 Not Found when ID does not exist")
+    void shouldReturnNotFoundWhenUpdatingStatusOfNonExistentShip() throws Exception {
+        when(shipService.updateShipStatus(eq(999L), any(UpdateShipStatusRequest.class)))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy tàu du lịch với ID: 999"));
+
+        String jsonPayload = """
+                {
+                    "status": "UNDER_MAINTENANCE"
+                }
+                """;
+
+        mockMvc.perform(patch("/api/itinerary/ships/999/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Không tìm thấy tàu du lịch với ID: 999"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/itinerary/ships/{id}/status returns 400 Bad Request when status is null")
+    void shouldReturnBadRequestWhenUpdatingStatusWithNullStatus() throws Exception {
+        String invalidPayload = """
+                {
+                    "status": null
+                }
+                """;
+
+        mockMvc.perform(patch("/api/itinerary/ships/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidPayload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("DELETE /api/itinerary/ships/{id} returns 404 Not Found when ID does not exist")
+    void shouldReturnNotFoundWhenDeletingNonExistentShip() throws Exception {
+        doThrow(new ResourceNotFoundException("Không tìm thấy tàu du lịch với ID: 999"))
+                .when(shipService).deleteShip(999L, false);
+
+        mockMvc.perform(delete("/api/itinerary/ships/999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Không tìm thấy tàu du lịch với ID: 999"));
+    }
 }
