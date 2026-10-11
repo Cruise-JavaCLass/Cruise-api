@@ -26,7 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(CruiseStopController.class)
 @Import(GlobalExceptionHandler.class)
-@DisplayName("CruiseStopController MockMvc Tests (KAN-109)")
+@DisplayName("CruiseStopController MockMvc Tests (KAN-106)")
 class CruiseStopControllerTest {
 
     @Autowired
@@ -65,6 +65,35 @@ class CruiseStopControllerTest {
     }
 
     @Test
+    @DisplayName("PUT /api/itinerary/tours/{tourId}/stops/{stopId} cập nhật điểm dừng thành công")
+    void updateStopSuccess() throws Exception {
+        CruiseStopResponse resp = CruiseStopResponse.builder()
+                .id(1L)
+                .tourId(10L)
+                .portId(2L)
+                .stopOrder(1)
+                .arrivalTime(LocalDateTime.of(2026, 10, 15, 9, 0))
+                .departureTime(LocalDateTime.of(2026, 10, 15, 19, 0))
+                .build();
+
+        when(stopService.updateStop(eq(10L), eq(1L), any(CruiseStopRequest.class))).thenReturn(resp);
+
+        mockMvc.perform(put("/api/itinerary/tours/10/stops/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "portId": 2,
+                                  "stopOrder": 1,
+                                  "arrivalTime": "2026-10-15T09:00:00",
+                                  "departureTime": "2026-10-15T19:00:00"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.stopOrder").value(1));
+    }
+
+    @Test
     @DisplayName("GET /api/itinerary/tours/{tourId}/stops lấy danh sách điểm dừng của tour")
     void getStopsByTourIdSuccess() throws Exception {
         CruiseStopResponse resp = CruiseStopResponse.builder()
@@ -79,6 +108,23 @@ class CruiseStopControllerTest {
         mockMvc.perform(get("/api/itinerary/tours/10/stops"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].stopOrder").value(1));
+    }
+
+    @Test
+    @DisplayName("GET /api/itinerary/tours/{tourId}/stops/{stopId} lấy chi tiết điểm dừng")
+    void getStopByIdSuccess() throws Exception {
+        CruiseStopResponse resp = CruiseStopResponse.builder()
+                .id(1L)
+                .tourId(10L)
+                .portId(2L)
+                .stopOrder(1)
+                .build();
+
+        when(stopService.getStopById(10L, 1L)).thenReturn(resp);
+
+        mockMvc.perform(get("/api/itinerary/tours/10/stops/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(1));
     }
 
     @Test
