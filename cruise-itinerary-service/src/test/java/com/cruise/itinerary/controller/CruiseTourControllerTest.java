@@ -33,9 +33,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * Tests for CruiseTourController API layer (Tour Management - KAN-99)
+ */
 @WebMvcTest(CruiseTourController.class)
 @Import(GlobalExceptionHandler.class)
-@DisplayName("CruiseTourController MockMvc Web Layer Tests")
+@DisplayName("CruiseTourController MockMvc Web Layer Tests (KAN-99)")
 class CruiseTourControllerTest {
 
     @Autowired
