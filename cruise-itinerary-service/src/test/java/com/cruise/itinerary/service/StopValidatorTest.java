@@ -66,6 +66,11 @@ class StopValidatorTest {
         assertThatThrownBy(() -> stopValidator.validateStopSchedule(sampleTour, req, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("all-aboard");
+
+        req.setAllAboardTime(LocalDateTime.of(2026, 10, 15, 9, 0)); // before arrival
+        assertThatThrownBy(() -> stopValidator.validateStopSchedule(sampleTour, req, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("all-aboard");
     }
 
     @Test
@@ -115,6 +120,51 @@ class StopValidatorTest {
         assertThatThrownBy(() -> stopValidator.validateStopSchedule(sampleTour, req2, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("không thể cập cảng trước khi điểm dừng thứ tự 1 rời cảng");
+    }
+
+    @Test
+    @DisplayName("Ném lỗi khi điểm dừng trước rời cảng sau khi điểm dừng sau cập cảng")
+    void shouldThrowExceptionWhenStopScheduleOverlapsWithNextStop() {
+        CruiseStop stop2 = CruiseStop.builder()
+                .stopOrder(2)
+                .arrivalTime(LocalDateTime.of(2026, 10, 16, 8, 0))
+                .departureTime(LocalDateTime.of(2026, 10, 16, 18, 0))
+                .build();
+        stop2.setId(20L);
+
+        when(stopRepository.findByTourIdAndActiveTrueOrderByStopOrderAsc(1L))
+                .thenReturn(List.of(stop2));
+
+        CruiseStopRequest req1 = new CruiseStopRequest();
+        req1.setStopOrder(1);
+        req1.setArrivalTime(LocalDateTime.of(2026, 10, 15, 8, 0));
+        req1.setDepartureTime(LocalDateTime.of(2026, 10, 16, 9, 0)); // After stop2 arrives!
+
+        assertThatThrownBy(() -> stopValidator.validateStopSchedule(sampleTour, req1, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("không thể rời cảng sau khi điểm dừng thứ tự 2 đã cập cảng");
+    }
+
+    @Test
+    @DisplayName("Bỏ qua kiểm tra chính mình khi đang cập nhật điểm dừng (currentStopId trùng)")
+    void shouldIgnoreSelfWhenUpdating() {
+        CruiseStop selfStop = CruiseStop.builder()
+                .stopOrder(1)
+                .arrivalTime(LocalDateTime.of(2026, 10, 15, 8, 0))
+                .departureTime(LocalDateTime.of(2026, 10, 15, 16, 0))
+                .build();
+        selfStop.setId(10L);
+
+        when(stopRepository.findByTourIdAndActiveTrueOrderByStopOrderAsc(1L))
+                .thenReturn(List.of(selfStop));
+
+        CruiseStopRequest updateReq = new CruiseStopRequest();
+        updateReq.setStopOrder(1);
+        updateReq.setArrivalTime(LocalDateTime.of(2026, 10, 15, 9, 0));
+        updateReq.setDepartureTime(LocalDateTime.of(2026, 10, 15, 17, 0));
+
+        assertThatCode(() -> stopValidator.validateStopSchedule(sampleTour, updateReq, 10L))
+                .doesNotThrowAnyException();
     }
 
     @Test

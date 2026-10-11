@@ -100,6 +100,19 @@ class CruiseStopServiceTest {
     }
 
     @Test
+    @DisplayName("createStop ném lỗi khi tour hoặc port không tồn tại")
+    void createStopNotFound() {
+        when(tourRepository.findById(99L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> stopService.createStop(99L, sampleRequest))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
+        when(portRepository.findById(2L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> stopService.createStop(10L, sampleRequest))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
     @DisplayName("createStop ném lỗi khi trùng stopOrder")
     void createStopDuplicateOrder() {
         when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
@@ -126,6 +139,31 @@ class CruiseStopServiceTest {
     }
 
     @Test
+    @DisplayName("updateStop ném lỗi khi tour không khớp hoặc trùng stopOrder")
+    void updateStopValidationErrors() {
+        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
+
+        CruiseTour otherTour = new CruiseTour();
+        otherTour.setId(99L);
+        CruiseStop mismatchedStop = CruiseStop.builder().tour(otherTour).build();
+        mismatchedStop.setId(100L);
+
+        when(stopRepository.findById(100L)).thenReturn(Optional.of(mismatchedStop));
+
+        assertThatThrownBy(() -> stopService.updateStop(10L, 100L, sampleRequest))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("không thuộc về tour");
+
+        // Duplicate order test
+        when(stopRepository.findById(100L)).thenReturn(Optional.of(sampleStop));
+        when(portRepository.findById(2L)).thenReturn(Optional.of(samplePort));
+        when(stopRepository.existsByTourIdAndStopOrderAndIdNotAndActiveTrue(10L, 1, 100L)).thenReturn(true);
+
+        assertThatThrownBy(() -> stopService.updateStop(10L, 100L, sampleRequest))
+                .isInstanceOf(DuplicateResourceException.class);
+    }
+
+    @Test
     @DisplayName("getStopsByTourId và getStopById thành công")
     void getStopsSuccess() {
         when(tourRepository.existsById(10L)).thenReturn(true);
@@ -140,6 +178,32 @@ class CruiseStopServiceTest {
     }
 
     @Test
+    @DisplayName("getStopsByTourId ném lỗi khi tour không tồn tại")
+    void getStopsTourNotFound() {
+        when(tourRepository.existsById(99L)).thenReturn(false);
+
+        assertThatThrownBy(() -> stopService.getStopsByTourId(99L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("getStopById và deleteStop ném lỗi khi stop không thuộc tour")
+    void stopNotBelongToTour() {
+        CruiseTour otherTour = new CruiseTour();
+        otherTour.setId(99L);
+        CruiseStop mismatchedStop = CruiseStop.builder().tour(otherTour).build();
+        mismatchedStop.setId(100L);
+
+        when(stopRepository.findById(100L)).thenReturn(Optional.of(mismatchedStop));
+
+        assertThatThrownBy(() -> stopService.getStopById(10L, 100L))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThatThrownBy(() -> stopService.deleteStop(10L, 100L))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     @DisplayName("deleteStop thành công")
     void deleteStopSuccess() {
         when(stopRepository.findById(100L)).thenReturn(Optional.of(sampleStop));
@@ -148,5 +212,11 @@ class CruiseStopServiceTest {
 
         assertThat(sampleStop.getActive()).isFalse();
         verify(stopRepository).save(sampleStop);
+    }
+
+    @Test
+    @DisplayName("fromEntity trả về null khi đầu vào null")
+    void fromEntityNull() {
+        assertThat(CruiseStopResponse.fromEntity(null)).isNull();
     }
 }
