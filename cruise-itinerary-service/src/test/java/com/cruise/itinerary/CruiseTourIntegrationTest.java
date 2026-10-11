@@ -26,10 +26,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * End-to-End API Integration Tests for Tour Management (KAN-99)
+ */
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
-@DisplayName("CruiseTour End-to-End Integration Tests")
+@DisplayName("CruiseTour End-to-End Integration Tests (KAN-99)")
 class CruiseTourIntegrationTest {
 
     @Autowired
