@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### MCP / AI Tool artifacts ###
+.codegraph/

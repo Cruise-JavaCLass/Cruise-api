@@ -15,6 +15,7 @@
 > - [KAN-63](https://huytran20052022.atlassian.net/browse/KAN-63) - *Write Unit Tests for Authentication Logic — Test logic xác thực*  
 > - [KAN-64](https://huytran20052022.atlassian.net/browse/KAN-64) - *Write API Tests for Login and Logout — Test API đăng nhập và đăng xuất*  
 > - [KAN-65](https://huytran20052022.atlassian.net/browse/KAN-65) - *Test Invalid Credentials and Expired Tokens — Test thông tin sai và token hết hạn*  
+> - [KAN-87](https://huytran20052022.atlassian.net/browse/KAN-87) - *Create Cruise Ship API — Tạo API quản lý tàu du lịch*  
 
 ---
 
@@ -124,6 +125,42 @@ Hệ thống cung cấp cơ chế toàn diện về phát hành, xác minh, làm
   * **User-level Token Revocation:** Tự động vô hiệu hóa toàn bộ token cũ của người dùng khi đổi mật khẩu (`change-password`) hoặc reset phiên làm việc.
 * **Cấp phát lại Token Pair:**
   * **`POST /api/auth/token/pair`**: Cấp mới cặp token cho phiên làm việc hiện tại (`Authorization: Bearer <token>`).
+
+### 4.4. Quản lý Tàu Du Lịch (Cruise Ship Management Endpoints — KAN-87):
+Được cung cấp bởi `cruise-itinerary-service` (Port `8082`):
+
+Hệ thống quản lý toàn diện thông tin tàu du lịch, đặc tính kỹ thuật, sức chứa và trạng thái hoạt động:
+
+* **`POST /api/itinerary/ships`**: Tạo mới tàu du lịch trong hệ thống.
+  * **Status:** `201 Created` (hoặc `400 Bad Request`, `409 Conflict` khi trùng mã `code` hoặc `name`).
+  * **Request Body:**
+    ```json
+    {
+      "name": "Halong Grand Harmony",
+      "code": "SHIP-001",
+      "operator": "Paradise Vietnam Cruises",
+      "capacity": 2400,
+      "crewCapacity": 750,
+      "totalCabins": 1100,
+      "totalDecks": 14,
+      "manufacturingYear": 2023,
+      "lengthMeters": 315.5,
+      "beamMeters": 38.0,
+      "draftMeters": 8.5,
+      "status": "ACTIVE",
+      "description": "Du thuyền 5 sao đẳng cấp quốc tế",
+      "amenities": "Sky Pool, Luxury Spa, Grand Ballroom",
+      "imageUrl": "https://cruise.com/ships/ship-001.jpg"
+    }
+    ```
+* **`GET /api/itinerary/ships`**: Lấy danh sách tàu du lịch với phân trang, tìm kiếm theo từ khóa và lọc theo trạng thái.
+  * **Query Params:** `keyword`, `status` (`ACTIVE`, `DOCKED`, `ON_VOYAGE`, `UNDER_MAINTENANCE`, `INACTIVE`), `activeOnly` (mặc định `true`), `page`, `size`, `sortBy`, `direction`.
+* **`GET /api/itinerary/ships/active`**: Lấy danh sách tất cả các tàu đang hoạt động (không phân trang, phục vụ dropdown chọn tàu).
+* **`GET /api/itinerary/ships/{id}`**: Lấy chi tiết tàu theo ID (`200 OK` / `404 Not Found`).
+* **`GET /api/itinerary/ships/code/{code}`**: Lấy chi tiết tàu theo mã hiệu `code` (`200 OK` / `404 Not Found`).
+* **`PUT /api/itinerary/ships/{id}`**: Cập nhật thông tin chi tiết tàu (`200 OK` / `400 Bad Request` / `404 Not Found` / `409 Conflict`).
+* **`PATCH /api/itinerary/ships/{id}/status`**: Cập nhật trạng thái tàu (`ACTIVE`, `DOCKED`, `ON_VOYAGE`, `UNDER_MAINTENANCE`, `INACTIVE`).
+* **`DELETE /api/itinerary/ships/{id}`**: Hủy kích hoạt tàu (soft delete mặc định; thêm query `?hard=true` để xóa vĩnh viễn khỏi cơ sở dữ liệu).
 
 ---
 
@@ -275,6 +312,39 @@ Bộ kiểm thử chuyên biệt tập trung vào các tình huống bảo mật
    - Kiểm thử độc lập tầng Service (`AuthService`) và tầng mã hóa (`JwtService`).
    - Kiểm thử thuật toán băm BCrypt, so khớp, xử lý trường hợp user null/inactive, và ngoại lệ nghiệp vụ.
    - Kiểm thử cơ chế giải mã payload, tính toán timestamp `iat`, `exp`, `remainingSeconds`, phát hiện hết hạn và cô lập cache (`clearRevocations`).
+
+### 6.6. Kiểm thử Tầng Quản lý Tàu Du Lịch (Cruise Ship Management Test Suite — KAN-87):
+Module `cruise-itinerary-service` được trang bị bộ kiểm thử chuyên sâu (38/38 tests pass 100%) bao phủ toàn bộ các tầng kiến trúc:
+
+1. **`CruiseShipRepositoryTest` (7 tests - DataJpaTest):**
+   - Kiểm thử lưu trữ entity `CruiseShip`, tự sinh ID và audit timestamps (`createdAt`, `updatedAt`).
+   - Kiểm thử tìm kiếm theo mã `code` và tên `name`.
+   - Kiểm thử kiểm tra tồn tại `existsByCode`, `existsByName`, `existsByCodeAndIdNot`, `existsByNameAndIdNot`.
+   - Kiểm thử lọc danh sách theo `status` và cờ `active`, đếm số lượng tàu `countByActiveTrue`.
+   - Kiểm thử tìm kiếm nâng cao đa trường (`keyword`, `status`, `activeOnly`) kết hợp phân trang.
+
+2. **`CruiseShipServiceTest` (16 tests - Mockito Unit Tests):**
+   - Kiểm thử tạo mới tàu thành công với dữ liệu hợp lệ và chuẩn hóa (trimming, uppercase code).
+   - Kiểm thử từ chối tạo mới khi trùng mã `code` hoặc trùng `name` (`DuplicateResourceException`).
+   - Kiểm thử lấy thông tin tàu theo ID và mã hiệu `code`, xử lý ngoại lệ `ResourceNotFoundException`.
+   - Kiểm thử tìm kiếm phân trang và danh sách tàu đang hoạt động (`active`).
+   - Kiểm thử cập nhật thông tin tàu, kiểm tra không cho phép trùng `code`/`name` với tàu khác.
+   - Kiểm thử cập nhật trạng thái hoạt động (`updateShipStatus`).
+   - Kiểm thử xóa mềm (`active = false`, `status = INACTIVE`) và xóa cứng (`hardDelete`).
+   - Kiểm thử thống kê số tàu đang hoạt động (`countActiveShips`).
+
+3. **`CruiseShipControllerTest` (12 tests - WebMvcTest):**
+   - Kiểm thử endpoint `POST /api/itinerary/ships`: tạo thành công `201 Created`, từ chối dữ liệu không hợp lệ `400 Bad Request`, từ chối trùng lặp `409 Conflict`.
+   - Kiểm thử endpoint `GET /api/itinerary/ships` phân trang và lọc `200 OK`.
+   - Kiểm thử endpoint `GET /api/itinerary/ships/active` lấy danh sách tàu hoạt động.
+   - Kiểm thử endpoint `GET /api/itinerary/ships/{id}` (`200 OK`, `404 Not Found`).
+   - Kiểm thử endpoint `GET /api/itinerary/ships/code/{code}` (`200 OK`).
+   - Kiểm thử endpoint `PUT /api/itinerary/ships/{id}` (`200 OK`).
+   - Kiểm thử endpoint `PATCH /api/itinerary/ships/{id}/status` (`200 OK`).
+   - Kiểm thử endpoint `DELETE /api/itinerary/ships/{id}` (xóa mềm `200 OK` và xóa cứng `200 OK`).
+
+4. **`CruiseShipIntegrationTest` (1 test - SpringBootTest E2E Lifecycle):**
+   - Kiểm thử trọn vẹn vòng đời một tàu du lịch từ khởi tạo, tra cứu ID/mã hiệu, tìm kiếm bộ lọc, cập nhật thông tin, thay đổi trạng thái hải trình, xóa mềm và xóa cứng khỏi database.
 
 ---
 
