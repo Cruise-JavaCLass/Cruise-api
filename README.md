@@ -17,6 +17,7 @@
 > - [KAN-65](https://huytran20052022.atlassian.net/browse/KAN-65) - *Test Invalid Credentials and Expired Tokens — Test thông tin sai và token hết hạn*  
 > - [KAN-87](https://huytran20052022.atlassian.net/browse/KAN-87) - *Create Cruise Ship API — Tạo API quản lý tàu du lịch*  
 > - [KAN-88](https://huytran20052022.atlassian.net/browse/KAN-88) - *Implement Ship Information Validation — Kiểm tra tính hợp lệ của thông tin tàu*  
+> - [KAN-89](https://huytran20052022.atlassian.net/browse/KAN-89) - *Write Unit Tests for Ship Business Rules — Test các quy tắc nghiệp vụ tàu du lịch*  
 
 ---
 
@@ -169,6 +170,9 @@ Hệ thống quản lý toàn diện thông tin tàu du lịch, đặc tính k�
   * Sức chứa thủy thủ đoàn: Tỷ lệ hợp lý không vượt quá gấp đôi sức chứa hành khách (`crewCapacity <= capacity * 2`).
   * Kích thước kỹ thuật: Chiều dài phải lớn hơn chiều rộng (`lengthMeters > beamMeters`) và mớn nước phải nhỏ hơn chiều rộng (`draftMeters < beamMeters`).
   * Năm sản xuất: Từ năm 1900 đến tối đa 5 năm trong tương lai (`1900 <= manufacturingYear <= currentYear + 5`).
+
+* **Kiểm thử quy tắc nghiệp vụ tàu du lịch (`ShipBusinessRulesTest` — KAN-89):**
+  * Kiểm thử phân tầng 5 nhóm quy tắc nghiệp vụ: Mã hiệu & tính duy nhất (Uniqueness), Sức chứa & tỷ lệ buồng phòng, Kích thước kỹ thuật hàng hải, Năm sản xuất & biên độ tương lai, Vòng đời & chuyển đổi trạng thái (Soft/Hard delete, đổi trạng thái tàu).
 
 ---
 
