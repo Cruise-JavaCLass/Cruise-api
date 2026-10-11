@@ -34,6 +34,9 @@ class CruiseShipServiceTest {
     @Mock
     private CruiseShipRepository shipRepository;
 
+    @Mock
+    private ShipValidator shipValidator;
+
     @InjectMocks
     private CruiseShipService shipService;
 

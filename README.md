@@ -16,6 +16,7 @@
 > - [KAN-64](https://huytran20052022.atlassian.net/browse/KAN-64) - *Write API Tests for Login and Logout — Test API đăng nhập và đăng xuất*  
 > - [KAN-65](https://huytran20052022.atlassian.net/browse/KAN-65) - *Test Invalid Credentials and Expired Tokens — Test thông tin sai và token hết hạn*  
 > - [KAN-87](https://huytran20052022.atlassian.net/browse/KAN-87) - *Create Cruise Ship API — Tạo API quản lý tàu du lịch*  
+> - [KAN-88](https://huytran20052022.atlassian.net/browse/KAN-88) - *Implement Ship Information Validation — Kiểm tra tính hợp lệ của thông tin tàu*  
 
 ---
 
@@ -161,6 +162,13 @@ Hệ thống quản lý toàn diện thông tin tàu du lịch, đặc tính k�
 * **`PUT /api/itinerary/ships/{id}`**: Cập nhật thông tin chi tiết tàu (`200 OK` / `400 Bad Request` / `404 Not Found` / `409 Conflict`).
 * **`PATCH /api/itinerary/ships/{id}/status`**: Cập nhật trạng thái tàu (`ACTIVE`, `DOCKED`, `ON_VOYAGE`, `UNDER_MAINTENANCE`, `INACTIVE`).
 * **`DELETE /api/itinerary/ships/{id}`**: Hủy kích hoạt tàu (soft delete mặc định; thêm query `?hard=true` để xóa vĩnh viễn khỏi cơ sở dữ liệu).
+
+* **Kiểm tra tính hợp lệ của thông tin tàu (`ShipValidator` — KAN-88):**
+  * Định dạng mã hiệu tàu: 3-30 ký tự, chữ in hoa, số, gạch nối hoặc gạch dưới (`^[A-Z0-9_-]{3,30}$`).
+  * Tương quan sức chứa & buồng phòng: Tổng số cabin không vượt quá sức chứa hành khách (`totalCabins <= capacity`).
+  * Sức chứa thủy thủ đoàn: Tỷ lệ hợp lý không vượt quá gấp đôi sức chứa hành khách (`crewCapacity <= capacity * 2`).
+  * Kích thước kỹ thuật: Chiều dài phải lớn hơn chiều rộng (`lengthMeters > beamMeters`) và mớn nước phải nhỏ hơn chiều rộng (`draftMeters < beamMeters`).
+  * Năm sản xuất: Từ năm 1900 đến tối đa 5 năm trong tương lai (`1900 <= manufacturingYear <= currentYear + 5`).
 
 ---
 
