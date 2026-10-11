@@ -1,5 +1,8 @@
 package com.cruise.itinerary.enums;
 
+import java.util.Collections;
+import java.util.Set;
+
 /**
  * Trạng thái hoạt động của tour du thuyền (Cruise Tour Status)
  */
@@ -48,13 +51,13 @@ public enum TourStatus {
     /**
      * Lấy danh sách các trạng thái được phép chuyển đến từ trạng thái hiện tại
      */
-    public java.util.Set<TourStatus> getAllowedTransitions() {
+    public Set<TourStatus> getAllowedTransitions() {
         return switch (this) {
-            case DRAFT -> java.util.Set.of(PUBLISHED, CANCELLED);
-            case PUBLISHED -> java.util.Set.of(IN_PROGRESS, DRAFT, CANCELLED);
-            case IN_PROGRESS -> java.util.Set.of(COMPLETED, CANCELLED);
-            case COMPLETED -> java.util.Collections.emptySet();
-            case CANCELLED -> java.util.Set.of(DRAFT);
+            case DRAFT -> Set.of(PUBLISHED, CANCELLED);
+            case PUBLISHED -> Set.of(IN_PROGRESS, DRAFT, CANCELLED);
+            case IN_PROGRESS -> Set.of(COMPLETED, CANCELLED);
+            case COMPLETED -> Collections.emptySet();
+            case CANCELLED -> Set.of(DRAFT);
         };
     }
 }

@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * Service xử lý logic nghiệp vụ quản lý Tour du thuyền (Cruise Tour Management)
@@ -170,7 +171,7 @@ public class CruiseTourService {
      * Lấy danh sách các trạng thái được phép chuyển đến từ trạng thái hiện tại của tour
      */
     @Transactional(readOnly = true)
-    public java.util.Set<TourStatus> getAllowedStatusTransitions(Long id) {
+    public Set<TourStatus> getAllowedStatusTransitions(Long id) {
         CruiseTour tour = tourRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tour du lịch với ID: " + id));
         return tour.getStatus().getAllowedTransitions();

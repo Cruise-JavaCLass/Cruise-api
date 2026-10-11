@@ -334,6 +334,28 @@ class CruiseTourServiceTest {
         verify(tourRepository).findByStatusAndActiveTrue(TourStatus.DRAFT);
     }
 
+    @Test
+    @DisplayName("updateTourStatus should throw ResourceNotFoundException when tour is not found")
+    void shouldThrowWhenTourNotFoundForStatusUpdate() {
+        when(tourRepository.findById(999L)).thenReturn(Optional.empty());
+
+        UpdateTourStatusRequest request = new UpdateTourStatusRequest(TourStatus.PUBLISHED);
+
+        assertThatThrownBy(() -> tourService.updateTourStatus(999L, request))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Không tìm thấy tour du lịch với ID: 999");
+    }
+
+    @Test
+    @DisplayName("getAllowedStatusTransitions should throw ResourceNotFoundException when tour is not found")
+    void shouldThrowWhenTourNotFoundForAllowedTransitions() {
+        when(tourRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> tourService.getAllowedStatusTransitions(999L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Không tìm thấy tour du lịch với ID: 999");
+    }
+
     // =========================================================================
     // GET TOUR TESTS
     // =========================================================================
