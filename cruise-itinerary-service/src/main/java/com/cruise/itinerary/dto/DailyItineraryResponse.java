@@ -1,42 +1,22 @@
 package com.cruise.itinerary.dto;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
 
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalTime;
 
-@Getter
-@Setter
+@Data
+@EqualsAndHashCode(callSuper = true)
+@SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class DailyItineraryResponse {
+public class DailyItineraryResponse extends BaseDailyItineraryDto {
 
     private Long id;
     private Long tourId;
-    private Integer dayNumber;
-
-    @JsonFormat(pattern = "yyyy-MM-dd")
-    private LocalDate itineraryDate;
-
-    private String title;
-    private String description;
-    private Long portId;
-    private String portName;
-
-    @JsonFormat(pattern = "HH:mm")
-    private LocalTime arrivalTime;
-
-    @JsonFormat(pattern = "HH:mm")
-    private LocalTime departureTime;
-
-    @JsonFormat(pattern = "HH:mm")
-    private LocalTime allAboardTime;
-
-    private Boolean isSeaDay;
-    private String weatherForecast;
     private Boolean active;
     private Instant createdAt;
     private Instant updatedAt;
