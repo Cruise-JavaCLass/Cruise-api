@@ -28,6 +28,7 @@
 > - [KAN-126](https://huytran20052022.atlassian.net/browse/KAN-126) - *Implement Itinerary Change Notification Trigger — Kích hoạt thông báo khi lịch trình thay đổi*  
 > - [KAN-128](https://huytran20052022.atlassian.net/browse/KAN-128) - *Write Integration Tests for Itinerary Updates — Kiểm thử tích hợp cho cập nhật lịch trình và audit log*  
 > - [KAN-134](https://huytran20052022.atlassian.net/browse/KAN-134) - *Create and Update Activity Endpoints — Tạo và cập nhật endpoints hoạt động trên tàu*  
+> - [KAN-135](https://huytran20052022.atlassian.net/browse/KAN-135) - *Implement Activity List and Detail Endpoints — Triển khai endpoints danh sách và chi tiết hoạt động*  
 > - [KAN-144](https://huytran20052022.atlassian.net/browse/KAN-144) - *Configure Activity Time and Location — Cấu hình thời gian và địa điểm cho hoạt động*  
 > - [KAN-146](https://huytran20052022.atlassian.net/browse/KAN-146) - *Retrieve Registered Passenger Lists — Lấy thông tin danh sách hành khách đăng ký*  
 > - [KAN-148](https://huytran20052022.atlassian.net/browse/KAN-148) - *Implement Registration List Export — Triển khai xuất danh sách hành khách đăng ký*  
@@ -484,8 +485,8 @@ Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn di�
   - Kiểm thử xử lý escape chuẩn RFC 4180 cho các trường chứa ký tự đặc biệt (dấu phẩy, dấu nháy kép, ký tự xuống dòng `\r\n`).
   - Kiểm thử xuất CSV khi danh sách tour rỗng (sinh đúng header và UTF-8 BOM).
 
-### 6.9. Tạo, Cập nhật & Cấu hình Hoạt động trên tàu (Create & Update Activity Endpoints — KAN-134, KAN-144):
-Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn diện cho việc tạo mới, cập nhật toàn diện thông tin, cấu hình địa điểm và phòng chống xung đột lịch trình hoạt động du thuyền:
+### 6.9. Tạo, Cập nhật, Cấu hình & Truy vấn Danh sách/Chi tiết Hoạt động trên tàu (Activities Management — KAN-134, KAN-135, KAN-144):
+Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn diện cho việc tạo mới, cập nhật toàn diện thông tin, cấu hình địa điểm, kiểm tra chi tiết và truy vấn danh sách hoạt động du thuyền:
 * **`OnboardActivityServiceTest` (13 tests - Mockito Unit Tests):**
   - Kiểm thử tạo hoạt động mới với ngày, giờ bắt đầu/kết thúc, số lượng tham gia tối đa, danh mục và địa điểm tổ chức.
   - Kiểm thử cập nhật toàn diện hoạt động (`updateActivity` — KAN-134): tiêu đề, mô tả, danh mục, số ngày, địa điểm, sức chứa, giá dịch vụ và trạng thái.
@@ -501,6 +502,11 @@ Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn di�
   - Kiểm thử `PATCH /api/activities/{id}/time-location`: cấu hình thời gian và địa điểm (`200 OK`).
   - Kiểm thử các kịch bản ngoại lệ: `400 Bad Request` khi vi phạm quy tắc thời gian hoặc xung đột địa điểm, `404 Not Found` khi hoạt động không tồn tại.
   - Kiểm thử `GET /api/activities/{id}`, `GET /api/activities/tour/{tourId}`, `GET /api/activities/tour/{tourId}/day/{dayNumber}`, `GET /api/activities/tour/{tourId}/paged`, và `DELETE /api/activities/{id}`.
+* **`ActivityListAndDetailApiTest` (12 tests - SpringBootTest End-to-End API Integration — KAN-135):**
+  - Kiểm thử truy vấn chi tiết hoạt động `GET /api/activities/{id}`: kiểm tra đầy đủ các trường (title, category, location, capacity, participants, isIncluded), xử lý 404 NOT_FOUND khi ID không tồn tại hoặc đã bị xóa mềm (`active = false`).
+  - Kiểm thử lấy danh sách hoạt động theo tour `GET /api/activities/tour/{tourId}`: sắp xếp theo ngày và giờ bắt đầu, trả về danh sách rỗng khi tour không có hoạt động.
+  - Kiểm thử lấy danh sách hoạt động theo từng ngày cụ thể `GET /api/activities/tour/{tourId}/day/{dayNumber}`.
+  - Kiểm thử phân trang `GET /api/activities/tour/{tourId}/paged` kết hợp lọc theo danh mục (`category`), tìm kiếm từ khóa (`keyword` theo tiêu đề hoặc địa điểm), và lọc theo ngày số (`dayNumber`).
 
 ---
 
