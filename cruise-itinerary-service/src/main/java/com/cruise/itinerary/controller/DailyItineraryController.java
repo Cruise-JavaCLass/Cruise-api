@@ -48,6 +48,16 @@ public class DailyItineraryController {
                 dailyItineraryService.updateDailyItinerary(tourId, itineraryId, request));
     }
 
+    @PatchMapping("/{itineraryId}/affected")
+    public ApiResponse<DailyItineraryResponse> updateAffectedSchedule(
+            @PathVariable Long tourId,
+            @PathVariable Long itineraryId,
+            @Valid @RequestBody com.cruise.itinerary.dto.UpdateAffectedScheduleRequest request
+    ) {
+        return ApiResponse.ok("Cập nhật thông tin lịch trình bị ảnh hưởng thành công",
+                dailyItineraryService.updateAffectedSchedule(tourId, itineraryId, request));
+    }
+
     @PatchMapping("/reorder")
     public ApiResponse<List<DailyItineraryResponse>> reorderDailyItineraries(
             @PathVariable Long tourId,

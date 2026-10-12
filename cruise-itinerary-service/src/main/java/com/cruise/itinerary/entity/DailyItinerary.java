@@ -58,6 +58,17 @@ public class DailyItinerary extends BaseEntity {
     @Column(name = "weather_forecast", length = 500)
     private String weatherForecast;
 
+    @Column(name = "is_affected", nullable = false)
+    @Builder.Default
+    private Boolean isAffected = false;
+
+    @Column(name = "change_reason", length = 500)
+    private String changeReason;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "change_type", length = 30)
+    private com.cruise.itinerary.enums.ChangeType changeType;
+
     @Column(nullable = false)
     @Builder.Default
     private Boolean active = true;
