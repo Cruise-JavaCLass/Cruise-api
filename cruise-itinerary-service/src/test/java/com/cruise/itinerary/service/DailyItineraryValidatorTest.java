@@ -48,6 +48,7 @@ class DailyItineraryValidatorTest {
                 .itineraryDate(LocalDate.of(2026, 11, 1))
                 .title("Ngày khởi hành")
                 .portId(2L)
+                .portName("Cảng Tuần Châu")
                 .arrivalTime(LocalTime.of(8, 0))
                 .departureTime(LocalTime.of(17, 0))
                 .allAboardTime(LocalTime.of(16, 30))
@@ -64,8 +65,44 @@ class DailyItineraryValidatorTest {
     }
 
     @Test
-    @DisplayName("Ném lỗi khi số thứ tự ngày nhỏ hơn 1")
+    @DisplayName("Hợp lệ khi là ngày Sea Day không có cảng")
+    void validSeaDayPasses() {
+        sampleRequest.setIsSeaDay(true);
+        sampleRequest.setPortId(null);
+        sampleRequest.setPortName(null);
+        sampleRequest.setArrivalTime(null);
+        sampleRequest.setDepartureTime(null);
+        sampleRequest.setAllAboardTime(null);
+
+        when(dailyItineraryRepository.findByTourIdAndActiveTrueOrderByDayNumberAsc(10L)).thenReturn(List.of());
+        assertThatCode(() -> validator.validateDailyItinerary(sampleTour, sampleRequest, null))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("Bỏ qua kiểm tra chính mình khi cập nhật currentItineraryId")
+    void updateSameItineraryPasses() {
+        DailyItinerary self = DailyItinerary.builder()
+                .dayNumber(1)
+                .itineraryDate(LocalDate.of(2026, 11, 1))
+                .build();
+        self.setId(100L);
+
+        when(dailyItineraryRepository.findByTourIdAndActiveTrueOrderByDayNumberAsc(10L))
+                .thenReturn(List.of(self));
+
+        assertThatCode(() -> validator.validateDailyItinerary(sampleTour, sampleRequest, 100L))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("Ném lỗi khi số thứ tự ngày null hoặc nhỏ hơn 1")
     void invalidDayNumberNegativeOrZero() {
+        sampleRequest.setDayNumber(null);
+        assertThatThrownBy(() -> validator.validateDailyItinerary(sampleTour, sampleRequest, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Số thứ tự ngày phải lớn hơn hoặc bằng 1");
+
         sampleRequest.setDayNumber(0);
         assertThatThrownBy(() -> validator.validateDailyItinerary(sampleTour, sampleRequest, null))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -123,8 +160,19 @@ class DailyItineraryValidatorTest {
     }
 
     @Test
-    @DisplayName("Ném lỗi khi all-aboard không nằm trong khoảng arrival và departure")
-    void allAboardOutOfRange() {
+    @DisplayName("Ném lỗi khi all-aboard trước arrival time")
+    void allAboardBeforeArrivalTime() {
+        sampleRequest.setArrivalTime(LocalTime.of(9, 0));
+        sampleRequest.setDepartureTime(LocalTime.of(17, 0));
+        sampleRequest.setAllAboardTime(LocalTime.of(8, 30));
+        assertThatThrownBy(() -> validator.validateDailyItinerary(sampleTour, sampleRequest, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Thời gian lên tàu (all-aboard) phải nằm giữa thời gian cập cảng và rời cảng");
+    }
+
+    @Test
+    @DisplayName("Ném lỗi khi all-aboard sau departure time")
+    void allAboardAfterDepartureTime() {
         sampleRequest.setArrivalTime(LocalTime.of(8, 0));
         sampleRequest.setDepartureTime(LocalTime.of(17, 0));
         sampleRequest.setAllAboardTime(LocalTime.of(17, 30));
@@ -134,10 +182,16 @@ class DailyItineraryValidatorTest {
     }
 
     @Test
-    @DisplayName("Ném lỗi khi Sea Day nhưng có gán cảng dừng")
+    @DisplayName("Ném lỗi khi Sea Day nhưng có gán cảng dừng bằng portId hoặc portName")
     void seaDayWithPortAssignedFails() {
         sampleRequest.setIsSeaDay(true);
         sampleRequest.setPortId(3L);
+        assertThatThrownBy(() -> validator.validateDailyItinerary(sampleTour, sampleRequest, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Ngày lênh đênh trên biển (Sea Day) không thể chỉ định cảng dừng");
+
+        sampleRequest.setPortId(null);
+        sampleRequest.setPortName("Vịnh Lan Hạ");
         assertThatThrownBy(() -> validator.validateDailyItinerary(sampleTour, sampleRequest, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Ngày lênh đênh trên biển (Sea Day) không thể chỉ định cảng dừng");
@@ -148,7 +202,7 @@ class DailyItineraryValidatorTest {
     void duplicateDayNumberWithExisting() {
         DailyItinerary existing = DailyItinerary.builder()
                 .dayNumber(1)
-                .itineraryDate(LocalDate.of(2026, 11, 1))
+                .itineraryDate(LocalDate.of(2026, 11, 2))
                 .build();
         existing.setId(101L);
 
@@ -158,5 +212,33 @@ class DailyItineraryValidatorTest {
         assertThatThrownBy(() -> validator.validateDailyItinerary(sampleTour, sampleRequest, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Lịch trình cho ngày thứ 1 đã tồn tại trong tour");
+    }
+
+    @Test
+    @DisplayName("Ném lỗi khi trùng ngày lịch trình với ngày khác trong tour")
+    void duplicateItineraryDateWithExisting() {
+        DailyItinerary existing = DailyItinerary.builder()
+                .dayNumber(2)
+                .itineraryDate(LocalDate.of(2026, 11, 1))
+                .build();
+        existing.setId(101L);
+
+        when(dailyItineraryRepository.findByTourIdAndActiveTrueOrderByDayNumberAsc(10L))
+                .thenReturn(List.of(existing));
+
+        assertThatThrownBy(() -> validator.validateDailyItinerary(sampleTour, sampleRequest, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("đã được sử dụng trong tour");
+    }
+
+    @Test
+    @DisplayName("Hợp lệ khi tour không set ngày bắt đầu/kết thúc hoặc không có thời lượng")
+    void validWhenTourDatesNull() {
+        CruiseTour openTour = CruiseTour.builder().build();
+        openTour.setId(20L);
+
+        when(dailyItineraryRepository.findByTourIdAndActiveTrueOrderByDayNumberAsc(20L)).thenReturn(List.of());
+        assertThatCode(() -> validator.validateDailyItinerary(openTour, sampleRequest, null))
+                .doesNotThrowAnyException();
     }
 }

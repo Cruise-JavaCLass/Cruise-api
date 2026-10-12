@@ -226,4 +226,42 @@ class DailyItineraryServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("không được vượt quá thời lượng tour");
     }
+
+    @Test
+    @DisplayName("Tạo lịch trình khi không chọn cảng (portId null)")
+    void createDailyItineraryWithoutPort() {
+        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
+        sampleRequest.setPortId(null);
+        sampleRequest.setPortName(null);
+        when(dailyItineraryRepository.save(any(DailyItinerary.class))).thenReturn(sampleItinerary);
+
+        DailyItineraryResponse response = dailyItineraryService.createDailyItinerary(10L, sampleRequest);
+
+        assertThat(response).isNotNull();
+        verify(portRepository, never()).findById(any());
+    }
+
+    @Test
+    @DisplayName("Tạo lịch trình thất bại khi portId không tồn tại")
+    void createDailyItineraryPortNotFound() {
+        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
+        when(portRepository.findById(999L)).thenReturn(Optional.empty());
+        sampleRequest.setPortId(999L);
+
+        assertThatThrownBy(() -> dailyItineraryService.createDailyItinerary(10L, sampleRequest))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Cảng với ID 999 không tồn tại");
+    }
+
+    @Test
+    @DisplayName("Lấy tên cảng từ Port entity khi portName trong request rỗng hoặc null")
+    void createDailyItineraryFallbackToPortName() {
+        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
+        when(portRepository.findById(2L)).thenReturn(Optional.of(samplePort));
+        sampleRequest.setPortName("   ");
+        when(dailyItineraryRepository.save(any(DailyItinerary.class))).thenReturn(sampleItinerary);
+
+        DailyItineraryResponse response = dailyItineraryService.createDailyItinerary(10L, sampleRequest);
+        assertThat(response).isNotNull();
+    }
 }
