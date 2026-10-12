@@ -35,6 +35,7 @@ public class PassengerService {
                 .qrCode(request.getQrCode() != null ? request.getQrCode().trim() : null)
                 .tourPackage(request.getTourPackage())
                 .bleZone(request.getBleZone())
+                .registrationStatus(request.getRegistrationStatus() != null ? request.getRegistrationStatus() : com.cruise.activity.enums.RegistrationStatus.CONFIRMED)
                 .checkInStatus(request.getCheckInStatus() != null ? request.getCheckInStatus() : CheckInStatus.NOT_CHECKED_IN)
                 .active(true)
                 .build();
@@ -56,13 +57,28 @@ public class PassengerService {
     }
 
     @Transactional(readOnly = true)
-    public Page<PassengerResponse> getRegisteredPassengersByTourPaged(Long tourId, String keyword, Pageable pageable) {
-        Page<Passenger> page;
-        if (keyword != null && !keyword.isBlank()) {
-            page = passengerRepository.searchPassengers(tourId, keyword.trim(), pageable);
-        } else {
-            page = passengerRepository.findByTourIdAndActiveTrue(tourId, pageable);
+    public List<PassengerResponse> getRegisteredPassengersByTourAndStatus(
+            Long tourId,
+            com.cruise.activity.enums.RegistrationStatus status
+    ) {
+        if (status == null) {
+            return getRegisteredPassengersByTour(tourId);
         }
+        return passengerRepository.findByTourIdAndRegistrationStatusAndActiveTrue(tourId, status)
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PassengerResponse> getRegisteredPassengersByTourPaged(
+            Long tourId,
+            String keyword,
+            com.cruise.activity.enums.RegistrationStatus status,
+            Pageable pageable
+    ) {
+        String cleanKeyword = (keyword != null && !keyword.isBlank()) ? keyword.trim() : null;
+        Page<Passenger> page = passengerRepository.searchPassengersWithStatus(tourId, cleanKeyword, status, pageable);
         return page.map(this::toResponse);
     }
 
@@ -93,6 +109,15 @@ public class PassengerService {
         return toResponse(passengerRepository.save(p));
     }
 
+    public PassengerResponse updateRegistrationStatus(Long passengerId, com.cruise.activity.enums.RegistrationStatus status) {
+        Passenger p = passengerRepository.findById(passengerId)
+                .filter(Passenger::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Hành khách với ID " + passengerId + " không tồn tại"));
+
+        p.setRegistrationStatus(status);
+        return toResponse(passengerRepository.save(p));
+    }
+
     private PassengerResponse toResponse(Passenger p) {
         return PassengerResponse.builder()
                 .id(p.getId())
@@ -105,6 +130,7 @@ public class PassengerService {
                 .qrCode(p.getQrCode())
                 .tourPackage(p.getTourPackage())
                 .bleZone(p.getBleZone())
+                .registrationStatus(p.getRegistrationStatus())
                 .checkInStatus(p.getCheckInStatus())
                 .boardedAt(p.getBoardedAt())
                 .createdAt(p.getCreatedAt())
