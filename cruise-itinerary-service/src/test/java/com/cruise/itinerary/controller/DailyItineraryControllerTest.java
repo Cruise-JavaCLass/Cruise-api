@@ -27,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(DailyItineraryController.class)
 @Import(GlobalExceptionHandler.class)
-@DisplayName("DailyItineraryController MockMvc Tests (KAN-114)")
+@DisplayName("DailyItineraryController MockMvc Tests (KAN-114, KAN-118)")
 class DailyItineraryControllerTest {
 
     @Autowired
@@ -170,5 +170,44 @@ class DailyItineraryControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data[0].dayNumber").value(2));
+    }
+
+    @Test
+    @DisplayName("POST /api/itinerary/tours/{tourId}/daily - Lỗi Validation 400 khi thiếu trường bắt buộc")
+    void createDailyItineraryValidationBadRequest() throws Exception {
+        mockMvc.perform(post("/api/itinerary/tours/10/daily")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Chỉ có tiêu đề"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("GET /api/itinerary/tours/{tourId}/daily/{id} - Lỗi 404 khi không tìm thấy lịch trình")
+    void getDailyItineraryNotFound() throws Exception {
+        when(dailyItineraryService.getDailyItineraryById(10L, 999L))
+                .thenThrow(new com.cruise.itinerary.exception.ResourceNotFoundException("Không tìm thấy lịch trình"));
+
+        mockMvc.perform(get("/api/itinerary/tours/10/daily/999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/itinerary/tours/{tourId}/daily/reorder - Lỗi 400 khi danh sách items rỗng")
+    void reorderDailyItinerariesValidationEmpty() throws Exception {
+        mockMvc.perform(patch("/api/itinerary/tours/10/daily/reorder")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "items": []
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
     }
 }
