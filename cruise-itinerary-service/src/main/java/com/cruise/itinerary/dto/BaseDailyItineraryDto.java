@@ -9,18 +9,16 @@ import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDate;
-import java.time.LocalTime;
 
 /**
- * Lớp cơ sở chứa các thuộc tính chung của Lịch trình theo ngày (Daily Itinerary)
- * nhằm tránh trùng lặp mã nguồn theo tiêu chuẩn SonarCloud CPD.
+ * Lớp cơ sở chứa các thuộc tính định danh và ngày của Lịch trình theo ngày (Daily Itinerary)
  */
 @Getter
 @Setter
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-public abstract class BaseDailyItineraryDto {
+public abstract class BaseDailyItineraryDto extends DailyScheduleDetailsDto {
 
     @NotNull(message = "Số thứ tự ngày không được để trống")
     private Integer dayNumber;
@@ -28,27 +26,6 @@ public abstract class BaseDailyItineraryDto {
     @NotNull(message = "Ngày lịch trình không được để trống")
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate itineraryDate;
-
-    private String title;
-
-    private String description;
-
-    private Long portId;
-
-    private String portName;
-
-    @JsonFormat(pattern = "HH:mm")
-    private LocalTime arrivalTime;
-
-    @JsonFormat(pattern = "HH:mm")
-    private LocalTime departureTime;
-
-    @JsonFormat(pattern = "HH:mm")
-    private LocalTime allAboardTime;
-
-    private Boolean isSeaDay;
-
-    private String weatherForecast;
 
     private Boolean isAffected;
 
