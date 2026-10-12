@@ -35,38 +35,15 @@ public class DailyItineraryService {
 
     public DailyItineraryResponse createDailyItinerary(Long tourId, DailyItineraryRequest request) {
         CruiseTour tour = findTourById(tourId);
-
-        if (dailyItineraryRepository.existsByTourIdAndDayNumberAndActiveTrue(tourId, request.getDayNumber())) {
-            throw new DuplicateResourceException("Lịch trình cho ngày thứ " + request.getDayNumber() + " đã tồn tại trong tour");
-        }
-
+        checkDayNumberUniqueness(tourId, request.getDayNumber(), null);
         validateItineraryDates(tour, request);
 
-        Port port = null;
-        String portName = request.getPortName();
-        if (request.getPortId() != null) {
-            port = portRepository.findById(request.getPortId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Cảng với ID " + request.getPortId() + " không tồn tại"));
-            if (portName == null || portName.isBlank()) {
-                portName = port.getName();
-            }
-        }
+        Port port = resolvePort(request.getPortId());
+        String portName = resolvePortName(request.getPortName(), port);
 
-        DailyItinerary itinerary = DailyItinerary.builder()
-                .tour(tour)
-                .dayNumber(request.getDayNumber())
-                .itineraryDate(request.getItineraryDate())
-                .title(request.getTitle())
-                .description(request.getDescription())
-                .port(port)
-                .portName(portName)
-                .arrivalTime(request.getArrivalTime())
-                .departureTime(request.getDepartureTime())
-                .allAboardTime(request.getAllAboardTime())
-                .isSeaDay(Boolean.TRUE.equals(request.getIsSeaDay()))
-                .weatherForecast(request.getWeatherForecast())
-                .active(true)
-                .build();
+        DailyItinerary itinerary = DailyItinerary.builder().tour(tour).build();
+        applyRequestToEntity(itinerary, request, port, portName);
+        itinerary.setActive(true);
 
         return toResponse(dailyItineraryRepository.save(itinerary));
     }
@@ -75,35 +52,13 @@ public class DailyItineraryService {
         CruiseTour tour = findTourById(tourId);
         DailyItinerary itinerary = findItineraryByIdAndTourId(itineraryId, tourId);
 
-        if (!itinerary.getDayNumber().equals(request.getDayNumber())
-                && dailyItineraryRepository.existsByTourIdAndDayNumberAndActiveTrue(tourId, request.getDayNumber())) {
-            throw new DuplicateResourceException("Lịch trình cho ngày thứ " + request.getDayNumber() + " đã tồn tại trong tour");
-        }
-
+        checkDayNumberUniqueness(tourId, request.getDayNumber(), itinerary.getDayNumber());
         validateItineraryDates(tour, request);
 
-        Port port = null;
-        String portName = request.getPortName();
-        if (request.getPortId() != null) {
-            port = portRepository.findById(request.getPortId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Cảng với ID " + request.getPortId() + " không tồn tại"));
-            if (portName == null || portName.isBlank()) {
-                portName = port.getName();
-            }
-        }
+        Port port = resolvePort(request.getPortId());
+        String portName = resolvePortName(request.getPortName(), port);
 
-        itinerary.setDayNumber(request.getDayNumber());
-        itinerary.setItineraryDate(request.getItineraryDate());
-        itinerary.setTitle(request.getTitle());
-        itinerary.setDescription(request.getDescription());
-        itinerary.setPort(port);
-        itinerary.setPortName(portName);
-        itinerary.setArrivalTime(request.getArrivalTime());
-        itinerary.setDepartureTime(request.getDepartureTime());
-        itinerary.setAllAboardTime(request.getAllAboardTime());
-        itinerary.setIsSeaDay(Boolean.TRUE.equals(request.getIsSeaDay()));
-        itinerary.setWeatherForecast(request.getWeatherForecast());
-
+        applyRequestToEntity(itinerary, request, port, portName);
         return toResponse(dailyItineraryRepository.save(itinerary));
     }
 
@@ -135,6 +90,42 @@ public class DailyItineraryService {
     private DailyItinerary findItineraryByIdAndTourId(Long itineraryId, Long tourId) {
         return dailyItineraryRepository.findByIdAndTourIdAndActiveTrue(itineraryId, tourId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lịch trình ngày với ID " + itineraryId + " không tồn tại trong tour"));
+    }
+
+    private void checkDayNumberUniqueness(Long tourId, Integer newDayNumber, Integer currentDayNumber) {
+        if (!newDayNumber.equals(currentDayNumber)
+                && dailyItineraryRepository.existsByTourIdAndDayNumberAndActiveTrue(tourId, newDayNumber)) {
+            throw new DuplicateResourceException("Lịch trình cho ngày thứ " + newDayNumber + " đã tồn tại trong tour");
+        }
+    }
+
+    private Port resolvePort(Long portId) {
+        if (portId == null) {
+            return null;
+        }
+        return portRepository.findById(portId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cảng với ID " + portId + " không tồn tại"));
+    }
+
+    private String resolvePortName(String requestedPortName, Port port) {
+        if (requestedPortName != null && !requestedPortName.isBlank()) {
+            return requestedPortName;
+        }
+        return port != null ? port.getName() : null;
+    }
+
+    private void applyRequestToEntity(DailyItinerary entity, DailyItineraryRequest req, Port port, String portName) {
+        entity.setDayNumber(req.getDayNumber());
+        entity.setItineraryDate(req.getItineraryDate());
+        entity.setTitle(req.getTitle());
+        entity.setDescription(req.getDescription());
+        entity.setPort(port);
+        entity.setPortName(portName);
+        entity.setArrivalTime(req.getArrivalTime());
+        entity.setDepartureTime(req.getDepartureTime());
+        entity.setAllAboardTime(req.getAllAboardTime());
+        entity.setIsSeaDay(Boolean.TRUE.equals(req.getIsSeaDay()));
+        entity.setWeatherForecast(req.getWeatherForecast());
     }
 
     private void validateItineraryDates(CruiseTour tour, DailyItineraryRequest request) {
