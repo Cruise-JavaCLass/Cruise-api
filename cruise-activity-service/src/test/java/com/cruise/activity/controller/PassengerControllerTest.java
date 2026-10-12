@@ -79,13 +79,32 @@ class PassengerControllerTest {
                 .rfidTag("RFID-88102")
                 .build();
 
-        when(passengerService.getRegisteredPassengersByTour(10L)).thenReturn(List.of(response));
+        when(passengerService.getRegisteredPassengersByTourAndStatus(10L, null)).thenReturn(List.of(response));
 
         mockMvc.perform(get("/api/activities/passengers/tour/10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data[0].fullName").value("Lê Hoàng Nam"))
                 .andExpect(jsonPath("$.data[0].cabinNumber").value("505"));
+    }
+
+    @Test
+    @DisplayName("GET /api/activities/passengers/tour/{tourId}?status=CONFIRMED - Lọc danh sách theo status")
+    void getRegisteredPassengersByTourWithStatusSuccess() throws Exception {
+        PassengerResponse response = PassengerResponse.builder()
+                .id(1L)
+                .tourId(10L)
+                .fullName("Lê Hoàng Nam")
+                .registrationStatus(com.cruise.activity.enums.RegistrationStatus.CONFIRMED)
+                .build();
+
+        when(passengerService.getRegisteredPassengersByTourAndStatus(10L, com.cruise.activity.enums.RegistrationStatus.CONFIRMED))
+                .thenReturn(List.of(response));
+
+        mockMvc.perform(get("/api/activities/passengers/tour/10?status=CONFIRMED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].registrationStatus").value("CONFIRMED"));
     }
 
     @Test
@@ -98,10 +117,10 @@ class PassengerControllerTest {
                 .cabinNumber("812")
                 .build();
 
-        when(passengerService.getRegisteredPassengersByTourPaged(eq(10L), eq("812"), any()))
+        when(passengerService.getRegisteredPassengersByTourPaged(eq(10L), eq("812"), eq(com.cruise.activity.enums.RegistrationStatus.CONFIRMED), any()))
                 .thenReturn(new PageImpl<>(List.of(response)));
 
-        mockMvc.perform(get("/api/activities/passengers/tour/10/paged?keyword=812"))
+        mockMvc.perform(get("/api/activities/passengers/tour/10/paged?keyword=812&status=CONFIRMED"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.content[0].fullName").value("Phạm Hồng Ánh"));
@@ -142,5 +161,23 @@ class PassengerControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.checkInStatus").value("BOARDED"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/activities/passengers/{id}/registration-status - Cập nhật trạng thái đăng ký")
+    void updateRegistrationStatusSuccess() throws Exception {
+        PassengerResponse response = PassengerResponse.builder()
+                .id(2L)
+                .tourId(10L)
+                .fullName("Đỗ Quốc Bảo")
+                .registrationStatus(com.cruise.activity.enums.RegistrationStatus.CANCELLED)
+                .build();
+
+        when(passengerService.updateRegistrationStatus(2L, com.cruise.activity.enums.RegistrationStatus.CANCELLED)).thenReturn(response);
+
+        mockMvc.perform(patch("/api/activities/passengers/2/registration-status?status=CANCELLED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.registrationStatus").value("CANCELLED"));
     }
 }

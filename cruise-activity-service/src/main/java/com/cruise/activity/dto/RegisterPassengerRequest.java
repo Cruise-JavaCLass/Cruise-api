@@ -36,5 +36,8 @@ public class RegisterPassengerRequest {
     private String bleZone;
 
     @Builder.Default
+    private com.cruise.activity.enums.RegistrationStatus registrationStatus = com.cruise.activity.enums.RegistrationStatus.CONFIRMED;
+
+    @Builder.Default
     private CheckInStatus checkInStatus = CheckInStatus.NOT_CHECKED_IN;
 }

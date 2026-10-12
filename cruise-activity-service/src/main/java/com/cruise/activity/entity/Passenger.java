@@ -51,6 +51,11 @@ public class Passenger extends BaseEntity {
     private String bleZone;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "registration_status", nullable = false, length = 30)
+    @Builder.Default
+    private com.cruise.activity.enums.RegistrationStatus registrationStatus = com.cruise.activity.enums.RegistrationStatus.CONFIRMED;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "check_in_status", nullable = false, length = 30)
     @Builder.Default
     private CheckInStatus checkInStatus = CheckInStatus.NOT_CHECKED_IN;

@@ -27,6 +27,7 @@ public class PassengerResponse {
     private String qrCode;
     private String tourPackage;
     private String bleZone;
+    private com.cruise.activity.enums.RegistrationStatus registrationStatus;
     private CheckInStatus checkInStatus;
     private Instant boardedAt;
     private Instant createdAt;
