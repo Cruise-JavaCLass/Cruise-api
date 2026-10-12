@@ -485,8 +485,33 @@ Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn di�
   - Kiểm thử xử lý escape chuẩn RFC 4180 cho các trường chứa ký tự đặc biệt (dấu phẩy, dấu nháy kép, ký tự xuống dòng `\r\n`).
   - Kiểm thử xuất CSV khi danh sách tour rỗng (sinh đúng header và UTF-8 BOM).
 
-### 6.9. Tạo, Cập nhật, Cấu hình, Quản lý Trạng thái & Quy tắc Nghiệp vụ Hoạt động trên tàu (Activities Management — KAN-134, KAN-135, KAN-136, KAN-137, KAN-144):
-Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn diện cho việc tạo mới, cập nhật toàn diện thông tin, cấu hình địa điểm, quản lý chuyển đổi trạng thái hoạt động (State Machine), kiểm tra chi tiết, truy vấn danh sách và xác thực nghiêm ngặt các quy tắc nghiệp vụ hoạt động:
+### 6.9. Tạo, Cập nhật, Cấu hình, Quản lý Trạng thái & API CRUD Hoạt động trên tàu (Activities Management — KAN-134, KAN-135, KAN-136, KAN-137, KAN-138, KAN-144):
+Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn diện cho việc tạo mới, cập nhật toàn diện thông tin, cấu hình địa điểm, quản lý chuyển đổi trạng thái hoạt động (State Machine), kiểm tra chi tiết, truy vấn danh sách, xác thực quy tắc nghiệp vụ và kiểm thử tích hợp toàn diện các thao tác CRUD API:
+* **`ActivityCrudOperationsApiTest` (19 tests - SpringBootTest End-to-End API Integration — KAN-138):**
+  - **Create Activity Tests (`POST /api/activities`):**
+    - Kiểm thử tạo mới thành công với payload đầy đủ (`201 Created`), kiểm tra tự sinh ID, liên kết tour, khung giờ và lưu trữ database.
+    - Kiểm thử tự động gán giá trị mặc định (`category: General`, `dayNumber: 1`, `maxCapacity: 50`, `price: 0`, `isIncluded: true`, `status: SCHEDULED`) khi người dùng không truyền.
+    - Kiểm thử bắt lỗi `400 Bad Request` khi vi phạm validation các trường bắt buộc (title, location, date, start/end time).
+    - Kiểm thử bắt lỗi `400 Bad Request` khi giờ kết thúc không sau giờ bắt đầu.
+    - Kiểm thử phát hiện và ngăn chặn xung đột lịch trình khi trùng địa điểm và khung giờ với hoạt động đã tồn tại.
+  - **Get Activity Detail Tests (`GET /api/activities/{id}`):**
+    - Kiểm thử tra cứu chi tiết thành công (`200 OK`) với thông tin chính xác.
+    - Kiểm thử xử lý lỗi `404 Not Found` khi ID không tồn tại hoặc hoạt động đã bị xóa mềm (`active = false`).
+  - **Update Activity Tests (`PUT /api/activities/{id}`):**
+    - Kiểm thử cập nhật toàn diện thành công (`200 OK`): tiêu đề, mô tả, danh mục, thời gian, sức chứa, giá và trạng thái.
+    - Kiểm thử từ chối `400 Bad Request` khi payload cập nhật rỗng hoặc để trống trường bắt buộc.
+    - Kiểm thử từ chối `404 Not Found` khi cập nhật ID không tồn tại.
+  - **Configure Time and Location Tests (`PATCH /api/activities/{id}/time-location`):**
+    - Kiểm thử cập nhật thời gian và địa điểm thành công (`200 OK`).
+    - Kiểm thử từ chối `400 Bad Request` khi địa điểm để trống hoặc chỉ chứa khoảng trắng.
+  - **Activity Status Transition Tests (`PATCH /api/activities/{id}/status`):**
+    - Kiểm thử chuyển đổi trạng thái sang `IN_PROGRESS` thành công.
+    - Kiểm thử chuyển đổi trạng thái sang `CANCELLED` kèm lý do hủy `cancellationReason`.
+    - Kiểm thử từ chối `400 Bad Request` khi vi phạm State Machine (`SCHEDULED` $\to$ `COMPLETED`).
+    - Kiểm thử tra cứu trạng thái hợp lệ tiếp theo `GET /api/activities/{id}/status/allowed-transitions`.
+  - **Delete Activity Tests (`DELETE /api/activities/{id}`):**
+    - Kiểm thử xóa mềm thành công (`200 OK`), cập nhật `active = false` và `status = CANCELLED`.
+    - Kiểm thử từ chối `404 Not Found` khi xóa hoạt động có ID không tồn tại.
 * **`ActivityBusinessRulesUnitTest` (23 tests - Mockito & Parameterized Unit Tests — KAN-137):**
   - **Quy tắc tính hợp lệ của Địa điểm (Location Validation):**
     - Từ chối địa điểm bị null, chuỗi rỗng hoặc chỉ chứa khoảng trắng (`BusinessRuleException: Địa điểm tổ chức không được để trống`).
