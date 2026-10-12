@@ -21,6 +21,7 @@
 > - [KAN-90](https://huytran20052022.atlassian.net/browse/KAN-90) - *Write API Tests for Ship CRUD Operations — Test các API CRUD tàu du lịch*  
 > - [KAN-96](https://huytran20052022.atlassian.net/browse/KAN-96) - *Create and Update Cruise Tour API — Tạo và cập nhật API tour du lịch*  
 > - [KAN-97](https://huytran20052022.atlassian.net/browse/KAN-97) - *Implement Tour Status Management — Quản lý trạng thái tour du lịch*  
+> - [KAN-146](https://huytran20052022.atlassian.net/browse/KAN-146) - *Retrieve Registered Passenger Lists — Lấy thông tin danh sách hành khách đăng ký*  
 
 ---
 
@@ -423,6 +424,16 @@ Module `cruise-itinerary-service` được trang bị bộ kiểm thử chuyên 
 
 4. **`CruiseShipIntegrationTest` (1 test - SpringBootTest E2E Lifecycle):**
    - Kiểm thử trọn vẹn vòng đời một tàu du lịch từ khởi tạo, tra cứu ID/mã hiệu, tìm kiếm bộ lọc, cập nhật thông tin, thay đổi trạng thái hải trình, xóa mềm và xóa cứng khỏi database.
+
+### 6.7. Kiểm thử Quản lý Danh sách Hành khách Đăng ký (Registered Passenger Lists — KAN-146):
+Module `cruise-activity-service` cung cấp API và bộ kiểm thử cho nghiệp vụ quản lý thông tin hành khách đã đăng ký theo tour du thuyền:
+* **`PassengerServiceTest` (7 tests - Mockito Unit Tests):**
+  - Kiểm thử đăng ký thông tin hành khách với số phòng cabin, mã định danh RFID/QR code, gói tour bao gồm và vùng định vị BLE.
+  - Kiểm thử truy vấn danh sách hành khách theo mã tour (`tourId`) và tìm kiếm phân trang theo tên, cabin, mã RFID.
+  - Kiểm thử tra cứu chi tiết theo ID hoặc mã thẻ RFID, xử lý ngoại lệ `ResourceNotFoundException`.
+  - Kiểm thử cập nhật trạng thái check-in (`NOT_CHECKED_IN` $\rightarrow$ `BOARDED`) và tự động ghi nhận thời gian lên tàu (`boardedAt`).
+* **`PassengerControllerTest` (5 tests - WebMvcTest):**
+  - Kiểm thử các endpoint: `POST /api/activities/passengers/register` (`201 Created`), `GET /tour/{tourId}`, `GET /tour/{tourId}/paged`, `GET /{id}`, `GET /rfid/{rfidTag}`, và `PATCH /{id}/check-in`.
 
 ---
 
