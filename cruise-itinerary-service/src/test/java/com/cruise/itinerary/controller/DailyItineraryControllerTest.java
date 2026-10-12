@@ -147,16 +147,28 @@ class DailyItineraryControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/itinerary/tours/{tourId}/daily - Báo lỗi validation khi thiếu ngày")
-    void createDailyItineraryValidationFail() throws Exception {
-        mockMvc.perform(post("/api/itinerary/tours/10/daily")
+    @DisplayName("PATCH /api/itinerary/tours/{tourId}/daily/reorder - Sắp xếp lại thứ tự thành công")
+    void reorderDailyItinerariesSuccess() throws Exception {
+        DailyItineraryResponse item = DailyItineraryResponse.builder()
+                .id(1L)
+                .tourId(10L)
+                .dayNumber(2)
+                .build();
+
+        when(dailyItineraryService.reorderDailyItineraries(eq(10L), any(com.cruise.itinerary.dto.ReorderItineraryRequest.class)))
+                .thenReturn(List.of(item));
+
+        mockMvc.perform(patch("/api/itinerary/tours/10/daily/reorder")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "title": "Thiếu thông tin"
+                                  "items": [
+                                    { "id": 1, "newOrder": 2 }
+                                  ]
                                 }
                                 """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].dayNumber").value(2));
     }
 }

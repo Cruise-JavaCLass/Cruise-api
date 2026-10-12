@@ -40,6 +40,15 @@ public class DailyItineraryController {
                 dailyItineraryService.updateDailyItinerary(tourId, itineraryId, request));
     }
 
+    @PatchMapping("/reorder")
+    public ApiResponse<List<DailyItineraryResponse>> reorderDailyItineraries(
+            @PathVariable Long tourId,
+            @Valid @RequestBody com.cruise.itinerary.dto.ReorderItineraryRequest request
+    ) {
+        return ApiResponse.ok("Sắp xếp lại thứ tự lịch trình thành công",
+                dailyItineraryService.reorderDailyItineraries(tourId, request));
+    }
+
     @GetMapping
     public ApiResponse<List<DailyItineraryResponse>> getDailyItineraries(@PathVariable Long tourId) {
         return ApiResponse.ok("Lấy danh sách lịch trình theo ngày thành công",
