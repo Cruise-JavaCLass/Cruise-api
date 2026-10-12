@@ -34,6 +34,7 @@ public class OnboardActivityResponse {
     private BigDecimal price;
     private Boolean isIncluded;
     private ActivityStatus status;
+    private String cancellationReason;
     private Boolean active;
     private Instant createdAt;
     private Instant updatedAt;
@@ -58,6 +59,7 @@ public class OnboardActivityResponse {
                 .price(activity.getPrice())
                 .isIncluded(activity.getIsIncluded())
                 .status(activity.getStatus())
+                .cancellationReason(activity.getCancellationReason())
                 .active(activity.getActive())
                 .createdAt(activity.getCreatedAt())
                 .updatedAt(activity.getUpdatedAt())

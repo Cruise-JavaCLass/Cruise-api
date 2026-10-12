@@ -25,6 +25,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 
+import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
@@ -291,5 +292,59 @@ class ActivityControllerTest {
         mockMvc.perform(delete("/api/activities/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/activities/{id}/status: updates status successfully (KAN-136)")
+    void updateActivityStatus_Success() throws Exception {
+        String jsonPayload = """
+                {
+                    "status": "IN_PROGRESS"
+                }
+                """;
+
+        sampleResponse.setStatus(ActivityStatus.IN_PROGRESS);
+
+        when(activityService.updateActivityStatus(eq(1L), any(com.cruise.activity.dto.UpdateActivityStatusRequest.class)))
+                .thenReturn(sampleResponse);
+
+        mockMvc.perform(patch("/api/activities/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("IN_PROGRESS"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/activities/{id}/status: returns 400 when transition is invalid (KAN-136)")
+    void updateActivityStatus_InvalidTransition() throws Exception {
+        String jsonPayload = """
+                {
+                    "status": "COMPLETED"
+                }
+                """;
+
+        when(activityService.updateActivityStatus(eq(1L), any(com.cruise.activity.dto.UpdateActivityStatusRequest.class)))
+                .thenThrow(new BusinessRuleException("Không thể chuyển trạng thái hoạt động"));
+
+        mockMvc.perform(patch("/api/activities/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Không thể chuyển trạng thái hoạt động"));
+    }
+
+    @Test
+    @DisplayName("GET /api/activities/{id}/status/allowed-transitions: returns allowed transitions (KAN-136)")
+    void getAllowedStatusTransitions_Success() throws Exception {
+        when(activityService.getAllowedStatusTransitions(1L))
+                .thenReturn(java.util.Set.of(ActivityStatus.IN_PROGRESS, ActivityStatus.CANCELLED));
+
+        mockMvc.perform(get("/api/activities/1/status/allowed-transitions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data", hasSize(2)));
     }
 }

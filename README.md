@@ -485,9 +485,9 @@ Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn di�
   - Kiểm thử xử lý escape chuẩn RFC 4180 cho các trường chứa ký tự đặc biệt (dấu phẩy, dấu nháy kép, ký tự xuống dòng `\r\n`).
   - Kiểm thử xuất CSV khi danh sách tour rỗng (sinh đúng header và UTF-8 BOM).
 
-### 6.9. Tạo, Cập nhật, Cấu hình & Truy vấn Danh sách/Chi tiết Hoạt động trên tàu (Activities Management — KAN-134, KAN-135, KAN-144):
-Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn diện cho việc tạo mới, cập nhật toàn diện thông tin, cấu hình địa điểm, kiểm tra chi tiết và truy vấn danh sách hoạt động du thuyền:
-* **`OnboardActivityServiceTest` (13 tests - Mockito Unit Tests):**
+### 6.9. Tạo, Cập nhật, Cấu hình, Quản lý Trạng thái & Truy vấn Hoạt động trên tàu (Activities Management — KAN-134, KAN-135, KAN-136, KAN-144):
+Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn diện cho việc tạo mới, cập nhật toàn diện thông tin, cấu hình địa điểm, quản lý chuyển đổi trạng thái hoạt động (State Machine), kiểm tra chi tiết và truy vấn danh sách hoạt động du thuyền:
+* **`OnboardActivityServiceTest` (17 tests - Mockito Unit Tests):**
   - Kiểm thử tạo hoạt động mới với ngày, giờ bắt đầu/kết thúc, số lượng tham gia tối đa, danh mục và địa điểm tổ chức.
   - Kiểm thử cập nhật toàn diện hoạt động (`updateActivity` — KAN-134): tiêu đề, mô tả, danh mục, số ngày, địa điểm, sức chứa, giá dịch vụ và trạng thái.
   - Kiểm thử cấu hình thời gian và địa điểm riêng biệt (`configureTimeAndLocation` — KAN-144).
@@ -495,11 +495,20 @@ Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn di�
     - Bắt lỗi khi địa điểm bị bỏ trống (`BusinessRuleException: Địa điểm tổ chức không được để trống`).
     - Bắt lỗi khi giờ kết thúc không sau giờ bắt đầu (`BusinessRuleException: Thời gian kết thúc phải sau thời gian bắt đầu`).
     - Bắt lỗi xung đột lịch trình khi cùng một địa điểm đã có hoạt động khác diễn ra trong cùng khung giờ (`existsOverlappingActivity`).
+  - Kiểm thử chuyển đổi trạng thái hoạt động theo State Machine (`updateActivityStatus` — KAN-136):
+    - `SCHEDULED` $\to$ `IN_PROGRESS`, `CANCELLED`
+    - `IN_PROGRESS` $\to$ `COMPLETED`, `CANCELLED`
+    - `COMPLETED` $\to$ Trạng thái kết thúc (không thể chuyển đổi tiếp)
+    - `CANCELLED` $\to$ `SCHEDULED` (khôi phục lên lại lịch)
+    - Kiểm tra từ chối chuyển trạng thái không hợp lệ (`BusinessRuleException`) và ghi nhận lý do hủy (`cancellationReason`).
+    - Tra cứu danh sách trạng thái kế tiếp được phép chuyển (`getAllowedStatusTransitions`).
   - Kiểm thử tra cứu chi tiết, phân trang theo ngày/thể loại/từ khóa và xóa mềm hoạt động (`CANCELLED`).
-* **`ActivityControllerTest` (12 tests - WebMvcTest):**
+* **`ActivityControllerTest` (15 tests - WebMvcTest):**
   - Kiểm thử `POST /api/activities`: tạo mới hoạt động du thuyền (`201 Created`).
   - Kiểm thử `PUT /api/activities/{id}`: cập nhật toàn diện hoạt động (`200 OK` / `400 Bad Request` khi validation thất bại).
   - Kiểm thử `PATCH /api/activities/{id}/time-location`: cấu hình thời gian và địa điểm (`200 OK`).
+  - Kiểm thử `PATCH /api/activities/{id}/status`: chuyển trạng thái hoạt động với validation và lý do hủy (`200 OK` / `400 Bad Request` / `404 Not Found`).
+  - Kiểm thử `GET /api/activities/{id}/status/allowed-transitions`: lấy danh sách các trạng thái hợp lệ tiếp theo (`200 OK`).
   - Kiểm thử các kịch bản ngoại lệ: `400 Bad Request` khi vi phạm quy tắc thời gian hoặc xung đột địa điểm, `404 Not Found` khi hoạt động không tồn tại.
   - Kiểm thử `GET /api/activities/{id}`, `GET /api/activities/tour/{tourId}`, `GET /api/activities/tour/{tourId}/day/{dayNumber}`, `GET /api/activities/tour/{tourId}/paged`, và `DELETE /api/activities/{id}`.
 * **`ActivityListAndDetailApiTest` (12 tests - SpringBootTest End-to-End API Integration — KAN-135):**

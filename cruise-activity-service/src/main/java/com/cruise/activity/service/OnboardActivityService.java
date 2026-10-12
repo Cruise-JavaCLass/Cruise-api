@@ -4,6 +4,7 @@ import com.cruise.activity.dto.ConfigureTimeAndLocationRequest;
 import com.cruise.activity.dto.CreateActivityRequest;
 import com.cruise.activity.dto.OnboardActivityResponse;
 import com.cruise.activity.dto.UpdateActivityRequest;
+import com.cruise.activity.dto.UpdateActivityStatusRequest;
 import com.cruise.activity.entity.OnboardActivity;
 import com.cruise.activity.enums.ActivityStatus;
 import com.cruise.activity.exception.BusinessRuleException;
@@ -129,6 +130,40 @@ public class OnboardActivityService {
         log.info("Configured time and location for activity ID={}: Location='{}', Date={}, Start={}, End={}",
                 updated.getId(), updated.getLocation(), updated.getActivityDate(), updated.getStartTime(), updated.getEndTime());
         return OnboardActivityResponse.fromEntity(updated);
+    }
+
+    @Transactional
+    public OnboardActivityResponse updateActivityStatus(Long activityId, UpdateActivityStatusRequest request) {
+        OnboardActivity activity = activityRepository.findById(activityId)
+                .filter(OnboardActivity::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hoạt động với ID: " + activityId));
+
+        ActivityStatus currentStatus = activity.getStatus();
+        ActivityStatus targetStatus = request.getStatus();
+
+        if (!currentStatus.canTransitionTo(targetStatus)) {
+            throw new BusinessRuleException(String.format(
+                    "Không thể chuyển trạng thái hoạt động từ '%s' sang '%s'. Các trạng thái hợp lệ: %s",
+                    currentStatus, targetStatus, currentStatus.getAllowedTransitions()
+            ));
+        }
+
+        if (targetStatus == ActivityStatus.CANCELLED) {
+            activity.setCancellationReason(request.getCancellationReason());
+        }
+
+        activity.setStatus(targetStatus);
+        OnboardActivity updated = activityRepository.save(activity);
+        log.info("Transitioned activity ID={} status from {} to {}", updated.getId(), currentStatus, targetStatus);
+        return OnboardActivityResponse.fromEntity(updated);
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.Set<ActivityStatus> getAllowedStatusTransitions(Long activityId) {
+        OnboardActivity activity = activityRepository.findById(activityId)
+                .filter(OnboardActivity::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hoạt động với ID: " + activityId));
+        return activity.getStatus().getAllowedTransitions();
     }
 
     @Transactional(readOnly = true)

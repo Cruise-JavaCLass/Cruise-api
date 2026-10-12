@@ -73,6 +73,9 @@ public class OnboardActivity extends BaseEntity {
     @Builder.Default
     private ActivityStatus status = ActivityStatus.SCHEDULED;
 
+    @Column(name = "cancellation_reason", length = 500)
+    private String cancellationReason;
+
     @Column(name = "active", nullable = false)
     @Builder.Default
     private Boolean active = true;
