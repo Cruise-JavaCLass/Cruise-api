@@ -75,6 +75,17 @@ public class PassengerController {
                 passengerService.updateCheckInStatus(id, status));
     }
 
+    @GetMapping(value = "/tour/{tourId}/export/csv", produces = "text/csv; charset=UTF-8")
+    public org.springframework.http.ResponseEntity<byte[]> exportRegisteredPassengersCsv(@PathVariable Long tourId) {
+        byte[] csvData = passengerService.exportRegisteredPassengersCsv(tourId);
+        String fileName = String.format("passengers_tour_%d.csv", tourId);
+
+        return org.springframework.http.ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+                .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
+                .body(csvData);
+    }
+
     @PatchMapping("/{id}/registration-status")
     public ApiResponse<PassengerResponse> updateRegistrationStatus(
             @PathVariable Long id,

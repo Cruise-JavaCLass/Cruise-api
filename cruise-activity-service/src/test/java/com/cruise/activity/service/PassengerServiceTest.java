@@ -192,4 +192,47 @@ class PassengerServiceTest {
         assertThat(response).isNotNull();
         verify(passengerRepository, times(1)).save(samplePassenger);
     }
+
+    @Test
+    @DisplayName("exportRegisteredPassengersCsv - Xuất danh sách hành khách dạng CSV có BOM UTF-8")
+    void exportRegisteredPassengersCsvSuccess() {
+        when(passengerRepository.findByTourIdAndActiveTrue(1L)).thenReturn(List.of(samplePassenger));
+
+        byte[] csvBytes = passengerService.exportRegisteredPassengersCsv(1L);
+
+        assertThat(csvBytes).isNotEmpty();
+        String csvContent = new String(csvBytes, java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(csvContent).startsWith("\ufeff");
+        assertThat(csvContent).contains("ID,Tour ID,Họ và Tên,Số Cabin,Mã Thẻ RFID,Mã QR,Gói Tour,Vị Trí BLE,Trạng Thái Check-in,Thời Gian Lên Tàu");
+        assertThat(csvContent).contains("Nguyễn Văn Minh");
+        assertThat(csvContent).contains("402");
+        assertThat(csvContent).contains("RFID-99412");
+        assertThat(csvContent).contains("All-Inclusive VIP");
+    }
+
+    @Test
+    @DisplayName("exportRegisteredPassengersCsv - Xử lý ký tự đặc biệt cần escape CSV và các trường null")
+    void exportRegisteredPassengersCsvWithSpecialCharactersAndNulls() {
+        Passenger passengerSpecial = Passenger.builder()
+                .tourId(1L)
+                .fullName("Nguyễn \"Văn\", Nam\r\nTest")
+                .cabinNumber(null)
+                .rfidTag(null)
+                .qrCode(null)
+                .tourPackage(null)
+                .bleZone(null)
+                .checkInStatus(null)
+                .boardedAt(null)
+                .active(true)
+                .build();
+        passengerSpecial.setId(2L);
+
+        when(passengerRepository.findByTourIdAndActiveTrue(1L)).thenReturn(List.of(passengerSpecial));
+
+        byte[] csvBytes = passengerService.exportRegisteredPassengersCsv(1L);
+
+        assertThat(csvBytes).isNotEmpty();
+        String csvContent = new String(csvBytes, java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(csvContent).contains("\"Nguyễn \"\"Văn\"\", Nam\r\nTest\"");
+    }
 }

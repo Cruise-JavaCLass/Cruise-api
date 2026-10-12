@@ -180,4 +180,20 @@ class PassengerControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.registrationStatus").value("CANCELLED"));
     }
+
+    @Test
+    @DisplayName("GET /api/activities/passengers/tour/{tourId}/export/csv - Xuất file CSV danh sách hành khách")
+    void exportRegisteredPassengersCsvSuccess() throws Exception {
+        String csvContent = "\ufeffID,Tour ID,Họ và Tên,Số Cabin\n1,10,Nguyễn Văn Minh,402\n";
+        byte[] csvBytes = csvContent.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        when(passengerService.exportRegisteredPassengersCsv(10L)).thenReturn(csvBytes);
+
+        mockMvc.perform(get("/api/activities/passengers/tour/10/export/csv"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string(
+                        org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"passengers_tour_10.csv\""))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().contentType("text/csv; charset=UTF-8"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().bytes(csvBytes));
+    }
 }

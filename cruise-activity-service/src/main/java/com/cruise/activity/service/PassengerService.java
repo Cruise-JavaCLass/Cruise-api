@@ -118,6 +118,40 @@ public class PassengerService {
         return toResponse(passengerRepository.save(p));
     }
 
+    @Transactional(readOnly = true)
+    public byte[] exportRegisteredPassengersCsv(Long tourId) {
+        List<Passenger> passengers = passengerRepository.findByTourIdAndActiveTrue(tourId);
+        StringBuilder sb = new StringBuilder();
+        // UTF-8 BOM for Excel compatibility
+        sb.append('\ufeff');
+        sb.append("ID,Tour ID,Họ và Tên,Số Cabin,Mã Thẻ RFID,Mã QR,Gói Tour,Vị Trí BLE,Trạng Thái Check-in,Thời Gian Lên Tàu\n");
+
+        for (Passenger p : passengers) {
+            sb.append(escapeCsv(String.valueOf(p.getId()))).append(",");
+            sb.append(escapeCsv(String.valueOf(p.getTourId()))).append(",");
+            sb.append(escapeCsv(p.getFullName())).append(",");
+            sb.append(escapeCsv(p.getCabinNumber())).append(",");
+            sb.append(escapeCsv(p.getRfidTag())).append(",");
+            sb.append(escapeCsv(p.getQrCode())).append(",");
+            sb.append(escapeCsv(p.getTourPackage())).append(",");
+            sb.append(escapeCsv(p.getBleZone())).append(",");
+            sb.append(escapeCsv(p.getCheckInStatus() != null ? p.getCheckInStatus().name() : "")).append(",");
+            sb.append(escapeCsv(p.getBoardedAt() != null ? p.getBoardedAt().toString() : "")).append("\n");
+        }
+
+        return sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private String escapeCsv(String val) {
+        if (val == null) {
+            return "";
+        }
+        if (val.contains(",") || val.contains("\"") || val.contains("\n") || val.contains("\r")) {
+            return "\"" + val.replace("\"", "\"\"") + "\"";
+        }
+        return val;
+    }
+
     private PassengerResponse toResponse(Passenger p) {
         return PassengerResponse.builder()
                 .id(p.getId())
