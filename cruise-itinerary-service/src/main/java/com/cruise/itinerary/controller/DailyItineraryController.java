@@ -16,13 +16,16 @@ public class DailyItineraryController {
 
     private final DailyItineraryService dailyItineraryService;
     private final com.cruise.itinerary.service.ItineraryChangeHistoryService historyService;
+    private final com.cruise.itinerary.service.ItineraryNotificationTriggerService notificationTriggerService;
 
     public DailyItineraryController(
             DailyItineraryService dailyItineraryService,
-            com.cruise.itinerary.service.ItineraryChangeHistoryService historyService
+            com.cruise.itinerary.service.ItineraryChangeHistoryService historyService,
+            com.cruise.itinerary.service.ItineraryNotificationTriggerService notificationTriggerService
     ) {
         this.dailyItineraryService = dailyItineraryService;
         this.historyService = historyService;
+        this.notificationTriggerService = notificationTriggerService;
     }
 
     @PostMapping
@@ -93,5 +96,13 @@ public class DailyItineraryController {
     ) {
         return ApiResponse.ok("Lấy lịch sử thay đổi của ngày lịch trình thành công",
                 historyService.getHistoriesByDailyItineraryId(itineraryId));
+    }
+
+    @GetMapping("/notifications")
+    public ApiResponse<List<com.cruise.itinerary.dto.ItineraryChangeNotificationDto>> getTourNotifications(
+            @PathVariable Long tourId
+    ) {
+        return ApiResponse.ok("Lấy danh sách thông báo thay đổi lịch trình thành công",
+                notificationTriggerService.getNotificationsByTourId(tourId));
     }
 }
