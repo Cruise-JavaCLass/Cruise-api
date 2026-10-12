@@ -127,6 +127,63 @@ class OnboardActivityServiceTest {
     }
 
     @Test
+    @DisplayName("updateActivity: should successfully update all activity fields (KAN-134)")
+    void updateActivity_Success() {
+        com.cruise.activity.dto.UpdateActivityRequest req = com.cruise.activity.dto.UpdateActivityRequest.builder()
+                .dayNumber(2)
+                .title("Dạ tiệc Khiêu vũ & Ẩm thực Ý")
+                .description("Bữa tối phong cách Địa Trung Hải")
+                .category("Dining")
+                .location("Venetian Ballroom")
+                .activityDate(LocalDate.of(2026, 11, 2))
+                .startTime(LocalTime.of(19, 30))
+                .endTime(LocalTime.of(22, 0))
+                .maxCapacity(250)
+                .price(BigDecimal.valueOf(150000))
+                .isIncluded(false)
+                .status(ActivityStatus.SCHEDULED)
+                .build();
+
+        when(activityRepository.findById(10L)).thenReturn(Optional.of(sampleActivity));
+        when(activityRepository.existsOverlappingActivity(
+                eq("Venetian Ballroom"),
+                eq(LocalDate.of(2026, 11, 2)),
+                eq(LocalTime.of(19, 30)),
+                eq(LocalTime.of(22, 0)),
+                eq(10L)
+        )).thenReturn(false);
+        when(activityRepository.save(any(OnboardActivity.class))).thenAnswer(i -> i.getArgument(0));
+
+        OnboardActivityResponse res = activityService.updateActivity(10L, req);
+
+        assertThat(res).isNotNull();
+        assertThat(res.getTitle()).isEqualTo("Dạ tiệc Khiêu vũ & Ẩm thực Ý");
+        assertThat(res.getLocation()).isEqualTo("Venetian Ballroom");
+        assertThat(res.getDayNumber()).isEqualTo(2);
+        assertThat(res.getMaxCapacity()).isEqualTo(250);
+        assertThat(res.getPrice()).isEqualTo(BigDecimal.valueOf(150000));
+        assertThat(res.getIsIncluded()).isFalse();
+    }
+
+    @Test
+    @DisplayName("updateActivity: throws ResourceNotFoundException when activity id does not exist")
+    void updateActivity_NotFound() {
+        com.cruise.activity.dto.UpdateActivityRequest req = com.cruise.activity.dto.UpdateActivityRequest.builder()
+                .title("Test")
+                .location("Hall")
+                .activityDate(LocalDate.of(2026, 11, 1))
+                .startTime(LocalTime.of(8, 0))
+                .endTime(LocalTime.of(9, 0))
+                .build();
+
+        when(activityRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> activityService.updateActivity(99L, req))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Không tìm thấy hoạt động với ID: 99");
+    }
+
+    @Test
     @DisplayName("configureTimeAndLocation: throws ResourceNotFoundException when activity id does not exist")
     void configureTimeAndLocation_NotFound() {
         ConfigureTimeAndLocationRequest req = ConfigureTimeAndLocationRequest.builder()

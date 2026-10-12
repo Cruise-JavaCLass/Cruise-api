@@ -3,6 +3,7 @@ package com.cruise.activity.service;
 import com.cruise.activity.dto.ConfigureTimeAndLocationRequest;
 import com.cruise.activity.dto.CreateActivityRequest;
 import com.cruise.activity.dto.OnboardActivityResponse;
+import com.cruise.activity.dto.UpdateActivityRequest;
 import com.cruise.activity.entity.OnboardActivity;
 import com.cruise.activity.enums.ActivityStatus;
 import com.cruise.activity.exception.BusinessRuleException;
@@ -57,6 +58,50 @@ public class OnboardActivityService {
         OnboardActivity saved = activityRepository.save(activity);
         log.info("Created onboard activity: ID={}, Title={}, TourID={}", saved.getId(), saved.getTitle(), saved.getTourId());
         return OnboardActivityResponse.fromEntity(saved);
+    }
+
+    @Transactional
+    public OnboardActivityResponse updateActivity(Long activityId, UpdateActivityRequest request) {
+        OnboardActivity activity = activityRepository.findById(activityId)
+                .filter(OnboardActivity::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hoạt động với ID: " + activityId));
+
+        validateTimeAndLocation(
+                request.getLocation(),
+                request.getActivityDate(),
+                request.getStartTime(),
+                request.getEndTime(),
+                activityId
+        );
+
+        if (request.getDayNumber() != null) {
+            activity.setDayNumber(request.getDayNumber());
+        }
+        activity.setTitle(request.getTitle().trim());
+        activity.setDescription(request.getDescription());
+        if (request.getCategory() != null) {
+            activity.setCategory(request.getCategory());
+        }
+        activity.setLocation(request.getLocation().trim());
+        activity.setActivityDate(request.getActivityDate());
+        activity.setStartTime(request.getStartTime());
+        activity.setEndTime(request.getEndTime());
+        if (request.getMaxCapacity() != null) {
+            activity.setMaxCapacity(request.getMaxCapacity());
+        }
+        if (request.getPrice() != null) {
+            activity.setPrice(request.getPrice());
+        }
+        if (request.getIsIncluded() != null) {
+            activity.setIsIncluded(request.getIsIncluded());
+        }
+        if (request.getStatus() != null) {
+            activity.setStatus(request.getStatus());
+        }
+
+        OnboardActivity updated = activityRepository.save(activity);
+        log.info("Updated activity ID={}: Title='{}', Location='{}'", updated.getId(), updated.getTitle(), updated.getLocation());
+        return OnboardActivityResponse.fromEntity(updated);
     }
 
     @Transactional

@@ -40,6 +40,14 @@ public class ActivityController {
         return ApiResponse.ok("Tạo hoạt động thành công", activityService.createActivity(request));
     }
 
+    @PutMapping("/{id}")
+    public ApiResponse<OnboardActivityResponse> updateActivity(
+            @PathVariable Long id,
+            @Valid @RequestBody com.cruise.activity.dto.UpdateActivityRequest request
+    ) {
+        return ApiResponse.ok("Cập nhật hoạt động thành công", activityService.updateActivity(id, request));
+    }
+
     @PatchMapping("/{id}/time-location")
     public ApiResponse<OnboardActivityResponse> configureTimeAndLocation(
             @PathVariable Long id,
