@@ -254,4 +254,52 @@ class DailyItineraryControllerTest {
                 .andExpect(jsonPath("$.data[0].id").value(2L))
                 .andExpect(jsonPath("$.data[0].changeType").value("UPDATE"));
     }
+
+    @Test
+    @DisplayName("PATCH /api/itinerary/tours/{tourId}/daily/{id}/affected - Cập nhật lịch trình bị ảnh hưởng thành công")
+    void updateAffectedScheduleSuccess() throws Exception {
+        DailyItineraryResponse response = DailyItineraryResponse.builder()
+                .id(1L)
+                .tourId(10L)
+                .dayNumber(1)
+                .title("Khởi hành tránh bão")
+                .isAffected(true)
+                .changeReason("Bão số 3")
+                .changeType(com.cruise.itinerary.enums.ChangeType.WEATHER_UPDATE)
+                .build();
+
+        when(dailyItineraryService.updateAffectedSchedule(eq(10L), eq(1L), any(com.cruise.itinerary.dto.UpdateAffectedScheduleRequest.class)))
+                .thenReturn(response);
+
+        mockMvc.perform(patch("/api/itinerary/tours/10/daily/1/affected")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "changeType": "WEATHER_UPDATE",
+                                  "reason": "Bão số 3",
+                                  "changedBy": "CAPTAIN",
+                                  "weatherForecast": "Mưa to gió lớn"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(1L))
+                .andExpect(jsonPath("$.data.isAffected").value(true))
+                .andExpect(jsonPath("$.data.changeReason").value("Bão số 3"))
+                .andExpect(jsonPath("$.data.changeType").value("WEATHER_UPDATE"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/itinerary/tours/{tourId}/daily/{id}/affected - Lỗi 400 khi thiếu changeType hoặc reason")
+    void updateAffectedScheduleValidation() throws Exception {
+        mockMvc.perform(patch("/api/itinerary/tours/10/daily/1/affected")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "reason": ""
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
 }

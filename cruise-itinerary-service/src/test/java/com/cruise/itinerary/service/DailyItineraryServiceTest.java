@@ -267,4 +267,56 @@ class DailyItineraryServiceTest {
         DailyItineraryResponse response = dailyItineraryService.createDailyItinerary(10L, sampleRequest);
         assertThat(response).isNotNull();
     }
+
+    @Test
+    @DisplayName("updateAffectedSchedule - Cập nhật lịch trình bị ảnh hưởng do thời tiết thành công")
+    void updateAffectedScheduleSuccess() {
+        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
+        when(dailyItineraryRepository.findByIdAndTourIdAndActiveTrue(100L, 10L)).thenReturn(Optional.of(sampleItinerary));
+        when(portRepository.findById(2L)).thenReturn(Optional.of(samplePort));
+        when(dailyItineraryRepository.save(any(DailyItinerary.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        com.cruise.itinerary.dto.UpdateAffectedScheduleRequest req = com.cruise.itinerary.dto.UpdateAffectedScheduleRequest.builder()
+                .changeType(com.cruise.itinerary.enums.ChangeType.WEATHER_UPDATE)
+                .reason("Bão số 3 chuyển hướng tàu")
+                .changedBy("CAPTAIN_AN")
+                .portId(2L)
+                .isSeaDay(true)
+                .weatherForecast("Mưa bão lớn, gió giật cấp 9")
+                .description("Hải trình chuyển sang đi trên biển tránh bão")
+                .arrivalTime(LocalTime.of(10, 0))
+                .departureTime(LocalTime.of(18, 0))
+                .allAboardTime(LocalTime.of(17, 30))
+                .build();
+
+        DailyItineraryResponse response = dailyItineraryService.updateAffectedSchedule(10L, 100L, req);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getIsAffected()).isTrue();
+        assertThat(response.getChangeReason()).isEqualTo("Bão số 3 chuyển hướng tàu");
+        assertThat(response.getChangeType()).isEqualTo(com.cruise.itinerary.enums.ChangeType.WEATHER_UPDATE);
+        verify(historyService, times(1)).recordChange(
+                eq(sampleTour), any(DailyItinerary.class), eq(com.cruise.itinerary.enums.ChangeType.WEATHER_UPDATE),
+                eq("Bão số 3 chuyển hướng tàu"), eq("CAPTAIN_AN"), anyString(), anyString()
+        );
+    }
+
+    @Test
+    @DisplayName("updateAffectedSchedule - Cập nhật khi chỉ đổi portName mà không đổi portId")
+    void updateAffectedSchedulePortNameOnly() {
+        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
+        when(dailyItineraryRepository.findByIdAndTourIdAndActiveTrue(100L, 10L)).thenReturn(Optional.of(sampleItinerary));
+        when(dailyItineraryRepository.save(any(DailyItinerary.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        com.cruise.itinerary.dto.UpdateAffectedScheduleRequest req = com.cruise.itinerary.dto.UpdateAffectedScheduleRequest.builder()
+                .changeType(com.cruise.itinerary.enums.ChangeType.EMERGENCY_CHANGE)
+                .reason("Cảng cũ bảo trì đột xuất")
+                .portName("Cảng thay thế Cát Bà")
+                .build();
+
+        DailyItineraryResponse response = dailyItineraryService.updateAffectedSchedule(10L, 100L, req);
+
+        assertThat(response.getPortName()).isEqualTo("Cảng thay thế Cát Bà");
+        assertThat(response.getIsAffected()).isTrue();
+    }
 }

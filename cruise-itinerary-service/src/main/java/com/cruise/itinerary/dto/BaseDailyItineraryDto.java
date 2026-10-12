@@ -49,4 +49,10 @@ public abstract class BaseDailyItineraryDto {
     private Boolean isSeaDay;
 
     private String weatherForecast;
+
+    private Boolean isAffected;
+
+    private String changeReason;
+
+    private com.cruise.itinerary.enums.ChangeType changeType;
 }

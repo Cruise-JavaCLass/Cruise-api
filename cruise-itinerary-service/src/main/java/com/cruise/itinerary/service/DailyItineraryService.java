@@ -133,6 +133,59 @@ public class DailyItineraryService {
                 "Xóa lịch trình ngày " + itinerary.getDayNumber(), null, itinerary.getTitle(), null);
     }
 
+    public DailyItineraryResponse updateAffectedSchedule(
+            Long tourId,
+            Long itineraryId,
+            com.cruise.itinerary.dto.UpdateAffectedScheduleRequest request
+    ) {
+        CruiseTour tour = findTourById(tourId);
+        DailyItinerary itinerary = findItineraryByIdAndTourId(itineraryId, tourId);
+        String previousState = String.format("Day %d: %s | Port: %s | SeaDay: %s | Times: %s - %s (All-aboard: %s)",
+                itinerary.getDayNumber(), itinerary.getTitle(), itinerary.getPortName(), itinerary.getIsSeaDay(),
+                itinerary.getArrivalTime(), itinerary.getDepartureTime(), itinerary.getAllAboardTime());
+
+        if (request.getPortId() != null) {
+            Port port = resolvePort(request.getPortId());
+            itinerary.setPort(port);
+            itinerary.setPortName(resolvePortName(request.getPortName(), port));
+        } else if (request.getPortName() != null) {
+            itinerary.setPortName(request.getPortName());
+        }
+
+        if (request.getArrivalTime() != null) {
+            itinerary.setArrivalTime(request.getArrivalTime());
+        }
+        if (request.getDepartureTime() != null) {
+            itinerary.setDepartureTime(request.getDepartureTime());
+        }
+        if (request.getAllAboardTime() != null) {
+            itinerary.setAllAboardTime(request.getAllAboardTime());
+        }
+        if (request.getIsSeaDay() != null) {
+            itinerary.setIsSeaDay(request.getIsSeaDay());
+        }
+        if (request.getWeatherForecast() != null) {
+            itinerary.setWeatherForecast(request.getWeatherForecast());
+        }
+        if (request.getDescription() != null) {
+            itinerary.setDescription(request.getDescription());
+        }
+
+        itinerary.setIsAffected(true);
+        itinerary.setChangeReason(request.getReason());
+        itinerary.setChangeType(request.getChangeType());
+
+        DailyItinerary updated = dailyItineraryRepository.save(itinerary);
+        String newState = String.format("Day %d: %s | Port: %s | SeaDay: %s | Times: %s - %s (All-aboard: %s) | Reason: %s",
+                updated.getDayNumber(), updated.getTitle(), updated.getPortName(), updated.getIsSeaDay(),
+                updated.getArrivalTime(), updated.getDepartureTime(), updated.getAllAboardTime(), request.getReason());
+
+        historyService.recordChange(tour, updated, request.getChangeType(),
+                request.getReason(), request.getChangedBy(), previousState, newState);
+
+        return toResponse(updated);
+    }
+
     private CruiseTour findTourById(Long tourId) {
         return tourRepository.findById(tourId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tour du thuyền với ID " + tourId + " không tồn tại"));
@@ -187,6 +240,9 @@ public class DailyItineraryService {
                 .allAboardTime(itinerary.getAllAboardTime())
                 .isSeaDay(itinerary.getIsSeaDay())
                 .weatherForecast(itinerary.getWeatherForecast())
+                .isAffected(itinerary.getIsAffected())
+                .changeReason(itinerary.getChangeReason())
+                .changeType(itinerary.getChangeType())
                 .active(itinerary.getActive())
                 .createdAt(itinerary.getCreatedAt())
                 .updatedAt(itinerary.getUpdatedAt())
