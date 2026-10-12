@@ -120,7 +120,15 @@ public class PassengerService {
 
     @Transactional(readOnly = true)
     public byte[] exportRegisteredPassengersCsv(Long tourId) {
-        List<Passenger> passengers = passengerRepository.findByTourIdAndActiveTrue(tourId);
+        return exportRegisteredPassengersCsv(tourId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] exportRegisteredPassengersCsv(Long tourId, com.cruise.activity.enums.RegistrationStatus status) {
+        List<Passenger> passengers = (status == null)
+                ? passengerRepository.findByTourIdAndActiveTrue(tourId)
+                : passengerRepository.findByTourIdAndRegistrationStatusAndActiveTrue(tourId, status);
+
         StringBuilder sb = new StringBuilder();
         // UTF-8 BOM for Excel compatibility
         sb.append('\ufeff');

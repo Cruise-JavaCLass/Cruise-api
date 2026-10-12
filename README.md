@@ -28,7 +28,9 @@
 > - [KAN-126](https://huytran20052022.atlassian.net/browse/KAN-126) - *Implement Itinerary Change Notification Trigger — Kích hoạt thông báo khi lịch trình thay đổi*  
 > - [KAN-128](https://huytran20052022.atlassian.net/browse/KAN-128) - *Write Integration Tests for Itinerary Updates — Kiểm thử tích hợp cho cập nhật lịch trình và audit log*  
 > - [KAN-146](https://huytran20052022.atlassian.net/browse/KAN-146) - *Retrieve Registered Passenger Lists — Lấy thông tin danh sách hành khách đăng ký*  
-> - [KAN-148](https://huytran20052022.atlassian.net/browse/KAN-148) - *Implement Registration List Export — Triển khai xuất danh sách hành khách đăng ký*
+> - [KAN-148](https://huytran20052022.atlassian.net/browse/KAN-148) - *Implement Registration List Export — Triển khai xuất danh sách hành khách đăng ký*  
+> - [KAN-149](https://huytran20052022.atlassian.net/browse/KAN-149) - *Write API Tests for Registration List Retrieval — Test API lấy danh sách đăng ký*  
+> - [KAN-150](https://huytran20052022.atlassian.net/browse/KAN-150) - *Test Filtering and Export Results — Test kết quả lọc và xuất dữ liệu*
 
 ---
 
@@ -458,16 +460,27 @@ Module `cruise-itinerary-service` cung cấp bộ kiểm thử toàn diện cho 
    - Kiểm thử tích hợp sắp xếp lại thứ tự các ngày trong tour (`REORDER`).
    - Kiểm thử tích hợp xóa mềm lịch trình và phát thông báo mức độ nghiêm trọng `CRITICAL`.
 
-### 6.8. Kiểm thử Quản lý & Xuất Danh sách Hành khách (Registered Passenger Lists & Export — KAN-146, KAN-148):
-Module `cruise-activity-service` cung cấp API và bộ kiểm thử cho nghiệp vụ quản lý và xuất dữ liệu hành khách theo tour du thuyền:
-* **`PassengerServiceTest` (8 tests - Mockito Unit Tests):**
+### 6.8. Kiểm thử Quản lý, Lọc & Xuất Danh sách Hành khách (Passenger Management, Filtering & Export — KAN-146, KAN-148, KAN-149, KAN-150):
+Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn diện cho nghiệp vụ quản lý, lọc theo trạng thái và xuất file CSV hành khách du thuyền:
+* **`PassengerServiceTest` (13 tests - Mockito Unit Tests):**
   - Kiểm thử đăng ký thông tin hành khách với số phòng cabin, mã định danh RFID/QR code, gói tour bao gồm và vùng định vị BLE.
   - Kiểm thử truy vấn danh sách hành khách theo mã tour (`tourId`) và tìm kiếm phân trang theo tên, cabin, mã RFID.
   - Kiểm thử tra cứu chi tiết theo ID hoặc mã thẻ RFID, xử lý ngoại lệ `ResourceNotFoundException`.
   - Kiểm thử cập nhật trạng thái check-in (`NOT_CHECKED_IN` $\rightarrow$ `BOARDED`) và tự động ghi nhận thời gian lên tàu (`boardedAt`).
-  - Kiểm thử xuất danh sách hành khách ra định dạng CSV chuẩn UTF-8 BOM phục vụ Microsoft Excel và các hệ thống điều hành cảng (`exportRegisteredPassengersCsv`).
-* **`PassengerControllerTest` (6 tests - WebMvcTest):**
-  - Kiểm thử các endpoint: `POST /api/activities/passengers/register` (`201 Created`), `GET /tour/{tourId}`, `GET /tour/{tourId}/paged`, `GET /{id}`, `GET /rfid/{rfidTag}`, `PATCH /{id}/check-in`, và `GET /tour/{tourId}/export/csv` (`Content-Type: text/csv`, file đính kèm `Content-Disposition`).
+  - Kiểm thử cập nhật trạng thái đăng ký `RegistrationStatus` (`CONFIRMED`, `PENDING`, `CANCELLED`).
+  - Kiểm thử xuất danh sách hành khách ra định dạng CSV chuẩn UTF-8 BOM phục vụ Microsoft Excel và các hệ thống điều hành cảng (`exportRegisteredPassengersCsv`), bao gồm cả lọc theo trạng thái đăng ký và escape ký tự đặc biệt.
+* **`PassengerControllerTest` (9 tests - WebMvcTest):**
+  - Kiểm thử các endpoint: `POST /api/activities/passengers/register` (`201 Created`), `GET /tour/{tourId}`, `GET /tour/{tourId}?status=...`, `GET /tour/{tourId}/paged`, `GET /{id}`, `GET /rfid/{rfidTag}`, `PATCH /{id}/check-in`, `PATCH /{id}/registration-status`, và `GET /tour/{tourId}/export/csv` (hỗ trợ param lọc `status`).
+* **`PassengerRegistrationListRetrievalApiTest` (17 tests - SpringBootTest End-to-End API Integration — KAN-149):**
+  - Kiểm thử tích hợp truy vấn danh sách hành khách theo tour không lọc và có lọc theo từng trạng thái `RegistrationStatus`.
+  - Kiểm thử tìm kiếm kết hợp phân trang, sắp xếp asc/desc, tìm theo họ tên, số cabin, mã RFID.
+  - Kiểm thử tra cứu hành khách theo ID và mã thẻ RFID kèm các trường hợp lỗi 404 NOT_FOUND.
+* **`FilteringAndExportResultsTest` (11 tests - SpringBootTest End-to-End Filtering & Export Integration — KAN-150):**
+  - Kiểm thử kết quả lọc danh sách theo `CONFIRMED`, `PENDING`, `CANCELLED` và loại trừ bản ghi soft-deleted (`active = false`).
+  - Kiểm thử kết hợp tìm kiếm keyword cabinNumber và lọc trạng thái trong phân trang.
+  - Kiểm thử xuất file CSV toàn bộ tour và xuất CSV có lọc theo `RegistrationStatus`.
+  - Kiểm thử xử lý escape chuẩn RFC 4180 cho các trường chứa ký tự đặc biệt (dấu phẩy, dấu nháy kép, ký tự xuống dòng `\r\n`).
+  - Kiểm thử xuất CSV khi danh sách tour rỗng (sinh đúng header và UTF-8 BOM).
 
 ---
 
