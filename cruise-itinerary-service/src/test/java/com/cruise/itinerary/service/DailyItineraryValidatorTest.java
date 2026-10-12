@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("DailyItineraryValidator Scheduling Rules Tests (KAN-116)")
+@DisplayName("DailyItineraryValidator Scheduling Rules Tests (KAN-116, KAN-117)")
 class DailyItineraryValidatorTest {
 
     @Mock
