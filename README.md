@@ -27,6 +27,8 @@
 > - [KAN-124](https://huytran20052022.atlassian.net/browse/KAN-124) - *Implement Itinerary Change History Service — Dịch vụ ghi nhận lịch sử thay đổi hải trình*  
 > - [KAN-126](https://huytran20052022.atlassian.net/browse/KAN-126) - *Implement Itinerary Change Notification Trigger — Kích hoạt thông báo khi lịch trình thay đổi*  
 > - [KAN-128](https://huytran20052022.atlassian.net/browse/KAN-128) - *Write Integration Tests for Itinerary Updates — Kiểm thử tích hợp cho cập nhật lịch trình và audit log*  
+> - [KAN-146](https://huytran20052022.atlassian.net/browse/KAN-146) - *Retrieve Registered Passenger Lists — Lấy thông tin danh sách hành khách đăng ký*  
+> - [KAN-148](https://huytran20052022.atlassian.net/browse/KAN-148) - *Implement Registration List Export — Triển khai xuất danh sách hành khách đăng ký*
 
 ---
 
@@ -455,6 +457,17 @@ Module `cruise-itinerary-service` cung cấp bộ kiểm thử toàn diện cho 
    - Kiểm thử tích hợp trọn vẹn: Tạo mới $\rightarrow$ Cập nhật lịch trình $\rightarrow$ Ghi nhận Audit Log $\rightarrow$ Kích hoạt thông báo với mức độ khẩn cấp phù hợp.
    - Kiểm thử tích hợp sắp xếp lại thứ tự các ngày trong tour (`REORDER`).
    - Kiểm thử tích hợp xóa mềm lịch trình và phát thông báo mức độ nghiêm trọng `CRITICAL`.
+
+### 6.8. Kiểm thử Quản lý & Xuất Danh sách Hành khách (Registered Passenger Lists & Export — KAN-146, KAN-148):
+Module `cruise-activity-service` cung cấp API và bộ kiểm thử cho nghiệp vụ quản lý và xuất dữ liệu hành khách theo tour du thuyền:
+* **`PassengerServiceTest` (8 tests - Mockito Unit Tests):**
+  - Kiểm thử đăng ký thông tin hành khách với số phòng cabin, mã định danh RFID/QR code, gói tour bao gồm và vùng định vị BLE.
+  - Kiểm thử truy vấn danh sách hành khách theo mã tour (`tourId`) và tìm kiếm phân trang theo tên, cabin, mã RFID.
+  - Kiểm thử tra cứu chi tiết theo ID hoặc mã thẻ RFID, xử lý ngoại lệ `ResourceNotFoundException`.
+  - Kiểm thử cập nhật trạng thái check-in (`NOT_CHECKED_IN` $\rightarrow$ `BOARDED`) và tự động ghi nhận thời gian lên tàu (`boardedAt`).
+  - Kiểm thử xuất danh sách hành khách ra định dạng CSV chuẩn UTF-8 BOM phục vụ Microsoft Excel và các hệ thống điều hành cảng (`exportRegisteredPassengersCsv`).
+* **`PassengerControllerTest` (6 tests - WebMvcTest):**
+  - Kiểm thử các endpoint: `POST /api/activities/passengers/register` (`201 Created`), `GET /tour/{tourId}`, `GET /tour/{tourId}/paged`, `GET /{id}`, `GET /rfid/{rfidTag}`, `PATCH /{id}/check-in`, và `GET /tour/{tourId}/export/csv` (`Content-Type: text/csv`, file đính kèm `Content-Disposition`).
 
 ---
 
