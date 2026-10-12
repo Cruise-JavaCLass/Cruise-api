@@ -76,8 +76,11 @@ public class PassengerController {
     }
 
     @GetMapping(value = "/tour/{tourId}/export/csv", produces = "text/csv; charset=UTF-8")
-    public org.springframework.http.ResponseEntity<byte[]> exportRegisteredPassengersCsv(@PathVariable Long tourId) {
-        byte[] csvData = passengerService.exportRegisteredPassengersCsv(tourId);
+    public org.springframework.http.ResponseEntity<byte[]> exportRegisteredPassengersCsv(
+            @PathVariable Long tourId,
+            @RequestParam(required = false) com.cruise.activity.enums.RegistrationStatus status
+    ) {
+        byte[] csvData = passengerService.exportRegisteredPassengersCsv(tourId, status);
         String fileName = String.format("passengers_tour_%d.csv", tourId);
 
         return org.springframework.http.ResponseEntity.ok()

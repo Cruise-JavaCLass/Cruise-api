@@ -235,4 +235,18 @@ class PassengerServiceTest {
         String csvContent = new String(csvBytes, java.nio.charset.StandardCharsets.UTF_8);
         assertThat(csvContent).contains("\"Nguyễn \"\"Văn\"\", Nam\r\nTest\"");
     }
+
+    @Test
+    @DisplayName("exportRegisteredPassengersCsv - Lọc xuất danh sách theo trạng thái RegistrationStatus")
+    void exportRegisteredPassengersCsvWithStatusSuccess() {
+        when(passengerRepository.findByTourIdAndRegistrationStatusAndActiveTrue(1L, com.cruise.activity.enums.RegistrationStatus.CONFIRMED))
+                .thenReturn(List.of(samplePassenger));
+
+        byte[] csvBytes = passengerService.exportRegisteredPassengersCsv(1L, com.cruise.activity.enums.RegistrationStatus.CONFIRMED);
+
+        assertThat(csvBytes).isNotEmpty();
+        String csvContent = new String(csvBytes, java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(csvContent).contains("Nguyễn Văn Minh");
+        verify(passengerRepository, times(1)).findByTourIdAndRegistrationStatusAndActiveTrue(1L, com.cruise.activity.enums.RegistrationStatus.CONFIRMED);
+    }
 }
