@@ -21,6 +21,12 @@
 > - [KAN-90](https://huytran20052022.atlassian.net/browse/KAN-90) - *Write API Tests for Ship CRUD Operations — Test các API CRUD tàu du lịch*  
 > - [KAN-96](https://huytran20052022.atlassian.net/browse/KAN-96) - *Create and Update Cruise Tour API — Tạo và cập nhật API tour du lịch*  
 > - [KAN-97](https://huytran20052022.atlassian.net/browse/KAN-97) - *Implement Tour Status Management — Quản lý trạng thái tour du lịch*  
+> - [KAN-114](https://huytran20052022.atlassian.net/browse/KAN-114) - *Implement Daily Itinerary Management API — API quản lý lịch trình theo ngày*  
+> - [KAN-116](https://huytran20052022.atlassian.net/browse/KAN-116) - *Implement Itinerary Reordering API — API sắp xếp lại thứ tự lịch trình*  
+> - [KAN-118](https://huytran20052022.atlassian.net/browse/KAN-118) - *Write Unit Tests for Daily Itinerary Management — Kiểm thử đơn vị quản lý lịch trình*  
+> - [KAN-124](https://huytran20052022.atlassian.net/browse/KAN-124) - *Implement Itinerary Change History Service — Dịch vụ ghi nhận lịch sử thay đổi hải trình*  
+> - [KAN-126](https://huytran20052022.atlassian.net/browse/KAN-126) - *Implement Itinerary Change Notification Trigger — Kích hoạt thông báo khi lịch trình thay đổi*  
+> - [KAN-128](https://huytran20052022.atlassian.net/browse/KAN-128) - *Write Integration Tests for Itinerary Updates — Kiểm thử tích hợp cho cập nhật lịch trình và audit log*  
 
 ---
 
@@ -423,6 +429,32 @@ Module `cruise-itinerary-service` được trang bị bộ kiểm thử chuyên 
 
 4. **`CruiseShipIntegrationTest` (1 test - SpringBootTest E2E Lifecycle):**
    - Kiểm thử trọn vẹn vòng đời một tàu du lịch từ khởi tạo, tra cứu ID/mã hiệu, tìm kiếm bộ lọc, cập nhật thông tin, thay đổi trạng thái hải trình, xóa mềm và xóa cứng khỏi database.
+
+### 6.7. Kiểm thử Quản lý Lịch trình Hàng ngày & Audit Log (Itinerary Management Test Suite — KAN-114, KAN-126, KAN-128):
+Module `cruise-itinerary-service` cung cấp bộ kiểm thử toàn diện cho hệ thống quản lý lịch trình chi tiết và kích hoạt thông báo tự động:
+
+1. **`DailyItineraryValidatorTest` (10 tests - Unit Tests):**
+   - Kiểm thử các quy tắc nghiệp vụ ngày lịch trình: ngày phải nằm trong khung thời gian tour, `allAboardTime` phải trước `departureTime`, không được trùng lặp `dayNumber`.
+
+2. **`DailyItineraryServiceTest` (14 tests - Mockito Unit Tests):**
+   - Kiểm thử tạo mới, cập nhật, lấy chi tiết/danh sách, sắp xếp lại thứ tự (`reorder`) và xóa mềm (`soft delete`).
+   - Kiểm thử tự động kích hoạt phát thông báo (`ItineraryNotificationTriggerService`) và ghi nhận nhật ký thay đổi (`ItineraryChangeHistoryService`).
+
+3. **`DailyItineraryControllerTest` (13 tests - WebMvcTest):**
+   - Kiểm thử các endpoint RESTful: `POST`, `PUT`, `PATCH /reorder`, `GET`, `DELETE` tại `/api/itinerary/tours/{tourId}/daily`.
+   - Kiểm thử endpoint lịch sử thay đổi `GET /history` và danh sách thông báo `GET /notifications`.
+
+4. **`ItineraryNotificationTriggerServiceTest` (5 tests - Unit Tests):**
+   - Kiểm thử phân loại mức độ khẩn cấp (`CRITICAL`, `URGENT`, `NORMAL`) dựa trên loại thay đổi (`ChangeType`).
+   - Kiểm thử lắng nghe sự kiện (`@EventListener`), tạo thông báo và xóa lịch sử thông báo (`clearHistory`).
+
+5. **`ItineraryChangeHistoryServiceTest` (5 tests - Unit Tests):**
+   - Kiểm thử lưu trữ nhật ký kiểm toán, gán người thực hiện mặc định và truy vấn theo `tourId` hoặc `dailyItineraryId`.
+
+6. **`DailyItineraryUpdateIntegrationTest` (3 tests - SpringBootTest E2E Integration):**
+   - Kiểm thử tích hợp trọn vẹn: Tạo mới $\rightarrow$ Cập nhật lịch trình $\rightarrow$ Ghi nhận Audit Log $\rightarrow$ Kích hoạt thông báo với mức độ khẩn cấp phù hợp.
+   - Kiểm thử tích hợp sắp xếp lại thứ tự các ngày trong tour (`REORDER`).
+   - Kiểm thử tích hợp xóa mềm lịch trình và phát thông báo mức độ nghiêm trọng `CRITICAL`.
 
 ---
 
