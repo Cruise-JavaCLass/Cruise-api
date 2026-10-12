@@ -485,24 +485,34 @@ Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn di�
   - Kiểm thử xử lý escape chuẩn RFC 4180 cho các trường chứa ký tự đặc biệt (dấu phẩy, dấu nháy kép, ký tự xuống dòng `\r\n`).
   - Kiểm thử xuất CSV khi danh sách tour rỗng (sinh đúng header và UTF-8 BOM).
 
-### 6.9. Tạo, Cập nhật, Cấu hình, Quản lý Trạng thái & Truy vấn Hoạt động trên tàu (Activities Management — KAN-134, KAN-135, KAN-136, KAN-144):
-Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn diện cho việc tạo mới, cập nhật toàn diện thông tin, cấu hình địa điểm, quản lý chuyển đổi trạng thái hoạt động (State Machine), kiểm tra chi tiết và truy vấn danh sách hoạt động du thuyền:
+### 6.9. Tạo, Cập nhật, Cấu hình, Quản lý Trạng thái & Quy tắc Nghiệp vụ Hoạt động trên tàu (Activities Management — KAN-134, KAN-135, KAN-136, KAN-137, KAN-144):
+Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn diện cho việc tạo mới, cập nhật toàn diện thông tin, cấu hình địa điểm, quản lý chuyển đổi trạng thái hoạt động (State Machine), kiểm tra chi tiết, truy vấn danh sách và xác thực nghiêm ngặt các quy tắc nghiệp vụ hoạt động:
+* **`ActivityBusinessRulesUnitTest` (23 tests - Mockito & Parameterized Unit Tests — KAN-137):**
+  - **Quy tắc tính hợp lệ của Địa điểm (Location Validation):**
+    - Từ chối địa điểm bị null, chuỗi rỗng hoặc chỉ chứa khoảng trắng (`BusinessRuleException: Địa điểm tổ chức không được để trống`).
+    - Chuẩn hóa khoảng trắng (`trim()`) của địa điểm trước khi thực hiện truy vấn và đối soát trùng lặp.
+  - **Quy tắc Khung thời gian & Thứ tự giờ (Time & Date Validation):**
+    - Từ chối ngày diễn ra bị null (`BusinessRuleException: Ngày tổ chức không được để trống`).
+    - Từ chối giờ bắt đầu hoặc giờ kết thúc bị null (`BusinessRuleException: Thời gian bắt đầu và kết thúc không được để trống`).
+    - Bắt lỗi khi giờ kết thúc trùng với giờ bắt đầu (thời lượng bằng 0) hoặc giờ kết thúc xảy ra trước giờ bắt đầu (`BusinessRuleException: Thời gian kết thúc phải sau thời gian bắt đầu`).
+  - **Quy tắc Xung đột Lịch trình & Trùng lặp Địa điểm (Schedule Conflict & Overlap Detection):**
+    - Phát hiện và từ chối xung đột khi địa điểm đã có hoạt động khác diễn ra trong cùng khung giờ (`existsOverlappingActivity`).
+    - Cho phép loại trừ chính ID của hoạt động (`excludeId`) khi cập nhật thông tin để tránh tự xung đột với chính nó.
+  - **Quy tắc Ma trận Trạng thái Hoạt động (State Machine Transition Rules):**
+    - Xác thực các luồng chuyển trạng thái hợp lệ và không hợp lệ giữa `SCHEDULED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`.
+    - Kiểm tra `COMPLETED` là trạng thái kết thúc (terminal state), không thể chuyển tiếp.
+    - Kiểm tra lưu trữ nguyên nhân hủy `cancellationReason` khi hoạt động chuyển sang `CANCELLED`.
+  - **Quy tắc Giá trị Mặc định & Toàn vẹn Dữ liệu (Defaults & Integrity):**
+    - Tự động áp dụng giá trị mặc định cho danh mục (`General`), sức chứa (`50`), giá (`0`), miễn phí (`true`), trạng thái (`SCHEDULED`), số người tham gia hiện tại (`0`).
+    - Kiểm thử cơ chế Soft Delete (`active = false`, `status = CANCELLED`) và xử lý ngoại lệ `ResourceNotFoundException`.
 * **`OnboardActivityServiceTest` (17 tests - Mockito Unit Tests):**
   - Kiểm thử tạo hoạt động mới với ngày, giờ bắt đầu/kết thúc, số lượng tham gia tối đa, danh mục và địa điểm tổ chức.
   - Kiểm thử cập nhật toàn diện hoạt động (`updateActivity` — KAN-134): tiêu đề, mô tả, danh mục, số ngày, địa điểm, sức chứa, giá dịch vụ và trạng thái.
   - Kiểm thử cấu hình thời gian và địa điểm riêng biệt (`configureTimeAndLocation` — KAN-144).
-  - Kiểm thử quy tắc nghiệp vụ `validateTimeAndLocation`:
-    - Bắt lỗi khi địa điểm bị bỏ trống (`BusinessRuleException: Địa điểm tổ chức không được để trống`).
-    - Bắt lỗi khi giờ kết thúc không sau giờ bắt đầu (`BusinessRuleException: Thời gian kết thúc phải sau thời gian bắt đầu`).
-    - Bắt lỗi xung đột lịch trình khi cùng một địa điểm đã có hoạt động khác diễn ra trong cùng khung giờ (`existsOverlappingActivity`).
-  - Kiểm thử chuyển đổi trạng thái hoạt động theo State Machine (`updateActivityStatus` — KAN-136):
-    - `SCHEDULED` $\to$ `IN_PROGRESS`, `CANCELLED`
-    - `IN_PROGRESS` $\to$ `COMPLETED`, `CANCELLED`
-    - `COMPLETED` $\to$ Trạng thái kết thúc (không thể chuyển đổi tiếp)
-    - `CANCELLED` $\to$ `SCHEDULED` (khôi phục lên lại lịch)
-    - Kiểm tra từ chối chuyển trạng thái không hợp lệ (`BusinessRuleException`) và ghi nhận lý do hủy (`cancellationReason`).
-    - Tra cứu danh sách trạng thái kế tiếp được phép chuyển (`getAllowedStatusTransitions`).
+  - Kiểm thử chuyển đổi trạng thái hoạt động theo State Machine (`updateActivityStatus` — KAN-136).
   - Kiểm thử tra cứu chi tiết, phân trang theo ngày/thể loại/từ khóa và xóa mềm hoạt động (`CANCELLED`).
+* **`ActivityStatusTest` (9 tests - Enum Unit Tests — KAN-136):**
+  - Kiểm thử toàn diện 100% độ bao phủ các nhánh chuyển đổi trạng thái của Enum `ActivityStatus`.
 * **`ActivityControllerTest` (15 tests - WebMvcTest):**
   - Kiểm thử `POST /api/activities`: tạo mới hoạt động du thuyền (`201 Created`).
   - Kiểm thử `PUT /api/activities/{id}`: cập nhật toàn diện hoạt động (`200 OK` / `400 Bad Request` khi validation thất bại).
