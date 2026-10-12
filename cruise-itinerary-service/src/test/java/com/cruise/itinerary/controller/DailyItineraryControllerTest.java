@@ -36,6 +36,9 @@ class DailyItineraryControllerTest {
     @MockitoBean
     private DailyItineraryService dailyItineraryService;
 
+    @MockitoBean
+    private com.cruise.itinerary.service.ItineraryChangeHistoryService historyService;
+
     @Test
     @DisplayName("POST /api/itinerary/tours/{tourId}/daily - Tạo lịch trình ngày thành công")
     void createDailyItinerarySuccess() throws Exception {
@@ -209,5 +212,46 @@ class DailyItineraryControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("GET /api/itinerary/tours/{tourId}/daily/history - Lấy lịch sử thay đổi tour thành công")
+    void getTourHistorySuccess() throws Exception {
+        com.cruise.itinerary.dto.ItineraryChangeHistoryResponse historyResponse = com.cruise.itinerary.dto.ItineraryChangeHistoryResponse.builder()
+                .id(1L)
+                .tourId(10L)
+                .changeType(com.cruise.itinerary.enums.ChangeType.CREATE)
+                .reason("Khởi tạo")
+                .changedBy("SYSTEM")
+                .build();
+
+        when(historyService.getHistoriesByTourId(10L)).thenReturn(List.of(historyResponse));
+
+        mockMvc.perform(get("/api/itinerary/tours/10/daily/history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].id").value(1L))
+                .andExpect(jsonPath("$.data[0].changeType").value("CREATE"));
+    }
+
+    @Test
+    @DisplayName("GET /api/itinerary/tours/{tourId}/daily/{id}/history - Lấy lịch sử ngày thành công")
+    void getDailyItineraryHistorySuccess() throws Exception {
+        com.cruise.itinerary.dto.ItineraryChangeHistoryResponse historyResponse = com.cruise.itinerary.dto.ItineraryChangeHistoryResponse.builder()
+                .id(2L)
+                .tourId(10L)
+                .dailyItineraryId(1L)
+                .changeType(com.cruise.itinerary.enums.ChangeType.UPDATE)
+                .reason("Cập nhật")
+                .changedBy("SYSTEM")
+                .build();
+
+        when(historyService.getHistoriesByDailyItineraryId(1L)).thenReturn(List.of(historyResponse));
+
+        mockMvc.perform(get("/api/itinerary/tours/10/daily/1/history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].id").value(2L))
+                .andExpect(jsonPath("$.data[0].changeType").value("UPDATE"));
     }
 }

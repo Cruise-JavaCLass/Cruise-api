@@ -43,6 +43,9 @@ class DailyItineraryServiceTest {
     @Mock
     private DailyItineraryValidator dailyItineraryValidator;
 
+    @Mock
+    private ItineraryChangeHistoryService historyService;
+
     @InjectMocks
     private DailyItineraryService dailyItineraryService;
 

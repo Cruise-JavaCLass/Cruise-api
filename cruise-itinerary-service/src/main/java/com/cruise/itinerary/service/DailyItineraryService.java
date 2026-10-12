@@ -22,17 +22,20 @@ public class DailyItineraryService {
     private final CruiseTourRepository tourRepository;
     private final PortRepository portRepository;
     private final DailyItineraryValidator dailyItineraryValidator;
+    private final ItineraryChangeHistoryService historyService;
 
     public DailyItineraryService(
             DailyItineraryRepository dailyItineraryRepository,
             CruiseTourRepository tourRepository,
             PortRepository portRepository,
-            DailyItineraryValidator dailyItineraryValidator
+            DailyItineraryValidator dailyItineraryValidator,
+            ItineraryChangeHistoryService historyService
     ) {
         this.dailyItineraryRepository = dailyItineraryRepository;
         this.tourRepository = tourRepository;
         this.portRepository = portRepository;
         this.dailyItineraryValidator = dailyItineraryValidator;
+        this.historyService = historyService;
     }
 
     public DailyItineraryResponse createDailyItinerary(Long tourId, DailyItineraryRequest request) {
@@ -46,12 +49,17 @@ public class DailyItineraryService {
         applyRequestToEntity(itinerary, request, port, portName);
         itinerary.setActive(true);
 
-        return toResponse(dailyItineraryRepository.save(itinerary));
+        DailyItinerary saved = dailyItineraryRepository.save(itinerary);
+        historyService.recordChange(tour, saved, com.cruise.itinerary.enums.ChangeType.CREATE,
+                "Khởi tạo lịch trình ngày " + saved.getDayNumber(), null, null, saved.getTitle());
+
+        return toResponse(saved);
     }
 
     public DailyItineraryResponse updateDailyItinerary(Long tourId, Long itineraryId, DailyItineraryRequest request) {
         CruiseTour tour = findTourById(tourId);
         DailyItinerary itinerary = findItineraryByIdAndTourId(itineraryId, tourId);
+        String previousState = "Day " + itinerary.getDayNumber() + ": " + itinerary.getTitle();
 
         dailyItineraryValidator.validateDailyItinerary(tour, request, itineraryId);
 
@@ -59,7 +67,13 @@ public class DailyItineraryService {
         String portName = resolvePortName(request.getPortName(), port);
 
         applyRequestToEntity(itinerary, request, port, portName);
-        return toResponse(dailyItineraryRepository.save(itinerary));
+        DailyItinerary updated = dailyItineraryRepository.save(itinerary);
+        String newState = "Day " + updated.getDayNumber() + ": " + updated.getTitle();
+
+        historyService.recordChange(tour, updated, com.cruise.itinerary.enums.ChangeType.UPDATE,
+                "Cập nhật thông tin lịch trình", null, previousState, newState);
+
+        return toResponse(updated);
     }
 
     @Transactional(readOnly = true)
@@ -104,6 +118,9 @@ public class DailyItineraryService {
         }
 
         dailyItineraryRepository.saveAll(currentItineraries);
+        historyService.recordChange(tour, null, com.cruise.itinerary.enums.ChangeType.REORDER,
+                "Sắp xếp lại thứ tự các ngày trong tour", null, null, null);
+
         return getDailyItinerariesByTourId(tourId);
     }
 
@@ -111,6 +128,9 @@ public class DailyItineraryService {
         DailyItinerary itinerary = findItineraryByIdAndTourId(itineraryId, tourId);
         itinerary.setActive(false);
         dailyItineraryRepository.save(itinerary);
+
+        historyService.recordChange(itinerary.getTour(), itinerary, com.cruise.itinerary.enums.ChangeType.DELETE,
+                "Xóa lịch trình ngày " + itinerary.getDayNumber(), null, itinerary.getTitle(), null);
     }
 
     private CruiseTour findTourById(Long tourId) {

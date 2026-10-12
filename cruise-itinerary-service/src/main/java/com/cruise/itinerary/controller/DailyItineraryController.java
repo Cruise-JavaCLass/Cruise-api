@@ -15,9 +15,14 @@ import java.util.List;
 public class DailyItineraryController {
 
     private final DailyItineraryService dailyItineraryService;
+    private final com.cruise.itinerary.service.ItineraryChangeHistoryService historyService;
 
-    public DailyItineraryController(DailyItineraryService dailyItineraryService) {
+    public DailyItineraryController(
+            DailyItineraryService dailyItineraryService,
+            com.cruise.itinerary.service.ItineraryChangeHistoryService historyService
+    ) {
         this.dailyItineraryService = dailyItineraryService;
+        this.historyService = historyService;
     }
 
     @PostMapping
@@ -71,5 +76,22 @@ public class DailyItineraryController {
     ) {
         dailyItineraryService.deleteDailyItinerary(tourId, itineraryId);
         return ApiResponse.ok("Xóa lịch trình ngày thành công", null);
+    }
+
+    @GetMapping("/history")
+    public ApiResponse<List<com.cruise.itinerary.dto.ItineraryChangeHistoryResponse>> getTourHistory(
+            @PathVariable Long tourId
+    ) {
+        return ApiResponse.ok("Lấy lịch sử thay đổi của tour thành công",
+                historyService.getHistoriesByTourId(tourId));
+    }
+
+    @GetMapping("/{itineraryId}/history")
+    public ApiResponse<List<com.cruise.itinerary.dto.ItineraryChangeHistoryResponse>> getDailyItineraryHistory(
+            @PathVariable Long tourId,
+            @PathVariable Long itineraryId
+    ) {
+        return ApiResponse.ok("Lấy lịch sử thay đổi của ngày lịch trình thành công",
+                historyService.getHistoriesByDailyItineraryId(itineraryId));
     }
 }
