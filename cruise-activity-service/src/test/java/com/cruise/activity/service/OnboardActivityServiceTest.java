@@ -362,4 +362,28 @@ class OnboardActivityServiceTest {
 
         assertThat(allowed).containsExactlyInAnyOrder(ActivityStatus.IN_PROGRESS, ActivityStatus.CANCELLED);
     }
+
+    @Test
+    @DisplayName("updateActivityStatus: throws ResourceNotFoundException when activity does not exist (KAN-136)")
+    void updateActivityStatus_NotFound() {
+        com.cruise.activity.dto.UpdateActivityStatusRequest req = com.cruise.activity.dto.UpdateActivityStatusRequest.builder()
+                .status(ActivityStatus.IN_PROGRESS)
+                .build();
+
+        when(activityRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> activityService.updateActivityStatus(999L, req))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Không tìm thấy hoạt động với ID: 999");
+    }
+
+    @Test
+    @DisplayName("getAllowedStatusTransitions: throws ResourceNotFoundException when activity does not exist (KAN-136)")
+    void getAllowedStatusTransitions_NotFound() {
+        when(activityRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> activityService.getAllowedStatusTransitions(999L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Không tìm thấy hoạt động với ID: 999");
+    }
 }
