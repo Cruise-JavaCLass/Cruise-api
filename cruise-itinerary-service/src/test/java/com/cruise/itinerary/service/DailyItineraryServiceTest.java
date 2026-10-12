@@ -185,4 +185,54 @@ class DailyItineraryServiceTest {
         assertThat(sampleItinerary.getActive()).isFalse();
         verify(dailyItineraryRepository).save(sampleItinerary);
     }
+
+    @Test
+    @DisplayName("Sắp xếp lại thứ tự lịch trình thành công")
+    void reorderDailyItinerariesSuccess() {
+        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
+        when(dailyItineraryRepository.findByTourIdAndActiveTrueOrderByDayNumberAsc(10L))
+                .thenReturn(List.of(sampleItinerary));
+
+        com.cruise.itinerary.dto.ReorderItineraryRequest req = com.cruise.itinerary.dto.ReorderItineraryRequest.builder()
+                .items(List.of(new com.cruise.itinerary.dto.ReorderItemDto(1L, 2)))
+                .build();
+
+        List<DailyItineraryResponse> result = dailyItineraryService.reorderDailyItineraries(10L, req);
+
+        assertThat(result).isNotNull();
+        assertThat(sampleItinerary.getDayNumber()).isEqualTo(2);
+        assertThat(sampleItinerary.getItineraryDate()).isEqualTo(LocalDate.of(2026, 11, 2));
+        verify(dailyItineraryRepository).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("Sắp xếp thất bại khi có thứ tự trùng nhau")
+    void reorderDailyItinerariesDuplicateOrder() {
+        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
+
+        com.cruise.itinerary.dto.ReorderItineraryRequest req = com.cruise.itinerary.dto.ReorderItineraryRequest.builder()
+                .items(List.of(
+                        new com.cruise.itinerary.dto.ReorderItemDto(1L, 2),
+                        new com.cruise.itinerary.dto.ReorderItemDto(2L, 2)
+                ))
+                .build();
+
+        assertThatThrownBy(() -> dailyItineraryService.reorderDailyItineraries(10L, req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("không được trùng lặp");
+    }
+
+    @Test
+    @DisplayName("Sắp xếp thất bại khi thứ tự vượt quá ngày tour")
+    void reorderDailyItinerariesExceedDuration() {
+        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
+
+        com.cruise.itinerary.dto.ReorderItineraryRequest req = com.cruise.itinerary.dto.ReorderItineraryRequest.builder()
+                .items(List.of(new com.cruise.itinerary.dto.ReorderItemDto(1L, 10)))
+                .build();
+
+        assertThatThrownBy(() -> dailyItineraryService.reorderDailyItineraries(10L, req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("không được vượt quá thời lượng tour");
+    }
 }

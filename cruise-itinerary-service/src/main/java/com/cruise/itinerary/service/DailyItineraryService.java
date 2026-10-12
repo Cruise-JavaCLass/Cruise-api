@@ -76,6 +76,37 @@ public class DailyItineraryService {
         return toResponse(findItineraryByIdAndTourId(itineraryId, tourId));
     }
 
+    public List<DailyItineraryResponse> reorderDailyItineraries(Long tourId, com.cruise.itinerary.dto.ReorderItineraryRequest request) {
+        CruiseTour tour = findTourById(tourId);
+        List<DailyItinerary> currentItineraries = dailyItineraryRepository.findByTourIdAndActiveTrueOrderByDayNumberAsc(tourId);
+
+        java.util.Map<Long, Integer> newOrderMap = new java.util.HashMap<>();
+        java.util.Set<Integer> uniqueOrders = new java.util.HashSet<>();
+
+        for (com.cruise.itinerary.dto.ReorderItemDto item : request.getItems()) {
+            if (!uniqueOrders.add(item.getNewOrder())) {
+                throw new IllegalArgumentException("Thứ tự ngày không được trùng lặp: " + item.getNewOrder());
+            }
+            if (tour.getDurationDays() != null && item.getNewOrder() > tour.getDurationDays()) {
+                throw new IllegalArgumentException("Thứ tự ngày không được vượt quá thời lượng tour: " + item.getNewOrder());
+            }
+            newOrderMap.put(item.getId(), item.getNewOrder());
+        }
+
+        for (DailyItinerary itinerary : currentItineraries) {
+            Integer newDayNumber = newOrderMap.get(itinerary.getId());
+            if (newDayNumber != null) {
+                itinerary.setDayNumber(newDayNumber);
+                if (tour.getStartDate() != null) {
+                    itinerary.setItineraryDate(tour.getStartDate().plusDays(newDayNumber - 1L));
+                }
+            }
+        }
+
+        dailyItineraryRepository.saveAll(currentItineraries);
+        return getDailyItinerariesByTourId(tourId);
+    }
+
     public void deleteDailyItinerary(Long tourId, Long itineraryId) {
         DailyItinerary itinerary = findItineraryByIdAndTourId(itineraryId, tourId);
         itinerary.setActive(false);
