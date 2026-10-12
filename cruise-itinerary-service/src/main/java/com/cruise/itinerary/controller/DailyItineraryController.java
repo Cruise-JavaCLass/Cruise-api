@@ -6,7 +6,6 @@ import com.cruise.itinerary.dto.DailyItineraryResponse;
 import com.cruise.itinerary.service.DailyItineraryService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,48 +21,46 @@ public class DailyItineraryController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<DailyItineraryResponse>> createDailyItinerary(
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<DailyItineraryResponse> createDailyItinerary(
             @PathVariable Long tourId,
             @Valid @RequestBody DailyItineraryRequest request
     ) {
-        DailyItineraryResponse response = dailyItineraryService.createDailyItinerary(tourId, request);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.ok("Tạo lịch trình ngày thành công", response));
+        return ApiResponse.ok("Tạo lịch trình ngày thành công",
+                dailyItineraryService.createDailyItinerary(tourId, request));
     }
 
     @PutMapping("/{itineraryId}")
-    public ResponseEntity<ApiResponse<DailyItineraryResponse>> updateDailyItinerary(
+    public ApiResponse<DailyItineraryResponse> updateDailyItinerary(
             @PathVariable Long tourId,
             @PathVariable Long itineraryId,
             @Valid @RequestBody DailyItineraryRequest request
     ) {
-        DailyItineraryResponse response = dailyItineraryService.updateDailyItinerary(tourId, itineraryId, request);
-        return ResponseEntity.ok(ApiResponse.ok("Cập nhật lịch trình ngày thành công", response));
+        return ApiResponse.ok("Cập nhật lịch trình ngày thành công",
+                dailyItineraryService.updateDailyItinerary(tourId, itineraryId, request));
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<DailyItineraryResponse>>> getDailyItineraries(
-            @PathVariable Long tourId
-    ) {
-        List<DailyItineraryResponse> responses = dailyItineraryService.getDailyItinerariesByTourId(tourId);
-        return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách lịch trình theo ngày thành công", responses));
+    public ApiResponse<List<DailyItineraryResponse>> getDailyItineraries(@PathVariable Long tourId) {
+        return ApiResponse.ok("Lấy danh sách lịch trình theo ngày thành công",
+                dailyItineraryService.getDailyItinerariesByTourId(tourId));
     }
 
     @GetMapping("/{itineraryId}")
-    public ResponseEntity<ApiResponse<DailyItineraryResponse>> getDailyItineraryById(
+    public ApiResponse<DailyItineraryResponse> getDailyItineraryById(
             @PathVariable Long tourId,
             @PathVariable Long itineraryId
     ) {
-        DailyItineraryResponse response = dailyItineraryService.getDailyItineraryById(tourId, itineraryId);
-        return ResponseEntity.ok(ApiResponse.ok("Lấy chi tiết lịch trình ngày thành công", response));
+        return ApiResponse.ok("Lấy chi tiết lịch trình ngày thành công",
+                dailyItineraryService.getDailyItineraryById(tourId, itineraryId));
     }
 
     @DeleteMapping("/{itineraryId}")
-    public ResponseEntity<ApiResponse<Void>> deleteDailyItinerary(
+    public ApiResponse<Void> deleteDailyItinerary(
             @PathVariable Long tourId,
             @PathVariable Long itineraryId
     ) {
         dailyItineraryService.deleteDailyItinerary(tourId, itineraryId);
-        return ResponseEntity.ok(ApiResponse.ok("Xóa lịch trình ngày thành công", null));
+        return ApiResponse.ok("Xóa lịch trình ngày thành công", null);
     }
 }
