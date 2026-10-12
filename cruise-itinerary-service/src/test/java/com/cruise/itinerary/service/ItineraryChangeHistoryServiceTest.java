@@ -130,4 +130,94 @@ class ItineraryChangeHistoryServiceTest {
         assertThat(result.get(0).getId()).isEqualTo(1L);
         assertThat(result.get(0).getDailyItineraryId()).isEqualTo(100L);
     }
+
+    @Test
+    @DisplayName("recordChange - Lưu lịch sử thay đổi do thời tiết (WEATHER_UPDATE) thành công")
+    void recordChangeWeatherUpdate() {
+        when(historyRepository.save(any(ItineraryChangeHistory.class))).thenReturn(sampleHistory);
+
+        historyService.recordChange(
+                sampleTour,
+                sampleDailyItinerary,
+                ChangeType.WEATHER_UPDATE,
+                "Bão ngoài khơi",
+                "CAPTAIN",
+                "Trời đẹp",
+                "Mưa bão lớn"
+        );
+
+        verify(historyRepository, times(1)).save(argThat(h ->
+                h.getChangeType() == ChangeType.WEATHER_UPDATE &&
+                "Bão ngoài khơi".equals(h.getReason()) &&
+                "CAPTAIN".equals(h.getChangedBy()) &&
+                "Trời đẹp".equals(h.getPreviousState()) &&
+                "Mưa bão lớn".equals(h.getNewState())
+        ));
+    }
+
+    @Test
+    @DisplayName("recordChange - Lưu lịch sử thay đổi khẩn cấp (EMERGENCY_CHANGE) thành công")
+    void recordChangeEmergencyChange() {
+        when(historyRepository.save(any(ItineraryChangeHistory.class))).thenReturn(sampleHistory);
+
+        historyService.recordChange(
+                sampleTour,
+                sampleDailyItinerary,
+                ChangeType.EMERGENCY_CHANGE,
+                "Sự cố kỹ thuật tại cảng",
+                "OPERATIONS",
+                "Cảng A",
+                "Cảng B"
+        );
+
+        verify(historyRepository, times(1)).save(argThat(h ->
+                h.getChangeType() == ChangeType.EMERGENCY_CHANGE &&
+                "Sự cố kỹ thuật tại cảng".equals(h.getReason()) &&
+                "OPERATIONS".equals(h.getChangedBy())
+        ));
+    }
+
+    @Test
+    @DisplayName("recordChange - Lưu lịch sử xóa (DELETE) thành công")
+    void recordChangeDelete() {
+        when(historyRepository.save(any(ItineraryChangeHistory.class))).thenReturn(sampleHistory);
+
+        historyService.recordChange(
+                sampleTour,
+                sampleDailyItinerary,
+                ChangeType.DELETE,
+                "Hủy ngày tham quan",
+                "ADMIN",
+                "Ngày 2: Hạ Long",
+                null
+        );
+
+        verify(historyRepository, times(1)).save(argThat(h ->
+                h.getChangeType() == ChangeType.DELETE &&
+                "Hủy ngày tham quan".equals(h.getReason()) &&
+                h.getNewState() == null
+        ));
+    }
+
+    @Test
+    @DisplayName("getHistoriesByTourId - Trả về danh sách rỗng khi không có lịch sử thay đổi")
+    void getHistoriesByTourIdEmpty() {
+        when(historyRepository.findByTourIdOrderByCreatedAtDesc(99L))
+                .thenReturn(List.of());
+
+        List<ItineraryChangeHistoryResponse> result = historyService.getHistoriesByTourId(99L);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("getHistoriesByDailyItineraryId - Trả về danh sách rỗng khi không có lịch sử")
+    void getHistoriesByDailyItineraryIdEmpty() {
+        when(historyRepository.findByDailyItineraryIdOrderByCreatedAtDesc(999L))
+                .thenReturn(List.of());
+
+        List<ItineraryChangeHistoryResponse> result = historyService.getHistoriesByDailyItineraryId(999L);
+
+        assertThat(result).isEmpty();
+    }
 }
