@@ -32,15 +32,19 @@ public class PassengerController {
     }
 
     @GetMapping("/tour/{tourId}")
-    public ApiResponse<List<PassengerResponse>> getRegisteredPassengersByTour(@PathVariable Long tourId) {
+    public ApiResponse<List<PassengerResponse>> getRegisteredPassengersByTour(
+            @PathVariable Long tourId,
+            @RequestParam(required = false) com.cruise.activity.enums.RegistrationStatus status
+    ) {
         return ApiResponse.ok("Lấy danh sách hành khách đăng ký theo tour thành công",
-                passengerService.getRegisteredPassengersByTour(tourId));
+                passengerService.getRegisteredPassengersByTourAndStatus(tourId, status));
     }
 
     @GetMapping("/tour/{tourId}/paged")
     public ApiResponse<Page<PassengerResponse>> getRegisteredPassengersByTourPaged(
             @PathVariable Long tourId,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) com.cruise.activity.enums.RegistrationStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "cabinNumber") String sortBy,
@@ -49,7 +53,7 @@ public class PassengerController {
         Sort sort = sortDir.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
         Pageable pageable = PageRequest.of(page, size, sort);
         return ApiResponse.ok("Lấy danh sách hành khách phân trang thành công",
-                passengerService.getRegisteredPassengersByTourPaged(tourId, keyword, pageable));
+                passengerService.getRegisteredPassengersByTourPaged(tourId, keyword, status, pageable));
     }
 
     @GetMapping("/{id}")
@@ -80,5 +84,14 @@ public class PassengerController {
                 .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
                 .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
                 .body(csvData);
+    }
+
+    @PatchMapping("/{id}/registration-status")
+    public ApiResponse<PassengerResponse> updateRegistrationStatus(
+            @PathVariable Long id,
+            @RequestParam com.cruise.activity.enums.RegistrationStatus status
+    ) {
+        return ApiResponse.ok("Cập nhật trạng thái đăng ký thành công",
+                passengerService.updateRegistrationStatus(id, status));
     }
 }

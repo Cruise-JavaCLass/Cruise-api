@@ -97,17 +97,44 @@ class PassengerServiceTest {
     }
 
     @Test
-    @DisplayName("getRegisteredPassengersByTourPaged - Tìm kiếm và phân trang danh sách hành khách")
+    @DisplayName("getRegisteredPassengersByTourPaged - Tìm kiếm và phân trang danh sách hành khách có filter status")
     void getRegisteredPassengersByTourPagedSuccess() {
         Pageable pageable = PageRequest.of(0, 10);
         Page<Passenger> page = new PageImpl<>(List.of(samplePassenger), pageable, 1);
 
-        when(passengerRepository.searchPassengers(1L, "Minh", pageable)).thenReturn(page);
+        when(passengerRepository.searchPassengersWithStatus(1L, "Minh", com.cruise.activity.enums.RegistrationStatus.CONFIRMED, pageable))
+                .thenReturn(page);
 
-        Page<PassengerResponse> result = passengerService.getRegisteredPassengersByTourPaged(1L, "Minh", pageable);
+        Page<PassengerResponse> result = passengerService.getRegisteredPassengersByTourPaged(
+                1L, "Minh", com.cruise.activity.enums.RegistrationStatus.CONFIRMED, pageable);
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).getFullName()).isEqualTo("Nguyễn Văn Minh");
+        assertThat(result.getContent().get(0).getRegistrationStatus()).isEqualTo(com.cruise.activity.enums.RegistrationStatus.CONFIRMED);
+    }
+
+    @Test
+    @DisplayName("getRegisteredPassengersByTourAndStatus - Lọc hành khách theo status")
+    void getRegisteredPassengersByTourAndStatusSuccess() {
+        when(passengerRepository.findByTourIdAndRegistrationStatusAndActiveTrue(1L, com.cruise.activity.enums.RegistrationStatus.WAITLIST))
+                .thenReturn(List.of(samplePassenger));
+
+        List<PassengerResponse> responses = passengerService.getRegisteredPassengersByTourAndStatus(
+                1L, com.cruise.activity.enums.RegistrationStatus.WAITLIST);
+
+        assertThat(responses).hasSize(1);
+        verify(passengerRepository, times(1)).findByTourIdAndRegistrationStatusAndActiveTrue(1L, com.cruise.activity.enums.RegistrationStatus.WAITLIST);
+    }
+
+    @Test
+    @DisplayName("getRegisteredPassengersByTourAndStatus - Không truyền status trả về toàn bộ")
+    void getRegisteredPassengersByTourAndStatusNull() {
+        when(passengerRepository.findByTourIdAndActiveTrue(1L)).thenReturn(List.of(samplePassenger));
+
+        List<PassengerResponse> responses = passengerService.getRegisteredPassengersByTourAndStatus(1L, null);
+
+        assertThat(responses).hasSize(1);
+        verify(passengerRepository, times(1)).findByTourIdAndActiveTrue(1L);
     }
 
     @Test
@@ -149,6 +176,18 @@ class PassengerServiceTest {
         when(passengerRepository.save(any(Passenger.class))).thenReturn(samplePassenger);
 
         PassengerResponse response = passengerService.updateCheckInStatus(100L, CheckInStatus.BOARDED);
+
+        assertThat(response).isNotNull();
+        verify(passengerRepository, times(1)).save(samplePassenger);
+    }
+
+    @Test
+    @DisplayName("updateRegistrationStatus - Cập nhật trạng thái đăng ký thành công")
+    void updateRegistrationStatusSuccess() {
+        when(passengerRepository.findById(100L)).thenReturn(Optional.of(samplePassenger));
+        when(passengerRepository.save(any(Passenger.class))).thenReturn(samplePassenger);
+
+        PassengerResponse response = passengerService.updateRegistrationStatus(100L, com.cruise.activity.enums.RegistrationStatus.CANCELLED);
 
         assertThat(response).isNotNull();
         verify(passengerRepository, times(1)).save(samplePassenger);

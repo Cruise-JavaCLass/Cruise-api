@@ -19,6 +19,17 @@ public interface PassengerRepository extends JpaRepository<Passenger, Long> {
 
     Page<Passenger> findByTourIdAndActiveTrue(Long tourId, Pageable pageable);
 
+    List<Passenger> findByTourIdAndRegistrationStatusAndActiveTrue(
+            Long tourId,
+            com.cruise.activity.enums.RegistrationStatus registrationStatus
+    );
+
+    Page<Passenger> findByTourIdAndRegistrationStatusAndActiveTrue(
+            Long tourId,
+            com.cruise.activity.enums.RegistrationStatus registrationStatus,
+            Pageable pageable
+    );
+
     List<Passenger> findByTourIdAndCheckInStatusAndActiveTrue(Long tourId, CheckInStatus checkInStatus);
 
     Optional<Passenger> findByRfidTagAndActiveTrue(String rfidTag);
@@ -26,16 +37,23 @@ public interface PassengerRepository extends JpaRepository<Passenger, Long> {
     Optional<Passenger> findByQrCodeAndActiveTrue(String qrCode);
 
     @Query("SELECT p FROM Passenger p WHERE p.tourId = :tourId AND p.active = true AND " +
+            "(:status IS NULL OR p.registrationStatus = :status) AND " +
             "(:keyword IS NULL OR LOWER(p.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
             "LOWER(p.cabinNumber) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
             "LOWER(p.rfidTag) LIKE LOWER(CONCAT('%', :keyword, '%')))")
-    Page<Passenger> searchPassengers(
+    Page<Passenger> searchPassengersWithStatus(
             @Param("tourId") Long tourId,
             @Param("keyword") String keyword,
+            @Param("status") com.cruise.activity.enums.RegistrationStatus status,
             Pageable pageable
     );
 
     long countByTourIdAndActiveTrue(Long tourId);
+
+    long countByTourIdAndRegistrationStatusAndActiveTrue(
+            Long tourId,
+            com.cruise.activity.enums.RegistrationStatus registrationStatus
+    );
 
     long countByTourIdAndCheckInStatusAndActiveTrue(Long tourId, CheckInStatus checkInStatus);
 }
