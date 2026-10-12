@@ -46,6 +46,9 @@ class DailyItineraryServiceTest {
     @Mock
     private ItineraryChangeHistoryService historyService;
 
+    @Mock
+    private ItineraryNotificationTriggerService notificationTriggerService;
+
     @InjectMocks
     private DailyItineraryService dailyItineraryService;
 
@@ -112,6 +115,7 @@ class DailyItineraryServiceTest {
         assertThat(response.getTitle()).isEqualTo("Khởi hành");
         assertThat(response.getPortName()).isEqualTo("Cảng Tuần Châu");
         verify(dailyItineraryRepository, times(1)).save(any(DailyItinerary.class));
+        verify(notificationTriggerService, times(1)).triggerChangeNotification(any());
     }
 
     @Test
@@ -150,6 +154,7 @@ class DailyItineraryServiceTest {
 
         assertThat(response).isNotNull();
         verify(dailyItineraryRepository).save(sampleItinerary);
+        verify(notificationTriggerService, times(1)).triggerChangeNotification(any());
     }
 
     @Test
@@ -178,6 +183,7 @@ class DailyItineraryServiceTest {
 
         assertThat(sampleItinerary.getActive()).isFalse();
         verify(dailyItineraryRepository).save(sampleItinerary);
+        verify(notificationTriggerService, times(1)).triggerChangeNotification(any());
     }
 
     @Test
@@ -197,6 +203,7 @@ class DailyItineraryServiceTest {
         assertThat(sampleItinerary.getDayNumber()).isEqualTo(2);
         assertThat(sampleItinerary.getItineraryDate()).isEqualTo(LocalDate.of(2026, 11, 2));
         verify(dailyItineraryRepository).saveAll(any());
+        verify(notificationTriggerService, times(1)).triggerChangeNotification(any());
     }
 
     @Test

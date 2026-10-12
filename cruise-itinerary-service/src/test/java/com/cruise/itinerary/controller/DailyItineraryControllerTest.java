@@ -39,6 +39,9 @@ class DailyItineraryControllerTest {
     @MockitoBean
     private com.cruise.itinerary.service.ItineraryChangeHistoryService historyService;
 
+    @MockitoBean
+    private com.cruise.itinerary.service.ItineraryNotificationTriggerService notificationTriggerService;
+
     @Test
     @DisplayName("POST /api/itinerary/tours/{tourId}/daily - Tạo lịch trình ngày thành công")
     void createDailyItinerarySuccess() throws Exception {
@@ -301,5 +304,28 @@ class DailyItineraryControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("GET /api/itinerary/tours/{tourId}/daily/notifications - Lấy danh sách thông báo thay đổi thành công (KAN-126)")
+    void getTourNotificationsSuccess() throws Exception {
+        com.cruise.itinerary.dto.ItineraryChangeNotificationDto notificationDto = com.cruise.itinerary.dto.ItineraryChangeNotificationDto.builder()
+                .tourId(10L)
+                .tourCode("TOUR-001")
+                .tourName("Hạ Long Bay Cruise")
+                .changeType(com.cruise.itinerary.enums.ChangeType.UPDATE)
+                .subject("[Thông Báo Lịch Trình] Hạ Long Bay Cruise - Ngày 1")
+                .message("Nội dung thay đổi")
+                .urgency("URGENT")
+                .build();
+
+        when(notificationTriggerService.getNotificationsByTourId(10L)).thenReturn(List.of(notificationDto));
+
+        mockMvc.perform(get("/api/itinerary/tours/10/daily/notifications"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].tourId").value(10L))
+                .andExpect(jsonPath("$.data[0].tourCode").value("TOUR-001"))
+                .andExpect(jsonPath("$.data[0].urgency").value("URGENT"));
     }
 }
