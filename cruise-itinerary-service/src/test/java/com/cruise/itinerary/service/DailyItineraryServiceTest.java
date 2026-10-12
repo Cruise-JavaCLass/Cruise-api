@@ -5,7 +5,6 @@ import com.cruise.itinerary.dto.DailyItineraryResponse;
 import com.cruise.itinerary.entity.CruiseTour;
 import com.cruise.itinerary.entity.DailyItinerary;
 import com.cruise.itinerary.entity.Port;
-import com.cruise.itinerary.exception.DuplicateResourceException;
 import com.cruise.itinerary.exception.ResourceNotFoundException;
 import com.cruise.itinerary.repository.CruiseTourRepository;
 import com.cruise.itinerary.repository.DailyItineraryRepository;
@@ -29,7 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("DailyItineraryService Unit Tests (KAN-114)")
+@DisplayName("DailyItineraryService Unit Tests (KAN-114, KAN-116)")
 class DailyItineraryServiceTest {
 
     @Mock
@@ -40,6 +39,9 @@ class DailyItineraryServiceTest {
 
     @Mock
     private PortRepository portRepository;
+
+    @Mock
+    private DailyItineraryValidator dailyItineraryValidator;
 
     @InjectMocks
     private DailyItineraryService dailyItineraryService;
@@ -96,7 +98,7 @@ class DailyItineraryServiceTest {
     @DisplayName("Tạo lịch trình ngày thành công khi hợp lệ")
     void createDailyItinerarySuccess() {
         when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
-        when(dailyItineraryRepository.existsByTourIdAndDayNumberAndActiveTrue(10L, 1)).thenReturn(false);
+        doNothing().when(dailyItineraryValidator).validateDailyItinerary(sampleTour, sampleRequest, null);
         when(portRepository.findById(2L)).thenReturn(Optional.of(samplePort));
         when(dailyItineraryRepository.save(any(DailyItinerary.class))).thenReturn(sampleItinerary);
 
@@ -120,27 +122,15 @@ class DailyItineraryServiceTest {
     }
 
     @Test
-    @DisplayName("Ném lỗi khi ngày thứ đã tồn tại trong tour")
-    void createFailsWhenDuplicateDayNumber() {
+    @DisplayName("Ném lỗi khi validator ném ngoại lệ")
+    void createFailsWhenValidatorFails() {
         when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
-        when(dailyItineraryRepository.existsByTourIdAndDayNumberAndActiveTrue(10L, 1)).thenReturn(true);
-
-        assertThatThrownBy(() -> dailyItineraryService.createDailyItinerary(10L, sampleRequest))
-                .isInstanceOf(DuplicateResourceException.class)
-                .hasMessageContaining("đã tồn tại");
-    }
-
-    @Test
-    @DisplayName("Ném lỗi khi ngày lịch trình vượt quá ngày kết thúc tour")
-    void createFailsWhenDateOutOfRange() {
-        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
-        when(dailyItineraryRepository.existsByTourIdAndDayNumberAndActiveTrue(10L, 1)).thenReturn(false);
-
-        sampleRequest.setItineraryDate(LocalDate.of(2026, 11, 10));
+        doThrow(new IllegalArgumentException("Lỗi xếp lịch"))
+                .when(dailyItineraryValidator).validateDailyItinerary(sampleTour, sampleRequest, null);
 
         assertThatThrownBy(() -> dailyItineraryService.createDailyItinerary(10L, sampleRequest))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("không được sau ngày kết thúc tour");
+                .hasMessage("Lỗi xếp lịch");
     }
 
     @Test
@@ -148,6 +138,7 @@ class DailyItineraryServiceTest {
     void updateDailyItinerarySuccess() {
         when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
         when(dailyItineraryRepository.findByIdAndTourIdAndActiveTrue(1L, 10L)).thenReturn(Optional.of(sampleItinerary));
+        doNothing().when(dailyItineraryValidator).validateDailyItinerary(sampleTour, sampleRequest, 1L);
         when(portRepository.findById(2L)).thenReturn(Optional.of(samplePort));
         when(dailyItineraryRepository.save(any(DailyItinerary.class))).thenReturn(sampleItinerary);
 
