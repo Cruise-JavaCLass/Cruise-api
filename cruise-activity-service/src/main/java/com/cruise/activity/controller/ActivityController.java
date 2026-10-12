@@ -57,6 +57,23 @@ public class ActivityController {
                 activityService.configureTimeAndLocation(id, request));
     }
 
+    @PatchMapping("/{id}/status")
+    public ApiResponse<OnboardActivityResponse> updateActivityStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody com.cruise.activity.dto.UpdateActivityStatusRequest request
+    ) {
+        return ApiResponse.ok("Cập nhật trạng thái hoạt động thành công",
+                activityService.updateActivityStatus(id, request));
+    }
+
+    @GetMapping("/{id}/status/allowed-transitions")
+    public ApiResponse<java.util.Set<com.cruise.activity.enums.ActivityStatus>> getAllowedStatusTransitions(
+            @PathVariable Long id
+    ) {
+        return ApiResponse.ok("Lấy danh sách trạng thái hợp lệ thành công",
+                activityService.getAllowedStatusTransitions(id));
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<OnboardActivityResponse> getActivityById(@PathVariable Long id) {
         return ApiResponse.ok("Lấy chi tiết hoạt động thành công", activityService.getActivityById(id));

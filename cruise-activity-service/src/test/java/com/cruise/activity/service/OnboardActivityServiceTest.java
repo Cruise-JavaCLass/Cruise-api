@@ -303,4 +303,63 @@ class OnboardActivityServiceTest {
         assertThat(sampleActivity.getStatus()).isEqualTo(ActivityStatus.CANCELLED);
         verify(activityRepository).save(sampleActivity);
     }
+
+    @Test
+    @DisplayName("updateActivityStatus: should successfully transition SCHEDULED -> IN_PROGRESS (KAN-136)")
+    void updateActivityStatus_Success() {
+        com.cruise.activity.dto.UpdateActivityStatusRequest req = com.cruise.activity.dto.UpdateActivityStatusRequest.builder()
+                .status(ActivityStatus.IN_PROGRESS)
+                .build();
+
+        when(activityRepository.findById(10L)).thenReturn(Optional.of(sampleActivity));
+        when(activityRepository.save(any(OnboardActivity.class))).thenAnswer(i -> i.getArgument(0));
+
+        OnboardActivityResponse res = activityService.updateActivityStatus(10L, req);
+
+        assertThat(res).isNotNull();
+        assertThat(res.getStatus()).isEqualTo(ActivityStatus.IN_PROGRESS);
+    }
+
+    @Test
+    @DisplayName("updateActivityStatus: should transition to CANCELLED with cancellation reason (KAN-136)")
+    void updateActivityStatus_CancelledWithReason() {
+        com.cruise.activity.dto.UpdateActivityStatusRequest req = com.cruise.activity.dto.UpdateActivityStatusRequest.builder()
+                .status(ActivityStatus.CANCELLED)
+                .cancellationReason("Thời tiết giông bão ngoài khơi")
+                .build();
+
+        when(activityRepository.findById(10L)).thenReturn(Optional.of(sampleActivity));
+        when(activityRepository.save(any(OnboardActivity.class))).thenAnswer(i -> i.getArgument(0));
+
+        OnboardActivityResponse res = activityService.updateActivityStatus(10L, req);
+
+        assertThat(res).isNotNull();
+        assertThat(res.getStatus()).isEqualTo(ActivityStatus.CANCELLED);
+        assertThat(res.getCancellationReason()).isEqualTo("Thời tiết giông bão ngoài khơi");
+    }
+
+    @Test
+    @DisplayName("updateActivityStatus: throws BusinessRuleException when transition is invalid (KAN-136)")
+    void updateActivityStatus_InvalidTransition() {
+        // sampleActivity has status SCHEDULED, cannot jump directly to COMPLETED
+        com.cruise.activity.dto.UpdateActivityStatusRequest req = com.cruise.activity.dto.UpdateActivityStatusRequest.builder()
+                .status(ActivityStatus.COMPLETED)
+                .build();
+
+        when(activityRepository.findById(10L)).thenReturn(Optional.of(sampleActivity));
+
+        assertThatThrownBy(() -> activityService.updateActivityStatus(10L, req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Không thể chuyển trạng thái hoạt động");
+    }
+
+    @Test
+    @DisplayName("getAllowedStatusTransitions: returns allowed next states for activity (KAN-136)")
+    void getAllowedStatusTransitions_Success() {
+        when(activityRepository.findById(10L)).thenReturn(Optional.of(sampleActivity));
+
+        java.util.Set<ActivityStatus> allowed = activityService.getAllowedStatusTransitions(10L);
+
+        assertThat(allowed).containsExactlyInAnyOrder(ActivityStatus.IN_PROGRESS, ActivityStatus.CANCELLED);
+    }
 }
