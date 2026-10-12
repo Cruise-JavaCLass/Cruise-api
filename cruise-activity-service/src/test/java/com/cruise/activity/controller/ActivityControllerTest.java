@@ -108,6 +108,62 @@ class ActivityControllerTest {
     }
 
     @Test
+    @DisplayName("PUT /api/activities/{id}: updates activity successfully (KAN-134)")
+    void updateActivity_Success() throws Exception {
+        String jsonPayload = """
+                {
+                    "dayNumber": 2,
+                    "title": "Dạ tiệc Hoàng Gia",
+                    "description": "Bữa tối sang trọng",
+                    "category": "Dining",
+                    "location": "Grand Ballroom",
+                    "activityDate": "2026-11-02",
+                    "startTime": "18:30:00",
+                    "endTime": "21:30:00",
+                    "maxCapacity": 200,
+                    "price": 100000,
+                    "isIncluded": false,
+                    "status": "SCHEDULED"
+                }
+                """;
+
+        sampleResponse.setTitle("Dạ tiệc Hoàng Gia");
+        sampleResponse.setLocation("Grand Ballroom");
+        sampleResponse.setDayNumber(2);
+
+        when(activityService.updateActivity(eq(1L), any(com.cruise.activity.dto.UpdateActivityRequest.class)))
+                .thenReturn(sampleResponse);
+
+        mockMvc.perform(put("/api/activities/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.title").value("Dạ tiệc Hoàng Gia"))
+                .andExpect(jsonPath("$.data.location").value("Grand Ballroom"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/activities/{id}: returns 400 when title or location is blank (KAN-134)")
+    void updateActivity_ValidationFailed() throws Exception {
+        String jsonPayload = """
+                {
+                    "title": "",
+                    "location": "",
+                    "activityDate": "2026-11-02",
+                    "startTime": "18:30:00",
+                    "endTime": "21:30:00"
+                }
+                """;
+
+        mockMvc.perform(put("/api/activities/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
     @DisplayName("PATCH /api/activities/{id}/time-location: configures time and location successfully (KAN-144)")
     void configureTimeAndLocation_Success() throws Exception {
         String jsonPayload = """

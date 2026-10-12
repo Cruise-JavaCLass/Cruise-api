@@ -27,6 +27,7 @@
 > - [KAN-124](https://huytran20052022.atlassian.net/browse/KAN-124) - *Implement Itinerary Change History Service — Dịch vụ ghi nhận lịch sử thay đổi hải trình*  
 > - [KAN-126](https://huytran20052022.atlassian.net/browse/KAN-126) - *Implement Itinerary Change Notification Trigger — Kích hoạt thông báo khi lịch trình thay đổi*  
 > - [KAN-128](https://huytran20052022.atlassian.net/browse/KAN-128) - *Write Integration Tests for Itinerary Updates — Kiểm thử tích hợp cho cập nhật lịch trình và audit log*  
+> - [KAN-134](https://huytran20052022.atlassian.net/browse/KAN-134) - *Create and Update Activity Endpoints — Tạo và cập nhật endpoints hoạt động trên tàu*  
 > - [KAN-144](https://huytran20052022.atlassian.net/browse/KAN-144) - *Configure Activity Time and Location — Cấu hình thời gian và địa điểm cho hoạt động*  
 > - [KAN-146](https://huytran20052022.atlassian.net/browse/KAN-146) - *Retrieve Registered Passenger Lists — Lấy thông tin danh sách hành khách đăng ký*  
 > - [KAN-148](https://huytran20052022.atlassian.net/browse/KAN-148) - *Implement Registration List Export — Triển khai xuất danh sách hành khách đăng ký*  
@@ -483,18 +484,20 @@ Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn di�
   - Kiểm thử xử lý escape chuẩn RFC 4180 cho các trường chứa ký tự đặc biệt (dấu phẩy, dấu nháy kép, ký tự xuống dòng `\r\n`).
   - Kiểm thử xuất CSV khi danh sách tour rỗng (sinh đúng header và UTF-8 BOM).
 
-### 6.9. Quản lý & Cấu hình Thời gian, Địa điểm Hoạt động trên tàu (Configure Activity Time and Location — KAN-144):
-Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn diện cho việc thiết lập hoạt động du thuyền, cấu hình địa điểm và phòng chống xung đột lịch trình:
-* **`OnboardActivityServiceTest` (11 tests - Mockito Unit Tests):**
-  - Kiểm thử tạo hoạt động mới với ngày, giờ bắt đầu/kết thúc, số lượng tham gia tối đa và địa điểm tổ chức.
-  - Kiểm thử cấu hình thời gian và địa điểm (`configureTimeAndLocation`), kiểm tra cập nhật thành công các trường `activityDate`, `startTime`, `endTime`, `location`.
+### 6.9. Tạo, Cập nhật & Cấu hình Hoạt động trên tàu (Create & Update Activity Endpoints — KAN-134, KAN-144):
+Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn diện cho việc tạo mới, cập nhật toàn diện thông tin, cấu hình địa điểm và phòng chống xung đột lịch trình hoạt động du thuyền:
+* **`OnboardActivityServiceTest` (13 tests - Mockito Unit Tests):**
+  - Kiểm thử tạo hoạt động mới với ngày, giờ bắt đầu/kết thúc, số lượng tham gia tối đa, danh mục và địa điểm tổ chức.
+  - Kiểm thử cập nhật toàn diện hoạt động (`updateActivity` — KAN-134): tiêu đề, mô tả, danh mục, số ngày, địa điểm, sức chứa, giá dịch vụ và trạng thái.
+  - Kiểm thử cấu hình thời gian và địa điểm riêng biệt (`configureTimeAndLocation` — KAN-144).
   - Kiểm thử quy tắc nghiệp vụ `validateTimeAndLocation`:
     - Bắt lỗi khi địa điểm bị bỏ trống (`BusinessRuleException: Địa điểm tổ chức không được để trống`).
     - Bắt lỗi khi giờ kết thúc không sau giờ bắt đầu (`BusinessRuleException: Thời gian kết thúc phải sau thời gian bắt đầu`).
     - Bắt lỗi xung đột lịch trình khi cùng một địa điểm đã có hoạt động khác diễn ra trong cùng khung giờ (`existsOverlappingActivity`).
   - Kiểm thử tra cứu chi tiết, phân trang theo ngày/thể loại/từ khóa và xóa mềm hoạt động (`CANCELLED`).
-* **`ActivityControllerTest` (10 tests - WebMvcTest):**
+* **`ActivityControllerTest` (12 tests - WebMvcTest):**
   - Kiểm thử `POST /api/activities`: tạo mới hoạt động du thuyền (`201 Created`).
+  - Kiểm thử `PUT /api/activities/{id}`: cập nhật toàn diện hoạt động (`200 OK` / `400 Bad Request` khi validation thất bại).
   - Kiểm thử `PATCH /api/activities/{id}/time-location`: cấu hình thời gian và địa điểm (`200 OK`).
   - Kiểm thử các kịch bản ngoại lệ: `400 Bad Request` khi vi phạm quy tắc thời gian hoặc xung đột địa điểm, `404 Not Found` khi hoạt động không tồn tại.
   - Kiểm thử `GET /api/activities/{id}`, `GET /api/activities/tour/{tourId}`, `GET /api/activities/tour/{tourId}/day/{dayNumber}`, `GET /api/activities/tour/{tourId}/paged`, và `DELETE /api/activities/{id}`.
