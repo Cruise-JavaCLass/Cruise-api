@@ -4,23 +4,26 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 
 /**
- * Request DTO chuyên biệt cấu hình Giá, Sức chứa và Lịch trình cho Tour bờ (KAN-168)
+ * DTO cơ sở chứa cấu hình Giá, Sức chứa và Lịch trình của Tour bờ (KAN-168)
+ * Tách biệt để tái sử dụng giữa BaseShoreExcursionRequest và ConfigureExcursionPriceCapacityScheduleRequest,
+ * loại bỏ hoàn toàn trùng lặp mã (SonarCloud CPD).
  */
 @Getter
 @Setter
+@SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class ConfigureExcursionPriceCapacityScheduleRequest {
 
     /**
-     * Ngày diễn ra tour bờ (tùy chọn cập nhật ngày)
+     * Ngày diễn ra tour bờ (tùy chọn khi cập nhật)
      */
     private LocalDate excursionDate;
 

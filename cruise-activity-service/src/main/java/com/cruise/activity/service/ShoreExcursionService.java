@@ -232,26 +232,17 @@ public class ShoreExcursionService {
 
     @Transactional(readOnly = true)
     public List<ShoreExcursionResponse> getExcursionsByTour(Long tourId) {
-        return excursionRepository.findByTourIdAndActiveTrueOrderByExcursionDateAscGatheringTimeAsc(tourId)
-                .stream()
-                .map(ShoreExcursionResponse::fromEntity)
-                .toList();
+        return toResponseList(excursionRepository.findByTourIdAndActiveTrueOrderByExcursionDateAscGatheringTimeAsc(tourId));
     }
 
     @Transactional(readOnly = true)
     public List<ShoreExcursionResponse> getExcursionsByTourAndPort(Long tourId, Long portId) {
-        return excursionRepository.findByTourIdAndPortIdAndActiveTrueOrderByGatheringTimeAsc(tourId, portId)
-                .stream()
-                .map(ShoreExcursionResponse::fromEntity)
-                .toList();
+        return toResponseList(excursionRepository.findByTourIdAndPortIdAndActiveTrueOrderByGatheringTimeAsc(tourId, portId));
     }
 
     @Transactional(readOnly = true)
     public List<ShoreExcursionResponse> getExcursionsByTourAndDay(Long tourId, Integer dayNumber) {
-        return excursionRepository.findByTourIdAndDayNumberAndActiveTrueOrderByGatheringTimeAsc(tourId, dayNumber)
-                .stream()
-                .map(ShoreExcursionResponse::fromEntity)
-                .toList();
+        return toResponseList(excursionRepository.findByTourIdAndDayNumberAndActiveTrueOrderByGatheringTimeAsc(tourId, dayNumber));
     }
 
     @Transactional(readOnly = true)
@@ -264,6 +255,10 @@ public class ShoreExcursionService {
     ) {
         return excursionRepository.findPagedExcursions(tourId, portId, dayNumber, keyword, pageable)
                 .map(ShoreExcursionResponse::fromEntity);
+    }
+
+    private List<ShoreExcursionResponse> toResponseList(List<ShoreExcursion> excursions) {
+        return excursions.stream().map(ShoreExcursionResponse::fromEntity).toList();
     }
 
     @Transactional
