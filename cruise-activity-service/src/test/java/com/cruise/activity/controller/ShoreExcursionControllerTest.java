@@ -216,6 +216,51 @@ class ShoreExcursionControllerTest {
     }
 
     @Test
+    @DisplayName("PATCH /api/excursions/{id}/status: returns 400 when transition is invalid")
+    void updateStatus_InvalidTransition() throws Exception {
+        String reqJson = """
+                {
+                    "status": "COMPLETED"
+                }
+                """;
+
+        when(excursionService.updateStatus(eq(1L), any(UpdateExcursionStatusRequest.class)))
+                .thenThrow(new BusinessRuleException("Không thể chuyển trạng thái tour bờ"));
+
+        mockMvc.perform(patch("/api/excursions/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reqJson))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Không thể chuyển trạng thái tour bờ"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/excursions/{id}/status: returns 400 when status is null")
+    void updateStatus_NullStatus() throws Exception {
+        String reqJson = """
+                {
+                    "cancellationReason": "Hủy không lý do"
+                }
+                """;
+
+        mockMvc.perform(patch("/api/excursions/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reqJson))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("GET /api/excursions/tour/{tourId}/status/{status}: returns excursions by status")
+    void getExcursionsByStatus_Success() throws Exception {
+        when(excursionService.getExcursionsByTourAndStatus(1L, ExcursionStatus.OPEN_FOR_BOOKING))
+                .thenReturn(List.of(sampleResponse));
+
+        mockMvc.perform(get("/api/excursions/tour/1/status/OPEN_FOR_BOOKING"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value(1));
+    }
+
+    @Test
     @DisplayName("GET /api/excursions/{id}/status/allowed-transitions: returns allowed transitions")
     void getAllowedTransitions_Success() throws Exception {
         when(excursionService.getAllowedStatusTransitions(1L))

@@ -34,7 +34,8 @@
 > - [KAN-148](https://huytran20052022.atlassian.net/browse/KAN-148) - *Implement Registration List Export — Triển khai xuất danh sách hành khách đăng ký*  
 > - [KAN-149](https://huytran20052022.atlassian.net/browse/KAN-149) - *Write API Tests for Registration List Retrieval — Test API lấy danh sách đăng ký*  
 > - [KAN-150](https://huytran20052022.atlassian.net/browse/KAN-150) - *Test Filtering and Export Results — Test kết quả lọc và xuất dữ liệu*  
-> - [KAN-168](https://huytran20052022.atlassian.net/browse/KAN-168) - *Configure Excursion Price, Capacity and Schedule — Cấu hình giá, sức chứa và lịch tour bờ*
+> - [KAN-168](https://huytran20052022.atlassian.net/browse/KAN-168) - *Configure Excursion Price, Capacity and Schedule — Cấu hình giá, sức chứa và lịch tour bờ*  
+> - [KAN-169](https://huytran20052022.atlassian.net/browse/KAN-169) - *Implement Excursion Status Management — Quản lý trạng thái tour bờ*
 
 ---
 
@@ -553,28 +554,38 @@ Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn di�
   - Kiểm thử lấy danh sách hoạt động theo từng ngày cụ thể `GET /api/activities/tour/{tourId}/day/{dayNumber}`.
   - Kiểm thử phân trang `GET /api/activities/tour/{tourId}/paged` kết hợp lọc theo danh mục (`category`), tìm kiếm từ khóa (`keyword` theo tiêu đề hoặc địa điểm), và lọc theo ngày số (`dayNumber`).
 
-### 6.10. Quản lý và Cấu hình Giá, Sức chứa & Lịch trình Tour Bờ (Shore Excursion Management — KAN-168):
-Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn diện phục vụ quản lý tour bờ (Shore Excursions), thiết lập giờ tập trung/xuất bến/quay lại tàu, sức chứa tối đa, giá vé người lớn/trẻ em và quy trình đăng ký:
+### 6.10. Quản lý và Cấu hình Giá, Sức chứa & Lịch trình Tour Bờ (Shore Excursion Management — KAN-168 & KAN-169):
+Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn diện phục vụ quản lý tour bờ (Shore Excursions), thiết lập giờ tập trung/xuất bến/quay lại tàu, sức chứa tối đa, giá vé người lớn/trẻ em, và quản lý vòng đời trạng thái tour bờ:
 * **Endpoints Quản lý Tour Bờ (`/api/excursions`):**
   - **`POST /api/excursions`**: Tạo mới tour bờ (`201 Created`).
   - **`PUT /api/excursions/{id}`**: Cập nhật toàn diện tour bờ (`200 OK`).
   - **`PATCH /api/excursions/{id}/price-capacity-schedule`**: Endpoint chuyên biệt cấu hình Giá vé (`price`, `childPrice`), Sức chứa tối đa (`maxCapacity`) và Lịch trình (`gatheringTime`, `departureTime`, `returnToShipTime`, `excursionDate`) (`200 OK`).
-  - **`PATCH /api/excursions/{id}/status`**: Chuyển trạng thái tour bờ (`SCHEDULED` $\to$ `OPEN_FOR_BOOKING` $\to$ `IN_PROGRESS` $\to$ `COMPLETED`, `DELAYED`, `CANCELLED`).
-  - **`GET /api/excursions/{id}/status/allowed-transitions`**: Tra cứu danh sách trạng thái hợp lệ tiếp theo.
+  - **`PATCH /api/excursions/{id}/status`**: Quản lý và chuyển đổi trạng thái tour bờ với state machine validation (`SCHEDULED` $\to$ `OPEN_FOR_BOOKING` $\to$ `IN_PROGRESS` $\to$ `COMPLETED`, `DELAYED`, `CANCELLED`) (KAN-169).
+  - **`GET /api/excursions/{id}/status/allowed-transitions`**: Tra cứu danh sách trạng thái hợp lệ tiếp theo (KAN-169).
+  - **`GET /api/excursions/tour/{tourId}/status/{status}`**: Tra cứu danh sách tour bờ theo trạng thái hoạt động trong tour (KAN-169).
   - **`GET /api/excursions/{id}`**: Lấy chi tiết tour bờ (bao gồm tính toán `remainingCapacity`).
   - **`GET /api/excursions/tour/{tourId}`**: Lấy danh sách tour bờ của chuyến hải trình.
   - **`GET /api/excursions/tour/{tourId}/port/{portId}`**: Lấy danh sách tour bờ theo điểm dừng/cảng ghé.
+  - **`GET /api/excursions/tour/{tourId}/day/{dayNumber}`**: Lấy danh sách tour bờ theo ngày của chuyến đi.
   - **`GET /api/excursions/tour/{tourId}/paged`**: Phân trang, tìm kiếm và lọc tour bờ theo cảng/ngày.
   - **`DELETE /api/excursions/{id}`**: Xóa mềm tour bờ (`active = false`, `status = CANCELLED`).
-* **Quy tắc Nghiệp vụ Tour Bờ (`ShoreExcursionService`):**
+* **Quy tắc Nghiệp vụ Tour Bờ (`ShoreExcursionService` & `ExcursionStatus`):**
+  - **Vòng đời Trạng thái (KAN-169):**
+    - `SCHEDULED` $\to$ Cho phép chuyển sang `OPEN_FOR_BOOKING`, `DELAYED`, `CANCELLED`.
+    - `OPEN_FOR_BOOKING` $\to$ Cho phép chuyển sang `IN_PROGRESS`, `DELAYED`, `CANCELLED`.
+    - `DELAYED` $\to$ Cho phép chuyển sang `OPEN_FOR_BOOKING`, `IN_PROGRESS`, `CANCELLED`.
+    - `IN_PROGRESS` $\to$ Cho phép chuyển sang `COMPLETED`, `CANCELLED`.
+    - `COMPLETED` $\to$ Trạng thái kết thúc (Terminal State), không cho phép chuyển trạng thái khác.
+    - `CANCELLED` $\to$ Chỉ cho phép mở lại về `SCHEDULED`.
+    - Khi trạng thái chuyển sang `CANCELLED`, hệ thống tự động ghi nhận lý do hủy (`cancellationReason`).
   - **Khung thời gian:** `departureTime` bắt buộc phải sau `gatheringTime`; `returnToShipTime` bắt buộc phải sau `departureTime`.
   - **Sức chứa:** `maxCapacity` bắt buộc lớn hơn 0 và không được nhỏ hơn số khách hiện đã đăng ký (`currentParticipants`).
   - **Giá vé:** `price >= 0`, `childPrice >= 0` và `childPrice <= price`.
   - **Chống trùng lặp:** Kiểm tra không cho phép tạo 2 tour bờ trùng tên tại cùng 1 cảng ghé vào cùng 1 ngày.
-* **Bộ Kiểm thử KAN-168:**
-  - **`ShoreExcursionServiceTest` (17 tests - Unit Tests):** Kiểm thử độc lập tầng Service, kiểm tra đầy đủ các quy tắc lịch trình, giá, sức chứa, chuyển đổi trạng thái và ngoại lệ.
+* **Bộ Kiểm thử KAN-168 & KAN-169:**
+  - **`ShoreExcursionServiceTest` (19 tests - Unit Tests):** Kiểm thử độc lập tầng Service, kiểm tra đầy đủ các quy tắc lịch trình, giá, sức chứa, chuyển đổi trạng thái, lọc theo trạng thái và ngoại lệ.
   - **`ExcursionStatusTest` (7 tests - Enum Tests):** Kiểm thử 100% các nhánh chuyển đổi trạng thái State Machine của `ExcursionStatus`.
-  - **`ShoreExcursionControllerTest` (10 tests - WebMvcTest):** Kiểm thử MockMvc tầng REST API cho toàn bộ các endpoint CRUD và PATCH cấu hình.
+  - **`ShoreExcursionControllerTest` (13 tests - WebMvcTest):** Kiểm thử MockMvc tầng REST API cho toàn bộ các endpoint CRUD, PATCH status, lấy allowed transitions và query theo status.
   - **`ShoreExcursionIntegrationTest` (2 tests - E2E Integration):** Kiểm thử tích hợp từ Web layer đến Database in-memory, xác minh lưu trữ và cập nhật trạng thái thực tế.
 
 ---

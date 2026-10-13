@@ -21,6 +21,8 @@ public interface ShoreExcursionRepository extends JpaRepository<ShoreExcursion, 
 
     List<ShoreExcursion> findByTourIdAndDayNumberAndActiveTrueOrderByGatheringTimeAsc(Long tourId, Integer dayNumber);
 
+    List<ShoreExcursion> findByTourIdAndStatusAndActiveTrueOrderByGatheringTimeAsc(Long tourId, com.cruise.activity.enums.ExcursionStatus status);
+
     @Query("SELECT e FROM ShoreExcursion e WHERE e.tourId = :tourId AND e.active = true " +
             "AND (:portId IS NULL OR e.portId = :portId) " +
             "AND (:dayNumber IS NULL OR e.dayNumber = :dayNumber) " +
