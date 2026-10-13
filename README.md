@@ -36,7 +36,8 @@
 > - [KAN-150](https://huytran20052022.atlassian.net/browse/KAN-150) - *Test Filtering and Export Results — Test kết quả lọc và xuất dữ liệu*  
 > - [KAN-168](https://huytran20052022.atlassian.net/browse/KAN-168) - *Configure Excursion Price, Capacity and Schedule — Cấu hình giá, sức chứa và lịch tour bờ*  
 > - [KAN-169](https://huytran20052022.atlassian.net/browse/KAN-169) - *Implement Excursion Status Management — Quản lý trạng thái tour bờ*  
-> - [KAN-170](https://huytran20052022.atlassian.net/browse/KAN-170) - *Write Unit Tests for Excursion Rules — Test các quy tắc nghiệp vụ tour bờ*
+> - [KAN-170](https://huytran20052022.atlassian.net/browse/KAN-170) - *Write Unit Tests for Excursion Rules — Test các quy tắc nghiệp vụ tour bờ*  
+> - [KAN-171](https://huytran20052022.atlassian.net/browse/KAN-171) - *Write API Tests for Excursion CRUD Operations — Test các API CRUD tour bờ*
 
 ---
 
@@ -583,14 +584,16 @@ Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn di�
   - **Sức chứa:** `maxCapacity` bắt buộc lớn hơn 0 và không được nhỏ hơn số khách hiện đã đăng ký (`currentParticipants`).
   - **Giá vé:** `price >= 0`, `childPrice >= 0` và `childPrice <= price`.
   - **Chống trùng lặp:** Kiểm tra không cho phép tạo 2 tour bờ trùng tên tại cùng 1 cảng ghé vào cùng 1 ngày.
-* **Bộ Kiểm thử KAN-168, KAN-169 & KAN-170:**
-  - **`ExcursionBusinessRulesUnitTest` (33 tests - Specialized Business Rules Unit Tests — KAN-170):** Kiểm thử chuyên biệt và toàn diện cho 6 nhóm quy tắc nghiệp vụ cốt lõi:
-    1. *Quy tắc Lịch trình:* Kiểm tra `excursionDate != null`, các mốc thời gian không được null, `departureTime > gatheringTime`, `returnToShipTime > departureTime`.
-    2. *Quy tắc Giá vé:* Kiểm tra giá người lớn `price >= 0`, `childPrice >= 0`, `childPrice <= price`, chấp nhận giá vé 0 đồng cho tour bao gồm trong gói.
-    3. *Quy tắc Sức chứa:* Kiểm tra `maxCapacity > 0`, từ chối giảm `maxCapacity < currentParticipants` khi cập nhật hoặc cấu hình lại.
-    4. *Quy tắc Chống trùng lặp:* Từ chối tour bờ rỗng tên hoặc trùng tên tại cùng cảng vào cùng ngày, loại trừ chính `excludeId` khi chỉnh sửa.
-    5. *Quy tắc Vòng đời Trạng thái:* Kiểm thử ma trận chuyển đổi trạng thái của `ExcursionStatus`, từ chối chuyển đổi không hợp lệ, ghi nhận `cancellationReason` khi hủy tour.
-    6. *Quy tắc Toàn vẹn & Xóa mềm:* Kiểm thử xóa mềm `active = false` và chuyển trạng thái sang `CANCELLED`, ném `ResourceNotFoundException` khi không tìm thấy.
+* **Bộ Kiểm thử KAN-168, KAN-169, KAN-170 & KAN-171:**
+  - **`ExcursionCrudOperationsApiTest` (22 tests - End-to-End SpringBootTest API Integration — KAN-171):** Kiểm thử toàn diện toàn bộ chu trình REST API tour bờ trên cơ sở dữ liệu thật:
+    1. *`POST /api/excursions`:* Tạo mới thành công (201 Created), xác thực dữ liệu đầu vào bắt buộc (@NotNull), kiểm tra vi phạm nghiệp vụ lịch trình và chống trùng lặp.
+    2. *`GET /api/excursions/{id}`:* Lấy chi tiết tour bờ (200 OK), tính toán chính xác sức chứa còn lại (`remainingCapacity`), xử lý 404 khi ID không tồn tại hoặc đã bị xóa mềm (`active = false`).
+    3. *`GET Queries`:* Truy vấn tour bờ theo tour (`/tour/{tourId}`), theo cảng ghé (`/port/{portId}`), theo ngày (`/day/{dayNumber}`), theo trạng thái (`/status/{status}`), và phân trang tìm kiếm (`/paged`).
+    4. *`PUT /api/excursions/{id}`:* Cập nhật toàn diện tour bờ (200 OK), kiểm tra 400 validation error và 404 khi không tìm thấy.
+    5. *`PATCH /api/excursions/{id}/price-capacity-schedule`:* Cấu hình chuyên biệt giá, sức chứa, lịch trình; từ chối khi giảm sức chứa nhỏ hơn số khách hiện tại.
+    6. *`PATCH /api/excursions/{id}/status`:* Chuyển trạng thái tour bờ với State Machine (SCHEDULED $\to$ OPEN_FOR_BOOKING, CANCELLED kèm reason), từ chối nhảy cóc sang COMPLETED, kiểm tra tra cứu `allowed-transitions`.
+    7. *`DELETE /api/excursions/{id}`:* Xóa mềm an toàn (`active = false`, `status = CANCELLED`), xử lý 404 khi ID không tồn tại.
+  - **`ExcursionBusinessRulesUnitTest` (33 tests - Specialized Business Rules Unit Tests — KAN-170):** Kiểm thử chuyên biệt và toàn diện cho 6 nhóm quy tắc nghiệp vụ cốt lõi (Lịch trình, Giá vé, Sức chứa, Chống trùng lặp, Vòng đời trạng thái, Toàn vẹn dữ liệu).
   - **`ShoreExcursionServiceTest` (19 tests - Service Unit Tests):** Kiểm thử độc lập tầng Service cho các tác vụ CRUD, lọc danh sách theo ngày/cảng/trạng thái.
   - **`ExcursionStatusTest` (7 tests - Enum Tests):** Kiểm thử 100% các nhánh chuyển đổi trạng thái State Machine của `ExcursionStatus`.
   - **`ShoreExcursionControllerTest` (13 tests - WebMvcTest):** Kiểm thử MockMvc tầng REST API cho toàn bộ các endpoint CRUD, PATCH status, lấy allowed transitions và query theo status.
