@@ -100,6 +100,15 @@ public class ShoreExcursionController {
                 excursionService.getExcursionsByTourAndDay(tourId, dayNumber));
     }
 
+    @GetMapping("/tour/{tourId}/status/{status}")
+    public ApiResponse<List<ShoreExcursionResponse>> getExcursionsByStatus(
+            @PathVariable Long tourId,
+            @PathVariable ExcursionStatus status
+    ) {
+        return ApiResponse.ok("Lấy danh sách tour bờ theo trạng thái thành công",
+                excursionService.getExcursionsByTourAndStatus(tourId, status));
+    }
+
     @GetMapping("/tour/{tourId}/paged")
     public ApiResponse<Page<ShoreExcursionResponse>> getExcursionsPaged(
             @PathVariable Long tourId,

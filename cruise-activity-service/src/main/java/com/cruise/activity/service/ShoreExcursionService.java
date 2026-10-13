@@ -246,6 +246,11 @@ public class ShoreExcursionService {
     }
 
     @Transactional(readOnly = true)
+    public List<ShoreExcursionResponse> getExcursionsByTourAndStatus(Long tourId, ExcursionStatus status) {
+        return toResponseList(excursionRepository.findByTourIdAndStatusAndActiveTrueOrderByGatheringTimeAsc(tourId, status));
+    }
+
+    @Transactional(readOnly = true)
     public Page<ShoreExcursionResponse> getExcursionsPaged(
             Long tourId,
             Long portId,

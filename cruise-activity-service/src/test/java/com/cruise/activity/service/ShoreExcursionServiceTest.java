@@ -316,6 +316,27 @@ class ShoreExcursionServiceTest {
     }
 
     @Test
+    @DisplayName("getAllowedStatusTransitions: throws ResourceNotFoundException when excursion not found")
+    void getAllowedStatusTransitions_NotFound() {
+        when(excursionRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> excursionService.getAllowedStatusTransitions(999L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Không tìm thấy tour bờ với ID: 999");
+    }
+
+    @Test
+    @DisplayName("getExcursionsByTourAndStatus: returns list of excursions with specific status")
+    void getExcursionsByTourAndStatus_Success() {
+        when(excursionRepository.findByTourIdAndStatusAndActiveTrueOrderByGatheringTimeAsc(1L, ExcursionStatus.OPEN_FOR_BOOKING))
+                .thenReturn(List.of(sampleExcursion));
+
+        List<ShoreExcursionResponse> list = excursionService.getExcursionsByTourAndStatus(1L, ExcursionStatus.OPEN_FOR_BOOKING);
+        assertThat(list).hasSize(1);
+        assertThat(list.get(0).getTitle()).isEqualTo("Khám phá Hang Sửng Sốt & Chèo Kayak");
+    }
+
+    @Test
     @DisplayName("getExcursionsByTour: returns list of excursions")
     void getExcursionsByTour_Success() {
         when(excursionRepository.findByTourIdAndActiveTrueOrderByExcursionDateAscGatheringTimeAsc(1L))
