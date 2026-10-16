@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 
 /**
  * Response DTO trả về thông tin chi tiết Tour bờ (KAN-168)
@@ -43,16 +44,25 @@ public class ShoreExcursionResponse {
     private ExcursionStatus status;
     private String cancellationReason;
     private Boolean active;
+    private List<ExcursionPassengerResponse> passengers;
     private Instant createdAt;
     private Instant updatedAt;
 
     public static ShoreExcursionResponse fromEntity(ShoreExcursion entity) {
+        return fromEntity(entity, null);
+    }
+
+    public static ShoreExcursionResponse fromEntity(ShoreExcursion entity, java.util.List<com.cruise.activity.entity.ExcursionPassenger> excursionPassengers) {
         if (entity == null) {
             return null;
         }
         int remaining = entity.getMaxCapacity() != null
                 ? Math.max(0, entity.getMaxCapacity() - (entity.getCurrentParticipants() != null ? entity.getCurrentParticipants() : 0))
                 : 0;
+
+        java.util.List<ExcursionPassengerResponse> passengerList = excursionPassengers != null
+                ? excursionPassengers.stream().map(ExcursionPassengerResponse::fromEntity).toList()
+                : null;
 
         return ShoreExcursionResponse.builder()
                 .id(entity.getId())
@@ -79,6 +89,7 @@ public class ShoreExcursionResponse {
                 .status(entity.getStatus())
                 .cancellationReason(entity.getCancellationReason())
                 .active(entity.getActive())
+                .passengers(passengerList)
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .build();
