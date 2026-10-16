@@ -127,7 +127,7 @@ class ExcursionLogisticsUnitTest {
                     .build();
 
             when(excursionRepository.findById(200L)).thenReturn(Optional.of(mockExcursion));
-            when(vehicleRepository.countByExcursionIdAndActiveTrue(200L)).thenReturn(0L);
+            when(vehicleRepository.countByExcursionId(200L)).thenReturn(0L);
             when(vehicleRepository.save(any(ExcursionVehicle.class))).thenAnswer(inv -> inv.getArgument(0));
 
             ShoreExcursionResponse response = excursionService.addVehicleToExcursion(200L, request);
@@ -179,6 +179,29 @@ class ExcursionLogisticsUnitTest {
         }
 
         @Test
+        @DisplayName("Ném lỗi khi cập nhật phương tiện với assignedPassengers âm hoặc vượt quá capacity")
+        void updateVehicle_InvalidAssignedPassengers_ThrowsException() {
+            when(excursionRepository.findById(200L)).thenReturn(Optional.of(mockExcursion));
+            when(vehicleRepository.findByVehicleCodeAndExcursionIdAndActiveTrue("VEH-01", 200L))
+                    .thenReturn(Optional.of(mockVehicle));
+
+            UpdateExcursionVehicleRequest reqNegative = UpdateExcursionVehicleRequest.builder()
+                    .assignedPassengers(-5)
+                    .build();
+            assertThatThrownBy(() -> excursionService.updateVehicleInExcursion(200L, "VEH-01", reqNegative))
+                    .isInstanceOf(BusinessRuleException.class)
+                    .hasMessageContaining("Số lượng hành khách đã gán không được nhỏ hơn 0");
+
+            UpdateExcursionVehicleRequest reqExceed = UpdateExcursionVehicleRequest.builder()
+                    .capacity(30)
+                    .assignedPassengers(35)
+                    .build();
+            assertThatThrownBy(() -> excursionService.updateVehicleInExcursion(200L, "VEH-01", reqExceed))
+                    .isInstanceOf(BusinessRuleException.class)
+                    .hasMessageContaining("không được vượt quá sức chứa phương tiện");
+        }
+
+        @Test
         @DisplayName("Xóa phương tiện thành công (soft delete active=false)")
         void removeVehicle_Success() {
             when(excursionRepository.findById(200L)).thenReturn(Optional.of(mockExcursion));
@@ -215,7 +238,7 @@ class ExcursionLogisticsUnitTest {
                     .build();
 
             when(excursionRepository.findById(200L)).thenReturn(Optional.of(mockExcursion));
-            when(vehicleRepository.countByExcursionIdAndActiveTrue(200L)).thenReturn(1L);
+            when(vehicleRepository.countByExcursionId(200L)).thenReturn(1L);
             when(vehicleRepository.save(any(ExcursionVehicle.class))).thenAnswer(inv -> inv.getArgument(0));
 
             ShoreExcursionResponse response = excursionService.addVehicleToExcursion(200L, request);
@@ -227,6 +250,36 @@ class ExcursionLogisticsUnitTest {
                     v.getAssignedPassengers() == 0 &&
                     v.getDriverPhone() == null
             ));
+        }
+
+        @Test
+        @DisplayName("Ném lỗi khi thêm phương tiện với assignedPassengers âm hoặc vượt quá capacity")
+        void addVehicle_InvalidAssignedPassengers_ThrowsException() {
+            when(excursionRepository.findById(200L)).thenReturn(Optional.of(mockExcursion));
+
+            AddExcursionVehicleRequest reqNegative = AddExcursionVehicleRequest.builder()
+                    .licensePlate("29B-123.45")
+                    .vehicleType("Bus")
+                    .driverName("Tài xế")
+                    .capacity(20)
+                    .assignedPassengers(-1)
+                    .build();
+
+            assertThatThrownBy(() -> excursionService.addVehicleToExcursion(200L, reqNegative))
+                    .isInstanceOf(BusinessRuleException.class)
+                    .hasMessageContaining("Số lượng hành khách đã gán không được nhỏ hơn 0");
+
+            AddExcursionVehicleRequest reqExceed = AddExcursionVehicleRequest.builder()
+                    .licensePlate("29B-123.45")
+                    .vehicleType("Bus")
+                    .driverName("Tài xế")
+                    .capacity(20)
+                    .assignedPassengers(25)
+                    .build();
+
+            assertThatThrownBy(() -> excursionService.addVehicleToExcursion(200L, reqExceed))
+                    .isInstanceOf(BusinessRuleException.class)
+                    .hasMessageContaining("không được vượt quá sức chứa phương tiện");
         }
 
         @Test
@@ -370,7 +423,7 @@ class ExcursionLogisticsUnitTest {
                     .build();
 
             when(excursionRepository.findById(200L)).thenReturn(Optional.of(mockExcursion));
-            when(guideRepository.countByExcursionIdAndActiveTrue(200L)).thenReturn(0L);
+            when(guideRepository.countByExcursionId(200L)).thenReturn(0L);
             when(guideRepository.save(any(ExcursionGuide.class))).thenAnswer(inv -> inv.getArgument(0));
 
             ShoreExcursionResponse response = excursionService.addGuideToExcursion(200L, request);
@@ -392,7 +445,7 @@ class ExcursionLogisticsUnitTest {
                     .build();
 
             when(excursionRepository.findById(200L)).thenReturn(Optional.of(mockExcursion));
-            when(guideRepository.countByExcursionIdAndActiveTrue(200L)).thenReturn(1L);
+            when(guideRepository.countByExcursionId(200L)).thenReturn(1L);
             when(guideRepository.save(any(ExcursionGuide.class))).thenAnswer(inv -> inv.getArgument(0));
 
             ShoreExcursionResponse response = excursionService.addGuideToExcursion(200L, request);

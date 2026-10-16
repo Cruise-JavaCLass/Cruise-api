@@ -421,7 +421,16 @@ public class ShoreExcursionService {
     public ShoreExcursionResponse addVehicleToExcursion(Long excursionId, AddExcursionVehicleRequest request) {
         ShoreExcursion excursion = findActiveExcursion(excursionId);
 
-        long count = vehicleRepository.countByExcursionIdAndActiveTrue(excursionId) + 1;
+        int capacity = request.getCapacity();
+        int assigned = request.getAssignedPassengers() != null ? request.getAssignedPassengers() : 0;
+        if (assigned < 0) {
+            throw new BusinessRuleException("Số lượng hành khách đã gán không được nhỏ hơn 0");
+        }
+        if (assigned > capacity) {
+            throw new BusinessRuleException(String.format("Số lượng hành khách đã gán (%d) không được vượt quá sức chứa phương tiện (%d)", assigned, capacity));
+        }
+
+        long count = vehicleRepository.countByExcursionId(excursionId) + 1;
         String vehicleCode = String.format("VEH-%02d", count);
 
         ExcursionVehicle vehicle = ExcursionVehicle.builder()
@@ -431,8 +440,8 @@ public class ShoreExcursionService {
                 .vehicleType(request.getVehicleType().trim())
                 .driverName(request.getDriverName().trim())
                 .driverPhone(request.getDriverPhone() != null ? request.getDriverPhone().trim() : null)
-                .capacity(request.getCapacity())
-                .assignedPassengers(request.getAssignedPassengers() != null ? request.getAssignedPassengers() : 0)
+                .capacity(capacity)
+                .assignedPassengers(assigned)
                 .status(request.getStatus() != null ? request.getStatus() : VehicleStatus.READY)
                 .operatorName(request.getOperatorName() != null ? request.getOperatorName().trim() : excursion.getLocalProvider())
                 .notes(request.getNotes())
@@ -449,6 +458,19 @@ public class ShoreExcursionService {
         ShoreExcursion excursion = findActiveExcursion(excursionId);
         ExcursionVehicle vehicle = findVehicleInExcursion(excursionId, vehicleIdOrCode);
 
+        if (request.getCapacity() != null && request.getCapacity() <= 0) {
+            throw new BusinessRuleException("Sức chứa phương tiện phải lớn hơn 0");
+        }
+        int effectiveCapacity = request.getCapacity() != null ? request.getCapacity() : vehicle.getCapacity();
+        int effectiveAssigned = request.getAssignedPassengers() != null ? request.getAssignedPassengers() : (vehicle.getAssignedPassengers() != null ? vehicle.getAssignedPassengers() : 0);
+
+        if (effectiveAssigned < 0) {
+            throw new BusinessRuleException("Số lượng hành khách đã gán không được nhỏ hơn 0");
+        }
+        if (effectiveAssigned > effectiveCapacity) {
+            throw new BusinessRuleException(String.format("Số lượng hành khách đã gán (%d) không được vượt quá sức chứa phương tiện (%d)", effectiveAssigned, effectiveCapacity));
+        }
+
         if (request.getLicensePlate() != null && !request.getLicensePlate().isBlank()) {
             vehicle.setLicensePlate(request.getLicensePlate().trim());
         }
@@ -462,9 +484,6 @@ public class ShoreExcursionService {
             vehicle.setDriverPhone(request.getDriverPhone().trim());
         }
         if (request.getCapacity() != null) {
-            if (request.getCapacity() <= 0) {
-                throw new BusinessRuleException("Sức chứa phương tiện phải lớn hơn 0");
-            }
             vehicle.setCapacity(request.getCapacity());
         }
         if (request.getAssignedPassengers() != null) {
@@ -509,7 +528,7 @@ public class ShoreExcursionService {
     public ShoreExcursionResponse addGuideToExcursion(Long excursionId, AddExcursionGuideRequest request) {
         ShoreExcursion excursion = findActiveExcursion(excursionId);
 
-        long count = guideRepository.countByExcursionIdAndActiveTrue(excursionId) + 1;
+        long count = guideRepository.countByExcursionId(excursionId) + 1;
         String guideCode = String.format("GUD-%02d", count);
 
         String languagesStr = request.getLanguages() != null ? String.join(", ", request.getLanguages()) : null;
@@ -588,9 +607,9 @@ public class ShoreExcursionService {
             return byCode.get();
         }
         try {
-            String numericPart = vehicleIdOrCode.replaceAll("\\D+", "");
-            if (!numericPart.isEmpty()) {
-                long numId = Long.parseLong(numericPart);
+            String trimmed = vehicleIdOrCode.trim();
+            if (trimmed.matches("\\d+")) {
+                long numId = Long.parseLong(trimmed);
                 var byId = vehicleRepository.findByIdAndExcursionIdAndActiveTrue(numId, excursionId);
                 if (byId.isPresent()) {
                     return byId.get();
@@ -611,9 +630,9 @@ public class ShoreExcursionService {
             return byCode.get();
         }
         try {
-            String numericPart = guideIdOrCode.replaceAll("\\D+", "");
-            if (!numericPart.isEmpty()) {
-                long numId = Long.parseLong(numericPart);
+            String trimmed = guideIdOrCode.trim();
+            if (trimmed.matches("\\d+")) {
+                long numId = Long.parseLong(trimmed);
                 var byId = guideRepository.findByIdAndExcursionIdAndActiveTrue(numId, excursionId);
                 if (byId.isPresent()) {
                     return byId.get();

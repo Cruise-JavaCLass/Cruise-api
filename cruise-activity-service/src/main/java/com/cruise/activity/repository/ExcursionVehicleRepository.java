@@ -20,4 +20,6 @@ public interface ExcursionVehicleRepository extends JpaRepository<ExcursionVehic
     Optional<ExcursionVehicle> findByVehicleCodeAndExcursionIdAndActiveTrue(String vehicleCode, Long excursionId);
 
     long countByExcursionIdAndActiveTrue(Long excursionId);
+
+    long countByExcursionId(Long excursionId);
 }

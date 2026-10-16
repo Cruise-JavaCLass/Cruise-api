@@ -23,4 +23,6 @@ public interface ExcursionGuideRepository extends JpaRepository<ExcursionGuide, 
     List<ExcursionGuide> findByExcursionIdAndRoleAndActiveTrue(Long excursionId, GuideRole role);
 
     long countByExcursionIdAndActiveTrue(Long excursionId);
+
+    long countByExcursionId(Long excursionId);
 }

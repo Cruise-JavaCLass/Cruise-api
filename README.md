@@ -621,7 +621,7 @@ Cung cấp bộ REST API hoàn chỉnh, các quy tắc nghiệp vụ chặt ch�
 * **Bộ Kiểm thử Tự động KAN-176 & KAN-177:**
   - **`ExcursionPassengerAssignmentUnitTest` (11 tests — KAN-176):** Kiểm thử độc lập tầng Service cho việc gán nhóm, kiểm tra vi phạm sức chứa, mã vé trùng lặp, từ chối thêm vào tour đã hủy, gán hàng loạt và xóa hành khách.
   - **`ExcursionPassengerAssignmentApiTest` (11 tests — KAN-176):** Kiểm thử tích hợp End-to-End toàn bộ các REST endpoint gán hành khách với SpringBootTest và MockMvc.
-  - **`ExcursionLogisticsUnitTest` (9 tests — KAN-177):** Kiểm thử nghiệp vụ quản lý phương tiện và hướng dẫn viên (tự sinh mã, cập nhật thông tin, xác thực sức chứa, soft-delete).
+  - **`ExcursionLogisticsUnitTest` (27 tests — KAN-177):** Kiểm thử nghiệp vụ quản lý phương tiện và hướng dẫn viên (tự sinh mã, cập nhật thông tin, xác thực sức chứa và hành khách gán, soft-delete, tra cứu ID số).
   - **`ExcursionLogisticsApiTest` (8 tests — KAN-177):** Kiểm thử tích hợp REST API CRUD phương tiện và hướng dẫn viên trên cơ sở dữ liệu thật.
 
 ---
