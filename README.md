@@ -37,7 +37,9 @@
 > - [KAN-168](https://huytran20052022.atlassian.net/browse/KAN-168) - *Configure Excursion Price, Capacity and Schedule — Cấu hình giá, sức chứa và lịch tour bờ*  
 > - [KAN-169](https://huytran20052022.atlassian.net/browse/KAN-169) - *Implement Excursion Status Management — Quản lý trạng thái tour bờ*  
 > - [KAN-170](https://huytran20052022.atlassian.net/browse/KAN-170) - *Write Unit Tests for Excursion Rules — Test các quy tắc nghiệp vụ tour bờ*  
-> - [KAN-171](https://huytran20052022.atlassian.net/browse/KAN-171) - *Write API Tests for Excursion CRUD Operations — Test các API CRUD tour bờ*
+> - [KAN-171](https://huytran20052022.atlassian.net/browse/KAN-171) - *Write API Tests for Excursion CRUD Operations — Test các API CRUD tour bờ*  
+> - [KAN-176](https://huytran20052022.atlassian.net/browse/KAN-176) - *Assign Passengers to Excursion Groups — Gán hành khách vào nhóm tour bờ*  
+> - [KAN-177](https://huytran20052022.atlassian.net/browse/KAN-177) - *Manage Vehicles and Tour Guides for Excursions — Quản lý phương tiện và hướng dẫn viên tour bờ*
 
 ---
 
@@ -598,6 +600,29 @@ Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn di�
   - **`ExcursionStatusTest` (7 tests - Enum Tests):** Kiểm thử 100% các nhánh chuyển đổi trạng thái State Machine của `ExcursionStatus`.
   - **`ShoreExcursionControllerTest` (13 tests - WebMvcTest):** Kiểm thử MockMvc tầng REST API cho toàn bộ các endpoint CRUD, PATCH status, lấy allowed transitions và query theo status.
   - **`ShoreExcursionIntegrationTest` (2 tests - E2E Integration):** Kiểm thử tích hợp từ Web layer đến Database in-memory, xác minh lưu trữ và cập nhật trạng thái thực tế.
+
+### 6.11. Quản lý Gán Hành khách vào Đoàn/Xe và Phương tiện, Hướng dẫn viên Tour Bờ (KAN-176 & KAN-177):
+Cung cấp bộ REST API hoàn chỉnh, các quy tắc nghiệp vụ chặt chẽ và bộ kiểm thử tự động phục vụ điều phối tour tham quan trên bờ:
+* **Endpoints Gán Hành khách vào Nhóm & Xe Tour Bờ (KAN-176):**
+  - **`GET /api/excursions/{id}/passengers`**: Lấy danh sách hành khách đã đăng ký và phân nhóm trong tour bờ (`200 OK`).
+  - **`POST /api/excursions/{id}/passengers`**: Thêm hành khách vào tour bờ (`201 Created`), kiểm tra sức chứa tối đa (`currentParticipants < maxCapacity`), tự sinh mã vé (`ticketCode`), tăng số lượng người tham gia (`+1`).
+  - **`PATCH /api/excursions/{id}/passengers/{passengerId}/group`**: Phân công đoàn/nhóm (`groupName`) và xe trung chuyển (`busNumber`) cho từng hành khách (`200 OK`).
+  - **`PATCH /api/excursions/{id}/passengers/bulk-group`**: Gán đoàn và xe hàng loạt cho danh sách ID hành khách (`200 OK`).
+  - **`DELETE /api/excursions/{id}/passengers/{passengerId}`**: Xóa hành khách khỏi tour bờ qua xóa mềm (`active = false`), giảm số lượng người tham gia (`-1`).
+* **Endpoints Quản lý Phương tiện & Hướng dẫn viên Tour Bờ (KAN-177):**
+  - **`GET /api/excursions/{id}/vehicles`**: Tra cứu danh sách phương tiện (tàu tender, cano, xe khách 45/29 chỗ) được phân bổ (`200 OK`).
+  - **`POST /api/excursions/{id}/vehicles`**: Thêm phương tiện mới vào tour bờ (`201 Created`), tự sinh mã quản lý (`VEH-01`, `VEH-02`), xác thực sức chứa hợp lệ.
+  - **`PATCH /api/excursions/{id}/vehicles/{vehicleId}`**: Cập nhật thông tin phương tiện (tài xế, sức chứa, biển số, trạng thái `READY`/`ON_TRIP`/`MAINTENANCE`) (`200 OK`).
+  - **`DELETE /api/excursions/{id}/vehicles/{vehicleId}`**: Xóa phương tiện khỏi tour bờ (`200 OK`).
+  - **`GET /api/excursions/{id}/guides`**: Tra cứu danh sách hướng dẫn viên (Lead, Assistant, Specialist) được phân công (`200 OK`).
+  - **`POST /api/excursions/{id}/guides`**: Thêm hướng dẫn viên vào tour bờ (`201 Created`), tự sinh mã (`GUD-01`, `GUD-02`), hỗ trợ danh sách ngôn ngữ và số thẻ HDV.
+  - **`PATCH /api/excursions/{id}/guides/{guideId}`**: Cập nhật thông tin hướng dẫn viên (vai trò, ngôn ngữ, đánh giá rating, trạng thái `ACTIVE`/`ASSIGNED`/`STANDBY`) (`200 OK`).
+  - **`DELETE /api/excursions/{id}/guides/{guideId}`**: Xóa hướng dẫn viên khỏi tour bờ (`200 OK`).
+* **Bộ Kiểm thử Tự động KAN-176 & KAN-177:**
+  - **`ExcursionPassengerAssignmentUnitTest` (11 tests — KAN-176):** Kiểm thử độc lập tầng Service cho việc gán nhóm, kiểm tra vi phạm sức chứa, mã vé trùng lặp, từ chối thêm vào tour đã hủy, gán hàng loạt và xóa hành khách.
+  - **`ExcursionPassengerAssignmentApiTest` (11 tests — KAN-176):** Kiểm thử tích hợp End-to-End toàn bộ các REST endpoint gán hành khách với SpringBootTest và MockMvc.
+  - **`ExcursionLogisticsUnitTest` (9 tests — KAN-177):** Kiểm thử nghiệp vụ quản lý phương tiện và hướng dẫn viên (tự sinh mã, cập nhật thông tin, xác thực sức chứa, soft-delete).
+  - **`ExcursionLogisticsApiTest` (8 tests — KAN-177):** Kiểm thử tích hợp REST API CRUD phương tiện và hướng dẫn viên trên cơ sở dữ liệu thật.
 
 ---
 

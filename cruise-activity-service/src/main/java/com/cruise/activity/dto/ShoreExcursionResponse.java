@@ -45,14 +45,25 @@ public class ShoreExcursionResponse {
     private String cancellationReason;
     private Boolean active;
     private List<ExcursionPassengerResponse> passengers;
+    private List<ExcursionVehicleResponse> vehicles;
+    private List<ExcursionGuideResponse> guides;
     private Instant createdAt;
     private Instant updatedAt;
 
     public static ShoreExcursionResponse fromEntity(ShoreExcursion entity) {
-        return fromEntity(entity, null);
+        return fromEntity(entity, null, null, null);
     }
 
     public static ShoreExcursionResponse fromEntity(ShoreExcursion entity, java.util.List<com.cruise.activity.entity.ExcursionPassenger> excursionPassengers) {
+        return fromEntity(entity, excursionPassengers, null, null);
+    }
+
+    public static ShoreExcursionResponse fromEntity(
+            ShoreExcursion entity,
+            java.util.List<com.cruise.activity.entity.ExcursionPassenger> excursionPassengers,
+            java.util.List<com.cruise.activity.entity.ExcursionVehicle> excursionVehicles,
+            java.util.List<com.cruise.activity.entity.ExcursionGuide> excursionGuides
+    ) {
         if (entity == null) {
             return null;
         }
@@ -62,6 +73,14 @@ public class ShoreExcursionResponse {
 
         java.util.List<ExcursionPassengerResponse> passengerList = excursionPassengers != null
                 ? excursionPassengers.stream().map(ExcursionPassengerResponse::fromEntity).toList()
+                : null;
+
+        java.util.List<ExcursionVehicleResponse> vehicleList = excursionVehicles != null
+                ? excursionVehicles.stream().map(ExcursionVehicleResponse::fromEntity).toList()
+                : null;
+
+        java.util.List<ExcursionGuideResponse> guideList = excursionGuides != null
+                ? excursionGuides.stream().map(ExcursionGuideResponse::fromEntity).toList()
                 : null;
 
         return ShoreExcursionResponse.builder()
@@ -90,6 +109,8 @@ public class ShoreExcursionResponse {
                 .cancellationReason(entity.getCancellationReason())
                 .active(entity.getActive())
                 .passengers(passengerList)
+                .vehicles(vehicleList)
+                .guides(guideList)
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .build();
