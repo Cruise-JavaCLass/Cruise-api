@@ -20,10 +20,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Service quản lý Tour tham quan trên bờ (Shore Excursion)
@@ -596,6 +597,177 @@ public class ShoreExcursionService {
         guideRepository.save(guide);
         log.info("Removed guide '{}' from excursion ID={}", guide.getGuideCode(), excursionId);
         return buildFullExcursionResponse(excursion);
+    }
+
+    /**
+     * Tra cứu danh sách hành khách gom nhóm theo từng đoàn/xe cho tour bờ (KAN-178)
+     */
+    @Transactional(readOnly = true)
+    public ExcursionManifestSummaryResponse getPassengerListsByGroup(Long excursionId) {
+        ShoreExcursion excursion = findActiveExcursion(excursionId);
+        List<ExcursionPassenger> passengers = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
+        List<ExcursionVehicle> vehicles = vehicleRepository.findByExcursionIdAndActiveTrue(excursionId);
+        List<ExcursionGuide> guides = guideRepository.findByExcursionIdAndActiveTrue(excursionId);
+
+        Map<String, List<ExcursionPassenger>> grouped = passengers.stream()
+                .collect(Collectors.groupingBy(
+                        p -> (p.getGroupName() != null && !p.getGroupName().isBlank()) ? p.getGroupName().trim() : "Chưa phân nhóm",
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+
+        List<ExcursionGroupManifestResponse> groupResponses = new ArrayList<>();
+        for (Map.Entry<String, List<ExcursionPassenger>> entry : grouped.entrySet()) {
+            String groupName = entry.getKey();
+            List<ExcursionPassenger> groupList = entry.getValue();
+
+            String busNumber = groupList.stream()
+                    .map(ExcursionPassenger::getBusNumber)
+                    .filter(b -> b != null && !b.isBlank())
+                    .findFirst()
+                    .orElse(null);
+
+            ExcursionVehicleResponse vehicleInfo = null;
+            if (busNumber != null) {
+                vehicleInfo = vehicles.stream()
+                        .filter(v -> busNumber.equalsIgnoreCase(v.getVehicleCode()) || busNumber.equalsIgnoreCase(v.getLicensePlate()))
+                        .findFirst()
+                        .map(ExcursionVehicleResponse::fromEntity)
+                        .orElse(null);
+            }
+
+            ExcursionGuideResponse guideInfo = guides.isEmpty() ? null : ExcursionGuideResponse.fromEntity(guides.get(0));
+
+            int checkedIn = (int) groupList.stream().filter(p -> p.getStatus() == ExcursionPassengerStatus.CHECKED_IN).count();
+            int onTour = (int) groupList.stream().filter(p -> p.getStatus() == ExcursionPassengerStatus.ON_TOUR).count();
+            int returnedSafe = (int) groupList.stream().filter(p -> p.getStatus() == ExcursionPassengerStatus.RETURNED_SAFE).count();
+            int pending = (int) groupList.stream().filter(p -> p.getStatus() == ExcursionPassengerStatus.REGISTERED).count();
+
+            List<ExcursionPassengerResponse> passengerResponses = groupList.stream()
+                    .map(ExcursionPassengerResponse::fromEntity)
+                    .toList();
+
+            groupResponses.add(ExcursionGroupManifestResponse.builder()
+                    .groupName(groupName)
+                    .busNumber(busNumber)
+                    .vehicleInfo(vehicleInfo)
+                    .guideInfo(guideInfo)
+                    .totalPassengers(groupList.size())
+                    .checkedInCount(checkedIn)
+                    .onTourCount(onTour)
+                    .returnedSafeCount(returnedSafe)
+                    .pendingCount(pending)
+                    .passengers(passengerResponses)
+                    .build());
+        }
+
+        int groupCount = (int) groupResponses.stream()
+                .filter(g -> !"Chưa phân nhóm".equals(g.getGroupName()))
+                .count();
+
+        return ExcursionManifestSummaryResponse.builder()
+                .excursionId(excursion.getId())
+                .excursionTitle(excursion.getTitle())
+                .excursionDate(excursion.getExcursionDate())
+                .gatheringTime(excursion.getGatheringTime())
+                .departureTime(excursion.getDepartureTime())
+                .returnToShipTime(excursion.getReturnToShipTime())
+                .totalPassengers(passengers.size())
+                .totalGroups(groupCount)
+                .groups(groupResponses)
+                .build();
+    }
+
+    /**
+     * Tự động sinh và phân bổ nhóm / xe cho các hành khách chưa có nhóm (KAN-178)
+     */
+    @Transactional
+    public ExcursionManifestSummaryResponse autoGeneratePassengerGroups(Long excursionId, AutoGenerateGroupsRequest request) {
+        findActiveExcursion(excursionId);
+        List<ExcursionPassenger> passengers = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
+        List<ExcursionVehicle> vehicles = vehicleRepository.findByExcursionIdAndActiveTrue(excursionId);
+
+        List<ExcursionPassenger> eligible = passengers.stream()
+                .filter(p -> Boolean.TRUE.equals(p.getActive()))
+                .toList();
+
+        if (eligible.isEmpty()) {
+            return getPassengerListsByGroup(excursionId);
+        }
+
+        int targetGroups = 1;
+        if (request != null && request.getTargetGroupCount() != null && request.getTargetGroupCount() > 0) {
+            targetGroups = request.getTargetGroupCount();
+        } else if (!vehicles.isEmpty()) {
+            targetGroups = vehicles.size();
+        } else if (request != null && request.getMaxPassengersPerGroup() != null && request.getMaxPassengersPerGroup() > 0) {
+            targetGroups = (int) Math.ceil((double) eligible.size() / request.getMaxPassengersPerGroup());
+        } else {
+            targetGroups = Math.max(1, (int) Math.ceil((double) eligible.size() / 25.0));
+        }
+
+        targetGroups = Math.min(targetGroups, eligible.size());
+        String rawPrefix = (request != null && request.getGroupPrefix() != null && !request.getGroupPrefix().isBlank())
+                ? request.getGroupPrefix().trim()
+                : "Đoàn";
+        String prefix = rawPrefix + " ";
+        boolean assignVehicles = request == null || Boolean.TRUE.equals(request.getAutoAssignVehicles());
+
+        for (int i = 0; i < eligible.size(); i++) {
+            ExcursionPassenger p = eligible.get(i);
+            int groupIndex = (i % targetGroups) + 1;
+            p.setGroupName(prefix + groupIndex);
+            if (assignVehicles && !vehicles.isEmpty()) {
+                p.setBusNumber(vehicles.get(i % vehicles.size()).getVehicleCode());
+            }
+        }
+
+        passengerRepository.saveAll(eligible);
+        log.info("Auto-generated {} groups for {} passengers in excursion ID={}", targetGroups, eligible.size(), excursionId);
+        return getPassengerListsByGroup(excursionId);
+    }
+
+    /**
+     * Xuất danh sách hành khách theo nhóm dạng CSV (KAN-178)
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportPassengerGroupsCsv(Long excursionId, String groupFilter) {
+        ExcursionManifestSummaryResponse manifest = getPassengerListsByGroup(excursionId);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append('\ufeff');
+        sb.append("STT,Đoàn / Nhóm,Xe vận chuyển,Mã vé,Họ và tên,Số cabin,Trạng thái,Số điện thoại khẩn cấp,Yêu cầu đặc biệt\n");
+
+        int index = 1;
+        for (ExcursionGroupManifestResponse group : manifest.getGroups()) {
+            if (groupFilter != null && !groupFilter.isBlank() && !group.getGroupName().equalsIgnoreCase(groupFilter.trim())) {
+                continue;
+            }
+            for (ExcursionPassengerResponse p : group.getPassengers()) {
+                sb.append(index++).append(",");
+                sb.append(formatCsvValue(group.getGroupName())).append(",");
+                sb.append(formatCsvValue(p.getBusNumber())).append(",");
+                sb.append(formatCsvValue(p.getTicketCode())).append(",");
+                sb.append(formatCsvValue(p.getPassengerName())).append(",");
+                sb.append(formatCsvValue(p.getCabinNumber())).append(",");
+                sb.append(formatCsvValue(p.getStatus() != null ? p.getStatus().name() : "")).append(",");
+                sb.append(formatCsvValue(p.getEmergencyPhone())).append(",");
+                sb.append(formatCsvValue(p.getSpecialRequirements())).append("\n");
+            }
+        }
+
+        return sb.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static String formatCsvValue(Object value) {
+        if (value == null) {
+            return "";
+        }
+        String s = String.valueOf(value);
+        if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0) {
+            return "\"" + s.replace("\"", "\"\"") + "\"";
+        }
+        return s;
     }
 
     private ExcursionVehicle findVehicleInExcursion(Long excursionId, String vehicleIdOrCode) {

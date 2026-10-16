@@ -21,5 +21,9 @@ public interface ExcursionPassengerRepository extends JpaRepository<ExcursionPas
 
     boolean existsByTicketCode(String ticketCode);
 
+    List<ExcursionPassenger> findByExcursionIdAndGroupNameAndActiveTrue(Long excursionId, String groupName);
+
     long countByExcursionIdAndActiveTrue(Long excursionId);
+
+    long countByExcursionId(Long excursionId);
 }
