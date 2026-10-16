@@ -181,4 +181,78 @@ public class ShoreExcursionController {
         return ApiResponse.ok("Xóa hành khách khỏi tour bờ thành công",
                 excursionService.removePassengerFromExcursion(id, passengerId));
     }
+
+    // ==========================================
+    // VEHICLE & GUIDE MANAGEMENT (KAN-177)
+    // ==========================================
+
+    @GetMapping("/{id}/vehicles")
+    public ApiResponse<List<ExcursionVehicleResponse>> getVehiclesByExcursion(@PathVariable Long id) {
+        return ApiResponse.ok("Lấy danh sách phương tiện tour bờ thành công",
+                excursionService.getVehiclesByExcursion(id));
+    }
+
+    @PostMapping("/{id}/vehicles")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<ShoreExcursionResponse> addVehicleToExcursion(
+            @PathVariable Long id,
+            @Valid @RequestBody AddExcursionVehicleRequest request
+    ) {
+        return ApiResponse.ok("Thêm phương tiện vào tour bờ thành công",
+                excursionService.addVehicleToExcursion(id, request));
+    }
+
+    @PatchMapping("/{id}/vehicles/{vehicleId}")
+    public ApiResponse<ShoreExcursionResponse> updateVehicleInExcursion(
+            @PathVariable Long id,
+            @PathVariable String vehicleId,
+            @RequestBody UpdateExcursionVehicleRequest request
+    ) {
+        return ApiResponse.ok("Cập nhật phương tiện tour bờ thành công",
+                excursionService.updateVehicleInExcursion(id, vehicleId, request));
+    }
+
+    @DeleteMapping("/{id}/vehicles/{vehicleId}")
+    public ApiResponse<ShoreExcursionResponse> removeVehicleFromExcursion(
+            @PathVariable Long id,
+            @PathVariable String vehicleId
+    ) {
+        return ApiResponse.ok("Xóa phương tiện khỏi tour bờ thành công",
+                excursionService.removeVehicleFromExcursion(id, vehicleId));
+    }
+
+    @GetMapping("/{id}/guides")
+    public ApiResponse<List<ExcursionGuideResponse>> getGuidesByExcursion(@PathVariable Long id) {
+        return ApiResponse.ok("Lấy danh sách hướng dẫn viên tour bờ thành công",
+                excursionService.getGuidesByExcursion(id));
+    }
+
+    @PostMapping("/{id}/guides")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<ShoreExcursionResponse> addGuideToExcursion(
+            @PathVariable Long id,
+            @Valid @RequestBody AddExcursionGuideRequest request
+    ) {
+        return ApiResponse.ok("Thêm hướng dẫn viên vào tour bờ thành công",
+                excursionService.addGuideToExcursion(id, request));
+    }
+
+    @PatchMapping("/{id}/guides/{guideId}")
+    public ApiResponse<ShoreExcursionResponse> updateGuideInExcursion(
+            @PathVariable Long id,
+            @PathVariable String guideId,
+            @RequestBody UpdateExcursionGuideRequest request
+    ) {
+        return ApiResponse.ok("Cập nhật hướng dẫn viên tour bờ thành công",
+                excursionService.updateGuideInExcursion(id, guideId, request));
+    }
+
+    @DeleteMapping("/{id}/guides/{guideId}")
+    public ApiResponse<ShoreExcursionResponse> removeGuideFromExcursion(
+            @PathVariable Long id,
+            @PathVariable String guideId
+    ) {
+        return ApiResponse.ok("Xóa hướng dẫn viên khỏi tour bờ thành công",
+                excursionService.removeGuideFromExcursion(id, guideId));
+    }
 }

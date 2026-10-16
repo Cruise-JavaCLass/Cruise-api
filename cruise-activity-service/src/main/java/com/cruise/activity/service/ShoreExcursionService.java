@@ -1,13 +1,16 @@
 package com.cruise.activity.service;
 
 import com.cruise.activity.dto.*;
+import com.cruise.activity.entity.ExcursionGuide;
 import com.cruise.activity.entity.ExcursionPassenger;
+import com.cruise.activity.entity.ExcursionVehicle;
 import com.cruise.activity.entity.ShoreExcursion;
-import com.cruise.activity.enums.ExcursionPassengerStatus;
-import com.cruise.activity.enums.ExcursionStatus;
+import com.cruise.activity.enums.*;
 import com.cruise.activity.exception.BusinessRuleException;
 import com.cruise.activity.exception.ResourceNotFoundException;
+import com.cruise.activity.repository.ExcursionGuideRepository;
 import com.cruise.activity.repository.ExcursionPassengerRepository;
+import com.cruise.activity.repository.ExcursionVehicleRepository;
 import com.cruise.activity.repository.ShoreExcursionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +27,7 @@ import java.util.Set;
 
 /**
  * Service quản lý Tour tham quan trên bờ (Shore Excursion)
- * Thực thi các quy tắc nghiệp vụ cấu hình Giá, Sức chứa, Lịch trình và Gán hành khách (KAN-168, KAN-176)
+ * Thực thi các quy tắc nghiệp vụ cấu hình Giá, Sức chứa, Lịch trình, Gán hành khách, Phương tiện và Hướng dẫn viên (KAN-168, KAN-176, KAN-177)
  */
 @Service
 @RequiredArgsConstructor
@@ -33,6 +36,8 @@ public class ShoreExcursionService {
 
     private final ShoreExcursionRepository excursionRepository;
     private final ExcursionPassengerRepository passengerRepository;
+    private final ExcursionVehicleRepository vehicleRepository;
+    private final ExcursionGuideRepository guideRepository;
 
     @Transactional
     public ShoreExcursionResponse createExcursion(CreateShoreExcursionRequest request) {
@@ -231,8 +236,7 @@ public class ShoreExcursionService {
     @Transactional(readOnly = true)
     public ShoreExcursionResponse getExcursionById(Long id) {
         ShoreExcursion excursion = findActiveExcursion(id);
-        List<ExcursionPassenger> passengers = passengerRepository != null ? passengerRepository.findByExcursionIdAndActiveTrue(id) : null;
-        return ShoreExcursionResponse.fromEntity(excursion, passengers);
+        return buildFullExcursionResponse(excursion);
     }
 
     @Transactional(readOnly = true)
@@ -397,7 +401,255 @@ public class ShoreExcursionService {
         List<ExcursionPassenger> remainingPassengers = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
         log.info("Removed passenger ID={} from excursion ID={}, RemainingParticipants={}",
                 passengerId, excursionId, updatedExcursion.getCurrentParticipants());
-        return ShoreExcursionResponse.fromEntity(updatedExcursion, remainingPassengers);
+        return buildFullExcursionResponse(updatedExcursion);
+    }
+
+    // ==========================================
+    // VEHICLE & GUIDE MANAGEMENT (KAN-177)
+    // ==========================================
+
+    @Transactional(readOnly = true)
+    public List<ExcursionVehicleResponse> getVehiclesByExcursion(Long excursionId) {
+        findActiveExcursion(excursionId);
+        return vehicleRepository.findByExcursionIdAndActiveTrue(excursionId)
+                .stream()
+                .map(ExcursionVehicleResponse::fromEntity)
+                .toList();
+    }
+
+    @Transactional
+    public ShoreExcursionResponse addVehicleToExcursion(Long excursionId, AddExcursionVehicleRequest request) {
+        ShoreExcursion excursion = findActiveExcursion(excursionId);
+
+        int capacity = request.getCapacity();
+        int assigned = request.getAssignedPassengers() != null ? request.getAssignedPassengers() : 0;
+        if (assigned < 0) {
+            throw new BusinessRuleException("Số lượng hành khách đã gán không được nhỏ hơn 0");
+        }
+        if (assigned > capacity) {
+            throw new BusinessRuleException(String.format("Số lượng hành khách đã gán (%d) không được vượt quá sức chứa phương tiện (%d)", assigned, capacity));
+        }
+
+        long count = vehicleRepository.countByExcursionId(excursionId) + 1;
+        String vehicleCode = String.format("VEH-%02d", count);
+
+        ExcursionVehicle vehicle = ExcursionVehicle.builder()
+                .excursionId(excursionId)
+                .vehicleCode(vehicleCode)
+                .licensePlate(request.getLicensePlate().trim())
+                .vehicleType(request.getVehicleType().trim())
+                .driverName(request.getDriverName().trim())
+                .driverPhone(request.getDriverPhone() != null ? request.getDriverPhone().trim() : null)
+                .capacity(capacity)
+                .assignedPassengers(assigned)
+                .status(request.getStatus() != null ? request.getStatus() : VehicleStatus.READY)
+                .operatorName(request.getOperatorName() != null ? request.getOperatorName().trim() : excursion.getLocalProvider())
+                .notes(request.getNotes())
+                .active(true)
+                .build();
+
+        vehicleRepository.save(vehicle);
+        log.info("Added vehicle '{}' ({}) to excursion ID={}", vehicle.getVehicleCode(), vehicle.getLicensePlate(), excursionId);
+        return buildFullExcursionResponse(excursion);
+    }
+
+    @Transactional
+    public ShoreExcursionResponse updateVehicleInExcursion(Long excursionId, String vehicleIdOrCode, UpdateExcursionVehicleRequest request) {
+        ShoreExcursion excursion = findActiveExcursion(excursionId);
+        ExcursionVehicle vehicle = findVehicleInExcursion(excursionId, vehicleIdOrCode);
+
+        if (request.getCapacity() != null && request.getCapacity() <= 0) {
+            throw new BusinessRuleException("Sức chứa phương tiện phải lớn hơn 0");
+        }
+        int effectiveCapacity = request.getCapacity() != null ? request.getCapacity() : vehicle.getCapacity();
+        int effectiveAssigned = request.getAssignedPassengers() != null ? request.getAssignedPassengers() : (vehicle.getAssignedPassengers() != null ? vehicle.getAssignedPassengers() : 0);
+
+        if (effectiveAssigned < 0) {
+            throw new BusinessRuleException("Số lượng hành khách đã gán không được nhỏ hơn 0");
+        }
+        if (effectiveAssigned > effectiveCapacity) {
+            throw new BusinessRuleException(String.format("Số lượng hành khách đã gán (%d) không được vượt quá sức chứa phương tiện (%d)", effectiveAssigned, effectiveCapacity));
+        }
+
+        if (request.getLicensePlate() != null && !request.getLicensePlate().isBlank()) {
+            vehicle.setLicensePlate(request.getLicensePlate().trim());
+        }
+        if (request.getVehicleType() != null && !request.getVehicleType().isBlank()) {
+            vehicle.setVehicleType(request.getVehicleType().trim());
+        }
+        if (request.getDriverName() != null && !request.getDriverName().isBlank()) {
+            vehicle.setDriverName(request.getDriverName().trim());
+        }
+        if (request.getDriverPhone() != null) {
+            vehicle.setDriverPhone(request.getDriverPhone().trim());
+        }
+        if (request.getCapacity() != null) {
+            vehicle.setCapacity(request.getCapacity());
+        }
+        if (request.getAssignedPassengers() != null) {
+            vehicle.setAssignedPassengers(request.getAssignedPassengers());
+        }
+        if (request.getStatus() != null) {
+            vehicle.setStatus(request.getStatus());
+        }
+        if (request.getOperatorName() != null) {
+            vehicle.setOperatorName(request.getOperatorName().trim());
+        }
+        if (request.getNotes() != null) {
+            vehicle.setNotes(request.getNotes());
+        }
+
+        vehicleRepository.save(vehicle);
+        log.info("Updated vehicle '{}' in excursion ID={}", vehicle.getVehicleCode(), excursionId);
+        return buildFullExcursionResponse(excursion);
+    }
+
+    @Transactional
+    public ShoreExcursionResponse removeVehicleFromExcursion(Long excursionId, String vehicleIdOrCode) {
+        ShoreExcursion excursion = findActiveExcursion(excursionId);
+        ExcursionVehicle vehicle = findVehicleInExcursion(excursionId, vehicleIdOrCode);
+
+        vehicle.setActive(false);
+        vehicleRepository.save(vehicle);
+        log.info("Removed vehicle '{}' from excursion ID={}", vehicle.getVehicleCode(), excursionId);
+        return buildFullExcursionResponse(excursion);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ExcursionGuideResponse> getGuidesByExcursion(Long excursionId) {
+        findActiveExcursion(excursionId);
+        return guideRepository.findByExcursionIdAndActiveTrue(excursionId)
+                .stream()
+                .map(ExcursionGuideResponse::fromEntity)
+                .toList();
+    }
+
+    @Transactional
+    public ShoreExcursionResponse addGuideToExcursion(Long excursionId, AddExcursionGuideRequest request) {
+        ShoreExcursion excursion = findActiveExcursion(excursionId);
+
+        long count = guideRepository.countByExcursionId(excursionId) + 1;
+        String guideCode = String.format("GUD-%02d", count);
+
+        String languagesStr = request.getLanguages() != null ? String.join(", ", request.getLanguages()) : null;
+
+        ExcursionGuide guide = ExcursionGuide.builder()
+                .excursionId(excursionId)
+                .guideCode(guideCode)
+                .fullName(request.getFullName().trim())
+                .phoneNumber(request.getPhoneNumber() != null ? request.getPhoneNumber().trim() : null)
+                .role(request.getRole() != null ? request.getRole() : GuideRole.LEAD)
+                .languages(languagesStr)
+                .licenseNumber(request.getLicenseNumber() != null ? request.getLicenseNumber().trim() : null)
+                .status(request.getStatus() != null ? request.getStatus() : GuideStatus.ACTIVE)
+                .rating(request.getRating() != null ? request.getRating() : 5.0)
+                .notes(request.getNotes())
+                .active(true)
+                .build();
+
+        guideRepository.save(guide);
+        log.info("Added guide '{}' ({}) to excursion ID={}", guide.getGuideCode(), guide.getFullName(), excursionId);
+        return buildFullExcursionResponse(excursion);
+    }
+
+    @Transactional
+    public ShoreExcursionResponse updateGuideInExcursion(Long excursionId, String guideIdOrCode, UpdateExcursionGuideRequest request) {
+        ShoreExcursion excursion = findActiveExcursion(excursionId);
+        ExcursionGuide guide = findGuideInExcursion(excursionId, guideIdOrCode);
+
+        if (request.getFullName() != null && !request.getFullName().isBlank()) {
+            guide.setFullName(request.getFullName().trim());
+        }
+        if (request.getPhoneNumber() != null) {
+            guide.setPhoneNumber(request.getPhoneNumber().trim());
+        }
+        if (request.getRole() != null) {
+            guide.setRole(request.getRole());
+        }
+        if (request.getLanguages() != null) {
+            guide.setLanguages(String.join(", ", request.getLanguages()));
+        }
+        if (request.getLicenseNumber() != null) {
+            guide.setLicenseNumber(request.getLicenseNumber().trim());
+        }
+        if (request.getStatus() != null) {
+            guide.setStatus(request.getStatus());
+        }
+        if (request.getRating() != null) {
+            guide.setRating(request.getRating());
+        }
+        if (request.getNotes() != null) {
+            guide.setNotes(request.getNotes());
+        }
+
+        guideRepository.save(guide);
+        log.info("Updated guide '{}' in excursion ID={}", guide.getGuideCode(), excursionId);
+        return buildFullExcursionResponse(excursion);
+    }
+
+    @Transactional
+    public ShoreExcursionResponse removeGuideFromExcursion(Long excursionId, String guideIdOrCode) {
+        ShoreExcursion excursion = findActiveExcursion(excursionId);
+        ExcursionGuide guide = findGuideInExcursion(excursionId, guideIdOrCode);
+
+        guide.setActive(false);
+        guideRepository.save(guide);
+        log.info("Removed guide '{}' from excursion ID={}", guide.getGuideCode(), excursionId);
+        return buildFullExcursionResponse(excursion);
+    }
+
+    private ExcursionVehicle findVehicleInExcursion(Long excursionId, String vehicleIdOrCode) {
+        if (vehicleIdOrCode == null || vehicleIdOrCode.isBlank()) {
+            throw new ResourceNotFoundException("ID hoặc mã phương tiện không được để trống");
+        }
+        var byCode = vehicleRepository.findByVehicleCodeAndExcursionIdAndActiveTrue(vehicleIdOrCode.trim(), excursionId);
+        if (byCode.isPresent()) {
+            return byCode.get();
+        }
+        try {
+            String trimmed = vehicleIdOrCode.trim();
+            if (trimmed.matches("\\d+")) {
+                long numId = Long.parseLong(trimmed);
+                var byId = vehicleRepository.findByIdAndExcursionIdAndActiveTrue(numId, excursionId);
+                if (byId.isPresent()) {
+                    return byId.get();
+                }
+            }
+        } catch (NumberFormatException ignored) {
+            // ignore
+        }
+        throw new ResourceNotFoundException(String.format("Không tìm thấy phương tiện với ID/Mã '%s' trong tour bờ ID: %d", vehicleIdOrCode, excursionId));
+    }
+
+    private ExcursionGuide findGuideInExcursion(Long excursionId, String guideIdOrCode) {
+        if (guideIdOrCode == null || guideIdOrCode.isBlank()) {
+            throw new ResourceNotFoundException("ID hoặc mã hướng dẫn viên không được để trống");
+        }
+        var byCode = guideRepository.findByGuideCodeAndExcursionIdAndActiveTrue(guideIdOrCode.trim(), excursionId);
+        if (byCode.isPresent()) {
+            return byCode.get();
+        }
+        try {
+            String trimmed = guideIdOrCode.trim();
+            if (trimmed.matches("\\d+")) {
+                long numId = Long.parseLong(trimmed);
+                var byId = guideRepository.findByIdAndExcursionIdAndActiveTrue(numId, excursionId);
+                if (byId.isPresent()) {
+                    return byId.get();
+                }
+            }
+        } catch (NumberFormatException ignored) {
+            // ignore
+        }
+        throw new ResourceNotFoundException(String.format("Không tìm thấy hướng dẫn viên với ID/Mã '%s' trong tour bờ ID: %d", guideIdOrCode, excursionId));
+    }
+
+    private ShoreExcursionResponse buildFullExcursionResponse(ShoreExcursion excursion) {
+        Long id = excursion.getId();
+        List<ExcursionPassenger> passengers = passengerRepository != null ? passengerRepository.findByExcursionIdAndActiveTrue(id) : null;
+        List<ExcursionVehicle> vehicles = vehicleRepository != null ? vehicleRepository.findByExcursionIdAndActiveTrue(id) : null;
+        List<ExcursionGuide> guides = guideRepository != null ? guideRepository.findByExcursionIdAndActiveTrue(id) : null;
+        return ShoreExcursionResponse.fromEntity(excursion, passengers, vehicles, guides);
     }
 
     public void validateSchedule(
