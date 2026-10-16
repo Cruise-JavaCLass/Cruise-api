@@ -1,10 +1,13 @@
 package com.cruise.activity.service;
 
 import com.cruise.activity.dto.*;
+import com.cruise.activity.entity.ExcursionPassenger;
 import com.cruise.activity.entity.ShoreExcursion;
+import com.cruise.activity.enums.ExcursionPassengerStatus;
 import com.cruise.activity.enums.ExcursionStatus;
 import com.cruise.activity.exception.BusinessRuleException;
 import com.cruise.activity.exception.ResourceNotFoundException;
+import com.cruise.activity.repository.ExcursionPassengerRepository;
 import com.cruise.activity.repository.ShoreExcursionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +24,7 @@ import java.util.Set;
 
 /**
  * Service quản lý Tour tham quan trên bờ (Shore Excursion)
- * Thực thi các quy tắc nghiệp vụ cấu hình Giá, Sức chứa và Lịch trình (KAN-168)
+ * Thực thi các quy tắc nghiệp vụ cấu hình Giá, Sức chứa, Lịch trình và Gán hành khách (KAN-168, KAN-176)
  */
 @Service
 @RequiredArgsConstructor
@@ -29,6 +32,7 @@ import java.util.Set;
 public class ShoreExcursionService {
 
     private final ShoreExcursionRepository excursionRepository;
+    private final ExcursionPassengerRepository passengerRepository;
 
     @Transactional
     public ShoreExcursionResponse createExcursion(CreateShoreExcursionRequest request) {
@@ -227,7 +231,8 @@ public class ShoreExcursionService {
     @Transactional(readOnly = true)
     public ShoreExcursionResponse getExcursionById(Long id) {
         ShoreExcursion excursion = findActiveExcursion(id);
-        return ShoreExcursionResponse.fromEntity(excursion);
+        List<ExcursionPassenger> passengers = passengerRepository != null ? passengerRepository.findByExcursionIdAndActiveTrue(id) : null;
+        return ShoreExcursionResponse.fromEntity(excursion, passengers);
     }
 
     @Transactional(readOnly = true)
@@ -273,6 +278,126 @@ public class ShoreExcursionService {
         excursion.setStatus(ExcursionStatus.CANCELLED);
         excursionRepository.save(excursion);
         log.info("Soft-deleted shore excursion ID={}", id);
+    }
+
+    // ==========================================
+    // PASSENGER ASSIGNMENT TO EXCURSION GROUPS (KAN-176)
+    // ==========================================
+
+    @Transactional(readOnly = true)
+    public List<ExcursionPassengerResponse> getPassengersByExcursion(Long excursionId) {
+        findActiveExcursion(excursionId);
+        return passengerRepository.findByExcursionIdAndActiveTrue(excursionId)
+                .stream()
+                .map(ExcursionPassengerResponse::fromEntity)
+                .toList();
+    }
+
+    @Transactional
+    public ShoreExcursionResponse addPassengerToExcursion(Long excursionId, AddExcursionPassengerRequest request) {
+        ShoreExcursion excursion = findActiveExcursion(excursionId);
+
+        if (excursion.getStatus() == ExcursionStatus.CANCELLED || excursion.getStatus() == ExcursionStatus.COMPLETED) {
+            throw new BusinessRuleException("Không thể thêm hành khách vào tour bờ đã hủy hoặc đã hoàn thành");
+        }
+
+        if (excursion.getCurrentParticipants() >= excursion.getMaxCapacity()) {
+            throw new BusinessRuleException(String.format("Tour đã đạt sức chứa tối đa (%d khách)", excursion.getMaxCapacity()));
+        }
+
+        String ticketCode = request.getTicketCode();
+        if (ticketCode == null || ticketCode.isBlank()) {
+            long count = passengerRepository.countByExcursionIdAndActiveTrue(excursionId) + 1;
+            ticketCode = String.format("EXC-TKT-%d-%03d", excursionId, count);
+        } else if (passengerRepository.existsByTicketCode(ticketCode.trim())) {
+            throw new BusinessRuleException("Mã vé tour bờ '" + ticketCode.trim() + "' đã tồn tại trên hệ thống");
+        }
+
+        ExcursionPassenger passenger = ExcursionPassenger.builder()
+                .excursionId(excursionId)
+                .passengerName(request.getPassengerName().trim())
+                .cabinNumber(request.getCabinNumber().trim())
+                .ticketCode(ticketCode.trim())
+                .busNumber(request.getBusNumber() != null ? request.getBusNumber().trim() : null)
+                .groupName(request.getGroupName() != null ? request.getGroupName().trim() : null)
+                .emergencyPhone(request.getEmergencyPhone() != null ? request.getEmergencyPhone().trim() : null)
+                .status(request.getStatus() != null ? request.getStatus() : ExcursionPassengerStatus.REGISTERED)
+                .specialRequirements(request.getSpecialRequirements())
+                .active(true)
+                .build();
+
+        passengerRepository.save(passenger);
+
+        excursion.setCurrentParticipants(excursion.getCurrentParticipants() + 1);
+        ShoreExcursion updatedExcursion = excursionRepository.save(excursion);
+
+        List<ExcursionPassenger> passengers = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
+        log.info("Added passenger '{}' to excursion ID={}, CurrentParticipants={}/{}",
+                passenger.getPassengerName(), excursionId, updatedExcursion.getCurrentParticipants(), updatedExcursion.getMaxCapacity());
+        return ShoreExcursionResponse.fromEntity(updatedExcursion, passengers);
+    }
+
+    @Transactional
+    public ShoreExcursionResponse assignPassengerToGroup(Long excursionId, Long passengerId, AssignPassengerGroupRequest request) {
+        ShoreExcursion excursion = findActiveExcursion(excursionId);
+
+        ExcursionPassenger passenger = passengerRepository.findByIdAndExcursionIdAndActiveTrue(passengerId, excursionId)
+                .orElseThrow(() -> new ResourceNotFoundException(String.format("Không tìm thấy hành khách với ID: %d trong tour bờ ID: %d", passengerId, excursionId)));
+
+        passenger.setGroupName(request.getGroupName().trim());
+        if (request.getBusNumber() != null) {
+            passenger.setBusNumber(request.getBusNumber().trim());
+        }
+        passengerRepository.save(passenger);
+
+        List<ExcursionPassenger> passengers = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
+        log.info("Assigned passenger ID={} in excursion ID={} to group='{}', bus='{}'",
+                passengerId, excursionId, request.getGroupName(), request.getBusNumber());
+        return ShoreExcursionResponse.fromEntity(excursion, passengers);
+    }
+
+    @Transactional
+    public ShoreExcursionResponse bulkAssignPassengersToGroup(Long excursionId, BulkAssignPassengerGroupRequest request) {
+        ShoreExcursion excursion = findActiveExcursion(excursionId);
+
+        List<ExcursionPassenger> targetPassengers = passengerRepository.findByExcursionIdAndIdInAndActiveTrue(excursionId, request.getPassengerIds());
+        if (targetPassengers.isEmpty()) {
+            throw new BusinessRuleException("Không tìm thấy hành khách hợp lệ nào trong tour bờ để gán nhóm");
+        }
+
+        for (ExcursionPassenger p : targetPassengers) {
+            p.setGroupName(request.getGroupName().trim());
+            if (request.getBusNumber() != null) {
+                p.setBusNumber(request.getBusNumber().trim());
+            }
+        }
+        passengerRepository.saveAll(targetPassengers);
+
+        List<ExcursionPassenger> allPassengers = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
+        log.info("Bulk-assigned {} passengers in excursion ID={} to group='{}', bus='{}'",
+                targetPassengers.size(), excursionId, request.getGroupName(), request.getBusNumber());
+        return ShoreExcursionResponse.fromEntity(excursion, allPassengers);
+    }
+
+    @Transactional
+    public ShoreExcursionResponse removePassengerFromExcursion(Long excursionId, Long passengerId) {
+        ShoreExcursion excursion = findActiveExcursion(excursionId);
+
+        ExcursionPassenger passenger = passengerRepository.findByIdAndExcursionIdAndActiveTrue(passengerId, excursionId)
+                .orElseThrow(() -> new ResourceNotFoundException(String.format("Không tìm thấy hành khách với ID: %d trong tour bờ ID: %d", passengerId, excursionId)));
+
+        passenger.setActive(false);
+        passengerRepository.save(passenger);
+
+        if (excursion.getCurrentParticipants() > 0) {
+            excursion.setCurrentParticipants(excursion.getCurrentParticipants() - 1);
+        }
+        ShoreExcursion updatedExcursion = excursionRepository.save(excursion);
+
+        List<ExcursionPassenger> remainingPassengers = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
+        log.info("Removed passenger ID={} from excursion ID={}, RemainingParticipants={}",
+                passengerId, excursionId, updatedExcursion.getCurrentParticipants());
+        return ShoreExcursionResponse.fromEntity(updatedExcursion, remainingPassengers);
     }
 
     public void validateSchedule(

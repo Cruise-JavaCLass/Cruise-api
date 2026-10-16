@@ -133,4 +133,52 @@ public class ShoreExcursionController {
         excursionService.deleteExcursion(id);
         return ApiResponse.ok("Xóa tour bờ thành công", null);
     }
+
+    // ==========================================
+    // PASSENGER ASSIGNMENT TO EXCURSION GROUPS (KAN-176)
+    // ==========================================
+
+    @GetMapping("/{id}/passengers")
+    public ApiResponse<List<ExcursionPassengerResponse>> getExcursionPassengers(@PathVariable Long id) {
+        return ApiResponse.ok("Lấy danh sách hành khách tour bờ thành công",
+                excursionService.getPassengersByExcursion(id));
+    }
+
+    @PostMapping("/{id}/passengers")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<ShoreExcursionResponse> addPassengerToExcursion(
+            @PathVariable Long id,
+            @Valid @RequestBody AddExcursionPassengerRequest request
+    ) {
+        return ApiResponse.ok("Thêm hành khách vào tour bờ thành công",
+                excursionService.addPassengerToExcursion(id, request));
+    }
+
+    @PatchMapping("/{id}/passengers/{passengerId}/group")
+    public ApiResponse<ShoreExcursionResponse> assignPassengerToGroup(
+            @PathVariable Long id,
+            @PathVariable Long passengerId,
+            @Valid @RequestBody AssignPassengerGroupRequest request
+    ) {
+        return ApiResponse.ok("Gán đoàn/xe cho hành khách thành công",
+                excursionService.assignPassengerToGroup(id, passengerId, request));
+    }
+
+    @PatchMapping("/{id}/passengers/bulk-group")
+    public ApiResponse<ShoreExcursionResponse> bulkAssignPassengersToGroup(
+            @PathVariable Long id,
+            @Valid @RequestBody BulkAssignPassengerGroupRequest request
+    ) {
+        return ApiResponse.ok("Gán đoàn/xe hàng loạt cho hành khách thành công",
+                excursionService.bulkAssignPassengersToGroup(id, request));
+    }
+
+    @DeleteMapping("/{id}/passengers/{passengerId}")
+    public ApiResponse<ShoreExcursionResponse> removePassengerFromExcursion(
+            @PathVariable Long id,
+            @PathVariable Long passengerId
+    ) {
+        return ApiResponse.ok("Xóa hành khách khỏi tour bờ thành công",
+                excursionService.removePassengerFromExcursion(id, passengerId));
+    }
 }
