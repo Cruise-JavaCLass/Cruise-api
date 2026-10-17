@@ -10,7 +10,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -254,5 +256,43 @@ public class ShoreExcursionController {
     ) {
         return ApiResponse.ok("Xóa hướng dẫn viên khỏi tour bờ thành công",
                 excursionService.removeGuideFromExcursion(id, guideId));
+    }
+
+    /**
+     * Tra cứu danh sách hành khách phân nhóm theo từng đoàn/xe (KAN-178)
+     */
+    @GetMapping("/{id}/groups/manifest")
+    public ApiResponse<ExcursionManifestSummaryResponse> getPassengerListsByGroup(@PathVariable Long id) {
+        return ApiResponse.ok("Lấy danh sách phân nhóm hành khách tour bờ thành công",
+                excursionService.getPassengerListsByGroup(id));
+    }
+
+    /**
+     * Tự động sinh và phân bổ nhóm / xe cho hành khách tour bờ (KAN-178)
+     */
+    @PostMapping("/{id}/groups/auto-generate")
+    public ApiResponse<ExcursionManifestSummaryResponse> autoGeneratePassengerGroups(
+            @PathVariable Long id,
+            @Valid @RequestBody(required = false) AutoGenerateGroupsRequest request
+    ) {
+        return ApiResponse.ok("Tự động sinh và phân bổ nhóm hành khách thành công",
+                excursionService.autoGeneratePassengerGroups(id, request));
+    }
+
+    /**
+     * Xuất danh sách hành khách theo nhóm dạng CSV (KAN-178)
+     */
+    @GetMapping(value = "/{id}/groups/export/csv", produces = "text/csv; charset=UTF-8")
+    public ResponseEntity<byte[]> exportPassengerGroupsCsv(
+            @PathVariable Long id,
+            @RequestParam(required = false) String groupName
+    ) {
+        byte[] csvData = excursionService.exportPassengerGroupsCsv(id, groupName);
+        String fileName = String.format("excursion_%d_passenger_groups.csv", id);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+                .header(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
+                .body(csvData);
     }
 }

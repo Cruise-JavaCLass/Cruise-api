@@ -624,6 +624,16 @@ Cung cấp bộ REST API hoàn chỉnh, các quy tắc nghiệp vụ chặt ch�
   - **`ExcursionLogisticsUnitTest` (27 tests — KAN-177):** Kiểm thử nghiệp vụ quản lý phương tiện và hướng dẫn viên (tự sinh mã, cập nhật thông tin, xác thực sức chứa và hành khách gán, soft-delete, tra cứu ID số).
   - **`ExcursionLogisticsApiTest` (8 tests — KAN-177):** Kiểm thử tích hợp REST API CRUD phương tiện và hướng dẫn viên trên cơ sở dữ liệu thật.
 
+### 6.12. Phân nhóm Tự động và Xuất Danh sách Hành khách theo Đoàn (Passenger Group Generation & Manifest — KAN-178):
+Cung cấp bộ REST API, thuật toán phân bổ hành khách tự động và xuất dữ liệu báo cáo hỗ trợ điều hành tour bờ:
+* **Endpoints Quản lý Danh sách Hành khách theo Nhóm (KAN-178):**
+  - **`GET /api/excursions/{id}/groups/manifest`**: Lấy danh sách hành khách phân nhóm kèm thông tin xe, hướng dẫn viên và thống kê trạng thái (`totalPassengers`, `checkedInCount`, `onTourCount`, `returnedSafeCount`, `pendingCount`) (`200 OK`).
+  - **`POST /api/excursions/{id}/groups/auto-generate`**: Tự động sinh nhóm và phân bổ lại toàn bộ hành khách đang hoạt động vào các xe khả dụng hoặc theo số lượng nhóm mục tiêu (`targetGroupCount`, `maxPassengersPerGroup`, `groupPrefix`, `autoAssignVehicles`) (`200 OK`).
+  - **`GET /api/excursions/{id}/groups/export/csv`**: Xuất danh sách hành khách theo từng đoàn/xe ra định dạng file CSV tương thích Microsoft Excel (sử dụng UTF-8 BOM `\ufeff`, chuẩn hóa dấu phẩy, ngoặc kép và xuống dòng; hỗ trợ tham số lọc `?groupName=...`) (`200 OK`).
+* **Bộ Kiểm thử Tự động KAN-178:**
+  - **`ExcursionGroupGenerationUnitTest` (11 tests — KAN-178):** Kiểm thử độc lập tầng Service cho việc phân nhóm, tự động sinh nhóm theo cấu hình, xử lý danh sách rỗng, xuất CSV chuẩn UTF-8 BOM, phòng chống tấn công CSV Injection và kiểm thử DTOs.
+  - **`ExcursionGroupGenerationApiTest` (6 tests — KAN-178):** Kiểm thử tích hợp REST API End-to-End cho cả 3 endpoint (`manifest`, `auto-generate`, `export/csv`), kiểm tra status code 200/404, định dạng header CSV và cấu trúc JSON trả về.
+
 ---
 
 ## 7. Tài liệu đặc tả nghiệp vụ
