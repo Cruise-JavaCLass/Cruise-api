@@ -30,11 +30,11 @@ jobs:
     # Trigger when:
     # 1. Manual trigger with inputs.issue_number
     # 2. An issue is labeled with 'jules' or 'ai-fix'
-    # 3. An issue comment mentions '@jules'
+    # 3. An issue comment (not PR) mentions '@jules'
     if: >
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'issues' && (contains(github.event.issue.labels.*.name, 'jules') || contains(github.event.issue.labels.*.name, 'ai-fix'))) ||
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@jules'))
+      (github.event_name == 'issues' && (github.event.label.name == 'jules' || github.event.label.name == 'ai-fix')) ||
+      (github.event_name == 'issue_comment' && !github.event.issue.pull_request && contains(github.event.comment.body, '@jules'))
 
     steps:
       - name: Checkout Repository

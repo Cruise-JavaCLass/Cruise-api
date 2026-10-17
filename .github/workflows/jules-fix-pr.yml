@@ -64,14 +64,28 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Resolve PR head branch
+        if: github.event_name == 'issue_comment'
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REF=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}" \
+            --jq 'select(.head.repo.full_name == "${{ github.repository }}") | .head.ref')
+          if [ -z "$REF" ]; then
+            echo "PR branch not found or PR is from an external fork. Exiting."
+            exit 1
+          fi
+          echo "branch=$REF" >> "$GITHUB_OUTPUT"
+
       - name: Resolve PR Information and Trigger Jules
         env:
           JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ inputs.pr_number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number }}
-          PR_BRANCH: ${{ inputs.pr_branch || github.event.workflow_run.head_branch }}
-          FAILURE_TYPE: ${{ inputs.failure_type || 'ci-failure-or-review' }}
+          PR_BRANCH: ${{ inputs.pr_branch || steps.pr.outputs.branch || github.event.workflow_run.head_branch }}
+          FAILURE_TYPE: ${{ inputs.failure_type || (github.event_name == 'issue_comment' && 'user-comment-request') || 'ci-failure-or-review' }}
           FAILURE_DETAILS: ${{ github.event.comment.body || format('Workflow {0} (Run ID {1}) failed on branch {2}', github.event.workflow_run.name, github.event.workflow_run.id, github.event.workflow_run.head_branch) }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: node .github/scripts/run-fix-pr.mjs
