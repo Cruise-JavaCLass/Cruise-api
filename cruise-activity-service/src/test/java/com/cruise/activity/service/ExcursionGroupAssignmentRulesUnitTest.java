@@ -467,6 +467,32 @@ class ExcursionGroupAssignmentRulesUnitTest {
                 assertThat(samplePassengers.get(i).getGroupName()).isEqualTo("Group " + (i + 1));
             }
         }
+
+        @Test
+        @DisplayName("Quy tắc 6: Từ chối phân bổ tự động khi số lượng khách vượt quá sức chứa tối đa của phương tiện")
+        void autoGenerate_VehicleCapacityExceeded_ThrowsBusinessRuleException() {
+            // Xe 1 chỉ chứa được 2 khách (capacity = 2), nhưng có 6 khách chia 2 xe => Xe 1 nhận 3 khách > 2
+            ExcursionVehicle smallVehicle = ExcursionVehicle.builder()
+                    .excursionId(200L)
+                    .vehicleCode("VEH-SMALL")
+                    .licensePlate("51B-999.99")
+                    .capacity(2)
+                    .active(true)
+                    .build();
+            smallVehicle.setId(99L);
+
+            AutoGenerateGroupsRequest request = AutoGenerateGroupsRequest.builder()
+                    .autoAssignVehicles(true)
+                    .build();
+
+            when(excursionRepository.findById(200L)).thenReturn(Optional.of(mockExcursion));
+            when(passengerRepository.findByExcursionIdAndActiveTrue(200L)).thenReturn(samplePassengers); // 6 khách
+            when(vehicleRepository.findByExcursionIdAndActiveTrue(200L)).thenReturn(List.of(smallVehicle));
+
+            assertThatThrownBy(() -> excursionService.autoGeneratePassengerGroups(200L, request))
+                    .isInstanceOf(BusinessRuleException.class)
+                    .hasMessageContaining("Số lượng hành khách đã gán vượt quá sức chứa phương tiện");
+        }
     }
 
     // =========================================================================

@@ -717,6 +717,17 @@ public class ShoreExcursionService {
         String prefix = rawPrefix + " ";
         boolean assignVehicles = request == null || Boolean.TRUE.equals(request.getAutoAssignVehicles());
 
+        if (assignVehicles && !vehicles.isEmpty()) {
+            int[] assignedPerVehicle = new int[vehicles.size()];
+            for (int i = 0; i < eligible.size(); i++) {
+                int vehicleIndex = i % vehicles.size();
+                Integer capacity = vehicles.get(vehicleIndex).getCapacity();
+                if (capacity == null || ++assignedPerVehicle[vehicleIndex] > capacity) {
+                    throw new BusinessRuleException("Số lượng hành khách đã gán vượt quá sức chứa phương tiện");
+                }
+            }
+        }
+
         for (int i = 0; i < eligible.size(); i++) {
             ExcursionPassenger p = eligible.get(i);
             int groupIndex = (i % targetGroups) + 1;
