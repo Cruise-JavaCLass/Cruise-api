@@ -9,7 +9,8 @@ import {
   checkDuplicateSession,
   generateAuditPrompt,
   createSession,
-  writeStepSummary
+  writeStepSummary,
+  sanitizeLog
 } from './jules-client.mjs';
 
 /**
@@ -33,15 +34,15 @@ async function main() {
   const scope = (process.env.AUDIT_SCOPE || 'full').toLowerCase().trim();
   const defaultBranch = process.env.DEFAULT_BRANCH || 'main';
 
-  console.log(`Repository: ${repoOwner}/${repoName}`);
-  console.log(`Audit Scope: ${scope}`);
-  console.log(`Target Branch: ${defaultBranch}`);
+  console.log(sanitizeLog(`Repository: ${repoOwner}/${repoName}`));
+  console.log(sanitizeLog(`Audit Scope: ${scope}`));
+  console.log(sanitizeLog(`Target Branch: ${defaultBranch}`));
 
   // Step 1: Discover connected Jules source
   console.log('Discovering connected Jules source via Sources API...');
   const { sourceName, defaultBranch: discoveredBranch } = await discoverSource(apiKey, repoOwner, repoName);
   const startingBranch = defaultBranch || discoveredBranch || 'main';
-  console.log(`Discovered source: "${sourceName}" (Starting branch: "${startingBranch}")`);
+  console.log(sanitizeLog(`Discovered source: "${sourceName}" (Starting branch: "${startingBranch}")`));
 
   // Step 2: Check for duplicate audit in the last 24 hours
   console.log('Checking for recent duplicate audit sessions...');
@@ -52,7 +53,7 @@ async function main() {
 
   if (isDuplicate && existingSession && process.env.FORCE_AUDIT !== 'true') {
     const msg = `Skipping duplicate audit session. A recent session "${existingSession.title || existingSession.name}" already exists (${existingSession.state}) created at ${existingSession.createTime}. Set FORCE_AUDIT=true to override.`;
-    console.log(msg);
+    console.log(sanitizeLog(msg));
     writeStepSummary(`### ⏭️ Jules Repository Audit Skipped
 - **Reason:** Duplicate session detected within the last 24 hours.
 - **Existing Session:** [${existingSession.title || existingSession.id}](${existingSession.url || '#'})
@@ -78,9 +79,9 @@ async function main() {
     automationMode: 'AUTO_CREATE_PR'
   });
 
-  console.log(`Successfully created Jules session! ID: ${session.id || session.name}`);
+  console.log(sanitizeLog(`Successfully created Jules session! ID: ${session.id || session.name}`));
   const sessionUrl = session.url || `https://jules.google.com/session/${session.id || ''}`;
-  console.log(`Session URL: ${sessionUrl}`);
+  console.log(sanitizeLog(`Session URL: ${sessionUrl}`));
 
   // Step 5: Output GitHub Step Summary
   writeStepSummary(`### 🚀 Google Jules Repository Audit Launched
@@ -100,7 +101,7 @@ async function main() {
 }
 
 main().catch(err => {
-  console.error(`Error executing Jules audit: ${err.message}`);
+  console.error(sanitizeLog(`Error executing Jules audit: ${err.message}`));
   writeStepSummary(`### ❌ Jules Audit Execution Failed
 \`\`\`
 ${err.message}
