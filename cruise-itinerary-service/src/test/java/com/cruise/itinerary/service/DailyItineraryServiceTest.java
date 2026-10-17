@@ -326,4 +326,30 @@ class DailyItineraryServiceTest {
         assertThat(response.getPortName()).isEqualTo("Cảng thay thế Cát Bà");
         assertThat(response.getIsAffected()).isTrue();
     }
+
+    @Test
+    @DisplayName("getDailyItineraryByDayNumber - Lấy lịch trình theo số thứ tự ngày thành công (KAN-205, KAN-208)")
+    void getDailyItineraryByDayNumberSuccess() {
+        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
+        when(dailyItineraryRepository.findByTourIdAndDayNumberAndActiveTrue(10L, 1))
+                .thenReturn(Optional.of(sampleItinerary));
+
+        DailyItineraryResponse response = dailyItineraryService.getDailyItineraryByDayNumber(10L, 1);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getDayNumber()).isEqualTo(1);
+        assertThat(response.getTitle()).isEqualTo("Khởi hành");
+    }
+
+    @Test
+    @DisplayName("getDailyItineraryByDayNumber - Báo lỗi 404 khi không tìm thấy ngày (KAN-208)")
+    void getDailyItineraryByDayNumberNotFound() {
+        when(tourRepository.findById(10L)).thenReturn(Optional.of(sampleTour));
+        when(dailyItineraryRepository.findByTourIdAndDayNumberAndActiveTrue(10L, 99))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> dailyItineraryService.getDailyItineraryByDayNumber(10L, 99))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Không tìm thấy lịch trình cho ngày 99");
+    }
 }

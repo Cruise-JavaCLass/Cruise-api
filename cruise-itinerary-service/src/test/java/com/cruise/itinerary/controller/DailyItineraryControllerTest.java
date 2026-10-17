@@ -142,6 +142,36 @@ class DailyItineraryControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/itinerary/tours/{tourId}/daily/day/{dayNumber} - Lấy chi tiết lịch trình theo số thứ tự ngày (KAN-205)")
+    void getDailyItineraryByDayNumberSuccess() throws Exception {
+        DailyItineraryResponse item = DailyItineraryResponse.builder()
+                .id(1L)
+                .tourId(10L)
+                .dayNumber(2)
+                .itineraryDate(LocalDate.of(2026, 11, 2))
+                .title("Cập cảng Chân Mây - Huế / Đà Nẵng")
+                .portName("Cảng Chân Mây")
+                .arrivalTime(LocalTime.of(8, 0))
+                .allAboardTime(LocalTime.of(17, 30))
+                .departureTime(LocalTime.of(18, 0))
+                .isSeaDay(false)
+                .build();
+
+        when(dailyItineraryService.getDailyItineraryByDayNumber(10L, 2)).thenReturn(item);
+
+        mockMvc.perform(get("/api/itinerary/tours/10/daily/day/2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(1))
+                .andExpect(jsonPath("$.data.dayNumber").value(2))
+                .andExpect(jsonPath("$.data.portName").value("Cảng Chân Mây"))
+                .andExpect(jsonPath("$.data.arrivalTime").value("08:00"))
+                .andExpect(jsonPath("$.data.allAboardTime").value("17:30"))
+                .andExpect(jsonPath("$.data.departureTime").value("18:00"))
+                .andExpect(jsonPath("$.data.isSeaDay").value(false));
+    }
+
+    @Test
     @DisplayName("DELETE /api/itinerary/tours/{tourId}/daily/{id} - Xóa lịch trình ngày")
     void deleteDailyItinerarySuccess() throws Exception {
         doNothing().when(dailyItineraryService).deleteDailyItinerary(10L, 1L);

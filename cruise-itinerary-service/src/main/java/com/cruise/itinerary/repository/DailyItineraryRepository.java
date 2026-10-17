@@ -17,5 +17,7 @@ public interface DailyItineraryRepository extends JpaRepository<DailyItinerary, 
 
     boolean existsByTourIdAndDayNumberAndActiveTrue(Long tourId, Integer dayNumber);
 
+    Optional<DailyItinerary> findByTourIdAndDayNumberAndActiveTrue(Long tourId, Integer dayNumber);
+
     List<DailyItinerary> findByTourIdAndItineraryDateAndActiveTrue(Long tourId, LocalDate itineraryDate);
 }
