@@ -386,6 +386,35 @@ class ExcursionGroupGenerationUnitTest {
             assertThat(csv).contains("\"Trần \"\"Vip\"\", Hải\"");
             assertThat(csv).contains("\"Bus, Special\"");
         }
+
+        @Test
+        @DisplayName("Kiểm tra phòng chống tấn công CSV Injection (ký tự =, +, -, @ được prefix với dấu nháy đơn)")
+        void exportPassengerGroupsCsv_FormulaInjection_PrefixedWithSingleQuote() {
+            ExcursionPassenger injectionPassenger = ExcursionPassenger.builder()
+                    .excursionId(300L)
+                    .passengerName("=cmd|'/C calc'!A0")
+                    .cabinNumber("+84001")
+                    .ticketCode("-EXC-TKT")
+                    .groupName("@AdminGroup")
+                    .busNumber("Bus-01")
+                    .specialRequirements("@calc")
+                    .status(ExcursionPassengerStatus.REGISTERED)
+                    .active(true)
+                    .build();
+
+            when(excursionRepository.findById(300L)).thenReturn(Optional.of(mockExcursion));
+            when(passengerRepository.findByExcursionIdAndActiveTrue(300L)).thenReturn(List.of(injectionPassenger));
+            when(vehicleRepository.findByExcursionIdAndActiveTrue(300L)).thenReturn(List.of());
+            when(guideRepository.findByExcursionIdAndActiveTrue(300L)).thenReturn(List.of());
+
+            byte[] csvBytes = excursionService.exportPassengerGroupsCsv(300L, null);
+            String csv = new String(csvBytes, StandardCharsets.UTF_8);
+
+            assertThat(csv).contains("'=cmd|'/C calc'!A0");
+            assertThat(csv).contains("'+84001");
+            assertThat(csv).contains("'-EXC-TKT");
+            assertThat(csv).contains("'@AdminGroup");
+        }
     }
 
     @Nested

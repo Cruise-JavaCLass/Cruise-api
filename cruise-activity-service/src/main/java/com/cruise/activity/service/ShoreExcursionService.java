@@ -706,6 +706,10 @@ public class ShoreExcursionService {
             targetGroups = Math.max(1, (int) Math.ceil((double) eligible.size() / 25.0));
         }
 
+        if (request != null && request.getMaxPassengersPerGroup() != null && request.getMaxPassengersPerGroup() > 0) {
+            int minimumGroups = (int) Math.ceil((double) eligible.size() / request.getMaxPassengersPerGroup());
+            targetGroups = Math.max(targetGroups, minimumGroups);
+        }
         targetGroups = Math.min(targetGroups, eligible.size());
         String rawPrefix = (request != null && request.getGroupPrefix() != null && !request.getGroupPrefix().isBlank())
                 ? request.getGroupPrefix().trim()
@@ -764,6 +768,9 @@ public class ShoreExcursionService {
             return "";
         }
         String s = String.valueOf(value);
+        if (!s.isEmpty() && "=+-@\t\r".indexOf(s.charAt(0)) >= 0) {
+            s = "'" + s;
+        }
         if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0) {
             return "\"" + s.replace("\"", "\"\"") + "\"";
         }
