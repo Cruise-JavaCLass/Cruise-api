@@ -214,6 +214,25 @@ class ExcursionStatusUpdatesIntegrationTest {
         @Test
         @DisplayName("Lọc danh sách tour bờ theo trạng thái tour /api/excursions/tour/{tourId}/status/{status}")
         void shouldFilterExcursionsByStatus() throws Exception {
+            // Tạo excursion SCHEDULED ở tourId khác (99L) để đảm bảo filter theo đúng tourId 10L
+            ShoreExcursion otherTourExcursion = ShoreExcursion.builder()
+                    .tourId(99L)
+                    .portId(20L)
+                    .portName("Cảng Phú Quốc")
+                    .meetingPoint("Cầu tàu số 2")
+                    .dayNumber(3)
+                    .title("Other Tour Excursion")
+                    .status(ExcursionStatus.SCHEDULED)
+                    .excursionDate(LocalDate.of(2026, 11, 26))
+                    .price(BigDecimal.valueOf(500000))
+                    .maxCapacity(20)
+                    .gatheringTime(LocalTime.of(8, 0))
+                    .departureTime(LocalTime.of(8, 30))
+                    .returnToShipTime(LocalTime.of(12, 0))
+                    .active(true)
+                    .build();
+            excursionRepository.save(otherTourExcursion);
+
             mockMvc.perform(get("/api/excursions/tour/10/status/SCHEDULED"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))

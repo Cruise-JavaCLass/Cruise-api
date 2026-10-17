@@ -134,13 +134,20 @@ class ExcursionStatusTransitionsUnitTest {
                 "SCHEDULED, COMPLETED",
                 "OPEN_FOR_BOOKING, COMPLETED",
                 "OPEN_FOR_BOOKING, SCHEDULED",
+                "DELAYED, SCHEDULED",
+                "DELAYED, COMPLETED",
+                "IN_PROGRESS, SCHEDULED",
+                "IN_PROGRESS, OPEN_FOR_BOOKING",
+                "IN_PROGRESS, DELAYED",
+                "CANCELLED, OPEN_FOR_BOOKING",
+                "CANCELLED, DELAYED",
+                "CANCELLED, IN_PROGRESS",
+                "CANCELLED, COMPLETED",
                 "COMPLETED, SCHEDULED",
                 "COMPLETED, OPEN_FOR_BOOKING",
                 "COMPLETED, IN_PROGRESS",
                 "COMPLETED, DELAYED",
-                "COMPLETED, CANCELLED",
-                "CANCELLED, IN_PROGRESS",
-                "CANCELLED, COMPLETED"
+                "COMPLETED, CANCELLED"
         })
         void shouldRejectDisallowedTransitions(ExcursionStatus from, ExcursionStatus to) {
             assertThat(from.canTransitionTo(to)).isFalse();
