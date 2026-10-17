@@ -35,6 +35,13 @@
 			${project.basedir}/cruise-activity-service/target/site/jacoco/jacoco.xml,
 			${project.basedir}/cruise-pos-service/target/site/jacoco/jacoco.xml,
 			${project.basedir}/target/site/jacoco/jacoco.xml
+			${maven.multiModuleProjectDirectory}/cruise-common/target/site/jacoco/jacoco.xml,
+			${maven.multiModuleProjectDirectory}/cruise-gateway/target/site/jacoco/jacoco.xml,
+			${maven.multiModuleProjectDirectory}/cruise-auth-service/target/site/jacoco/jacoco.xml,
+			${maven.multiModuleProjectDirectory}/cruise-itinerary-service/target/site/jacoco/jacoco.xml,
+			${maven.multiModuleProjectDirectory}/cruise-activity-service/target/site/jacoco/jacoco.xml,
+			${maven.multiModuleProjectDirectory}/cruise-pos-service/target/site/jacoco/jacoco.xml,
+			${maven.multiModuleProjectDirectory}/target/site/jacoco/jacoco.xml
 		</sonar.coverage.jacoco.xmlReportPaths>
 	</properties>
 
