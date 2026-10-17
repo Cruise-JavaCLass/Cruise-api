@@ -23,11 +23,24 @@ public class UserController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<User>> createUser(@RequestBody User user) {
+    public ResponseEntity<ApiResponse<com.cruise.auth.dto.UserResponseDto>> createUser(@RequestBody com.cruise.auth.dto.UserDto userDto) {
         try {
+            User user = new User();
+            user.setUsername(userDto.getUsername());
+            user.setPassword(userDto.getPassword());
+            user.setFullName(userDto.getFullName());
+            user.setEmail(userDto.getEmail());
+            user.setRole(userDto.getRole());
+            user.setCabinNumber(userDto.getCabinNumber());
+            user.setRfidTag(userDto.getRfidTag());
+            if (userDto.getActive() != null) {
+                user.setActive(userDto.getActive());
+            }
+
             User created = userService.registerUser(user);
+            com.cruise.auth.dto.UserResponseDto responseDto = mapToResponseDto(created);
             return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(ApiResponse.ok("User created successfully", created));
+                    .body(ApiResponse.ok("User created successfully", responseDto));
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.badRequest()
                     .body(ApiResponse.error(ex.getMessage()));
@@ -35,11 +48,26 @@ public class UserController {
     }
 
     @GetMapping("/{username}")
-    public ResponseEntity<ApiResponse<User>> getUserByUsername(@PathVariable String username) {
+    public ResponseEntity<ApiResponse<com.cruise.auth.dto.UserResponseDto>> getUserByUsername(@PathVariable String username) {
         Optional<User> user = userService.getUserByUsername(username);
-        return user.map(u -> ResponseEntity.ok(ApiResponse.ok("User found", u)))
+        return user.map(u -> ResponseEntity.ok(ApiResponse.ok("User found", mapToResponseDto(u))))
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(ApiResponse.error("User not found: " + username)));
+    }
+
+    private com.cruise.auth.dto.UserResponseDto mapToResponseDto(User user) {
+        return com.cruise.auth.dto.UserResponseDto.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .fullName(user.getFullName())
+                .email(user.getEmail())
+                .role(user.getRole())
+                .cabinNumber(user.getCabinNumber())
+                .rfidTag(user.getRfidTag())
+                .active(user.getActive())
+                .createdAt(user.getCreatedAt())
+                .updatedAt(user.getUpdatedAt())
+                .build();
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
