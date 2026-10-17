@@ -502,7 +502,7 @@ test('7. Workflow YAML Structure & Safety Policy Verification', () => {
   const fixCiContent = readFileSync(fixCiPath, 'utf8');
 
   // Audit workflow checks
-  assert.match(auditContent, /cron:\s*['"]0 3 \* \* 1['"]/);
+  assert.match(auditContent, /cron:\s*['"]0 3 \* \* \*['"]/);
   assert.match(auditContent, /workflow_dispatch:/);
   assert.match(auditContent, /concurrency:/);
   assert.match(auditContent, /JULES_API_KEY/);
