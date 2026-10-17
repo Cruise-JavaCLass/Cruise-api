@@ -114,6 +114,7 @@ export async function discoverSource(apiKey, repoOwner, repoName, options = {}) 
   const targetRepo = repoName.toLowerCase().trim();
 
   let pageToken = '';
+  const seenPageTokens = new Set();
   let allSources = [];
 
   do {
@@ -167,7 +168,14 @@ export async function discoverSource(apiKey, repoOwner, repoName, options = {}) 
       };
     }
 
-    pageToken = data.nextPageToken || '';
+    const nextToken = data.nextPageToken || '';
+    if (nextToken && seenPageTokens.has(nextToken)) {
+      throw new Error(`Infinite pagination loop detected in Jules Sources API: repeating pageToken "${nextToken}".`);
+    }
+    if (nextToken) {
+      seenPageTokens.add(nextToken);
+    }
+    pageToken = nextToken;
   } while (pageToken);
 
   const available = allSources.map(s => {
@@ -197,6 +205,7 @@ export async function checkDuplicateSession(apiKey, criteria, options = {}) {
   const cutoffTime = Date.now() - (maxAgeHours * 60 * 60 * 1000);
 
   let pageToken = '';
+  const seenPageTokens = new Set();
 
   do {
     const url = new URL(`${baseUrl}/sessions`);
@@ -254,7 +263,15 @@ export async function checkDuplicateSession(apiKey, criteria, options = {}) {
       }
     }
 
-    pageToken = data.nextPageToken || '';
+    const nextToken = data.nextPageToken || '';
+    if (nextToken && seenPageTokens.has(nextToken)) {
+      console.warn(`Warning: Repeating pageToken "${nextToken}" detected in Sessions API during deduplication. Aborting pagination.`);
+      return { isDuplicate: false, existingSession: null };
+    }
+    if (nextToken) {
+      seenPageTokens.add(nextToken);
+    }
+    pageToken = nextToken;
   } while (pageToken);
 
   return { isDuplicate: false, existingSession: null };

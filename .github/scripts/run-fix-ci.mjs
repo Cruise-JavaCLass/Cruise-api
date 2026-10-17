@@ -111,8 +111,10 @@ async function main() {
   let branch = process.env.HEAD_BRANCH;
   const defaultBranch = process.env.DEFAULT_BRANCH || 'main';
 
+  const isWorkflowDispatch = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch';
+
   // If commitSha or branch is missing, or event was workflow_dispatch, query GitHub API to get accurate failed run metadata
-  if (!commitSha || !branch || process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' || commitSha === 'HEAD') {
+  if (!commitSha || !branch || isWorkflowDispatch || commitSha === 'HEAD') {
     try {
       console.log(`Fetching workflow run details for run ${runId} from GitHub API...`);
       const runRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/runs/${runId}`, {
@@ -129,9 +131,16 @@ async function main() {
         branch = runInfo.head_branch || branch;
         console.log(`Resolved from Actions API -> commitSha: ${commitSha}, branch: ${branch}`);
       } else {
-        console.warn(`Could not fetch run metadata for run ${runId} (HTTP ${runRes.status}). Using fallback values.`);
+        const errMsg = `Could not fetch run metadata for run ${runId} (HTTP ${runRes.status}).`;
+        if (isWorkflowDispatch) {
+          throw new Error(`${errMsg} Failed to resolve target commit and branch for manual dispatch.`);
+        }
+        console.warn(`${errMsg} Using fallback values.`);
       }
     } catch (err) {
+      if (isWorkflowDispatch) {
+        throw err;
+      }
       console.warn(`Error fetching run metadata: ${err.message}. Using fallback values.`);
     }
   }

@@ -168,6 +168,24 @@ test('3. Jules Source Discovery Tests', async (t) => {
     assert.equal(callCount, 2);
   });
 
+  await t.test('Detects repeating pageToken in discoverSource and throws descriptive error', async () => {
+    const mockFetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        sources: [
+          { name: 'sources/looping-repo', githubRepo: { owner: 'loop', repo: 'loop' } }
+        ],
+        nextPageToken: 'looping-token'
+      })
+    });
+
+    await assert.rejects(
+      async () => discoverSource('test-key', 'Cruise-JavaCLass', 'Cruise-api', { fetchFn: mockFetch }),
+      /Infinite pagination loop detected in Jules Sources API: repeating pageToken "looping-token"/
+    );
+  });
+
   await t.test('Throws descriptive error when source is not connected', async () => {
     const mockFetch = async () => ({
       ok: true,
@@ -327,6 +345,28 @@ test('4. Session Deduplication Tests', async (t) => {
     assert.equal(result.isDuplicate, true);
     assert.equal(result.existingSession.id, 'sess-p2-target');
     assert.equal(callCount, 2, 'Must stop paging as soon as duplicate is found on page 2');
+  });
+
+  await t.test('Detects repeating pageToken in checkDuplicateSession and aborts safely', async () => {
+    let callCount = 0;
+    const mockFetch = async () => {
+      callCount++;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          sessions: [
+            { id: 'sess-repeat', title: 'Unrelated title', createTime: new Date().toISOString(), state: 'COMPLETED' }
+          ],
+          nextPageToken: 'stuck-token'
+        })
+      };
+    };
+
+    const result = await checkDuplicateSession('test-key', { runId: '888' }, { fetchFn: mockFetch });
+    assert.equal(result.isDuplicate, false);
+    assert.equal(result.existingSession, null);
+    assert.equal(callCount, 2, 'Must abort pagination after seeing repeating stuck-token');
   });
 
   await t.test('Allows session creation when no duplicate exists', async () => {
