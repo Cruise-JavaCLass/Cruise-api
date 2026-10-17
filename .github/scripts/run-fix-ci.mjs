@@ -14,6 +14,15 @@ import {
   writeStepSummary
 } from './jules-client.mjs';
 
+/**
+ * Fetches failed jobs, step information, and logs for a specific GitHub Actions workflow run.
+ * 
+ * @param {string} githubToken - GitHub Personal Access Token or Actions Token.
+ * @param {string} owner - Repository owner.
+ * @param {string} repo - Repository name.
+ * @param {string|number} runId - GitHub Actions workflow run ID.
+ * @returns {Promise<{ failedJobs: Array<{ id: number, name: string, failedStep: string, htmlUrl: string }>, combinedLogs: string }>}
+ */
 async function fetchFailedJobsAndLogs(githubToken, owner, repo, runId) {
   const headers = {
     'Authorization': `Bearer ${githubToken}`,
@@ -69,6 +78,10 @@ async function fetchFailedJobsAndLogs(githubToken, owner, repo, runId) {
   };
 }
 
+/**
+ * Main entrypoint for investigating CI failures and dispatching a repair task to Google Jules.
+ * @returns {Promise<void>}
+ */
 async function main() {
   console.log('=== Starting Google Jules CI Failure Investigation ===');
 
@@ -94,9 +107,37 @@ async function main() {
   }
 
   const runUrl = process.env.RUN_URL || `https://github.com/${repository}/actions/runs/${runId}`;
-  const commitSha = process.env.HEAD_SHA || 'HEAD';
-  const branch = process.env.HEAD_BRANCH || 'main';
+  let commitSha = process.env.HEAD_SHA;
+  let branch = process.env.HEAD_BRANCH;
   const defaultBranch = process.env.DEFAULT_BRANCH || 'main';
+
+  // If commitSha or branch is missing, or event was workflow_dispatch, query GitHub API to get accurate failed run metadata
+  if (!commitSha || !branch || process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' || commitSha === 'HEAD') {
+    try {
+      console.log(`Fetching workflow run details for run ${runId} from GitHub API...`);
+      const runRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/runs/${runId}`, {
+        headers: {
+          'Authorization': `Bearer ${githubToken}`,
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'jules-autonomous-maintainer'
+        }
+      });
+      if (runRes.ok) {
+        const runInfo = await runRes.json();
+        commitSha = runInfo.head_sha || commitSha;
+        branch = runInfo.head_branch || branch;
+        console.log(`Resolved from Actions API -> commitSha: ${commitSha}, branch: ${branch}`);
+      } else {
+        console.warn(`Could not fetch run metadata for run ${runId} (HTTP ${runRes.status}). Using fallback values.`);
+      }
+    } catch (err) {
+      console.warn(`Error fetching run metadata: ${err.message}. Using fallback values.`);
+    }
+  }
+
+  commitSha = commitSha || 'HEAD';
+  branch = branch || 'main';
 
   console.log(`Failed Run ID: ${runId}`);
   console.log(`Run URL: ${runUrl}`);

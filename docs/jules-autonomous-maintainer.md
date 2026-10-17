@@ -137,14 +137,10 @@ The prompt explicitly instructs Jules:
 2. **Never Auto-Merge:** All Jules PRs require human review, status checks pass, and standard branch protection compliance before merging.
 3. **Branch Protection Remains Untouched:** The workflows have zero administrative permissions to modify GitHub branch rules, secrets, or repository settings.
 4. **Minimal Permissions:**
-   ```yaml
-   permissions:
-     contents: read
-     actions: read
-     issues: write
-     pull-requests: write
-   ```
-5. **Prompt Injection Defense:** Commit messages, workflow logs, and branch names are treated as untrusted data. Prompts are constructed with fenced code blocks and explicit instructions that override external log instructions.
+   - **jules-fix-ci.yml:** `contents: read`, `actions: read` (reads failed job logs; PR creation is handled through connected Jules GitHub App).
+   - **jules-audit.yml:** `contents: read`.
+   - Both workflows configure `persist-credentials: false` on repository checkout.
+5. **Prompt Injection Defense:** Commit metadata, job names, failed steps, and workflow logs are treated as untrusted data within strict prompt trust boundaries. Prompts isolate external values into explicit untrusted blocks with escaped delimiters and instruct Jules to ignore any instructions found within that data.
 
 ---
 

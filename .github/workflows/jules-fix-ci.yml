@@ -20,8 +20,6 @@ concurrency:
 permissions:
   contents: read
   actions: read
-  issues: write
-  pull-requests: write
 
 jobs:
   repair-ci-failure:
@@ -30,12 +28,13 @@ jobs:
     timeout-minutes: 20
     # Process only if:
     # 1. Triggered manually via workflow_dispatch, OR
-    # 2. workflow_run completed with failure on default branch
+    # 2. workflow_run completed with failure on default branch in the same repository
     if: >
       github.event_name == 'workflow_dispatch' ||
       (
         github.event.workflow_run.conclusion == 'failure' &&
         github.event.workflow_run.head_branch == (github.event.repository.default_branch || 'main') &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
         github.event.workflow_run.name == 'Backend CI Pipeline'
       )
 
@@ -44,6 +43,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -55,10 +55,11 @@ jobs:
           JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
           RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
           RUN_URL: ${{ github.event.workflow_run.html_url || format('https://github.com/{0}/actions/runs/{1}', github.repository, inputs.run_id) }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch || github.ref_name }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha || '' }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch || '' }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch || 'main' }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: node .github/scripts/run-fix-ci.mjs

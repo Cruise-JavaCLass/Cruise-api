@@ -12,6 +12,10 @@ import {
   writeStepSummary
 } from './jules-client.mjs';
 
+/**
+ * Main entrypoint for launching scheduled or on-demand Google Jules repository audits.
+ * @returns {Promise<void>}
+ */
 async function main() {
   console.log('=== Starting Google Jules Repository Audit ===');
 
@@ -42,7 +46,7 @@ async function main() {
   // Step 2: Check for duplicate audit in the last 24 hours
   console.log('Checking for recent duplicate audit sessions...');
   const { isDuplicate, existingSession } = await checkDuplicateSession(apiKey, {
-    auditType: 'weekly',
+    auditType: scope,
     maxAgeHours: 24
   });
 
