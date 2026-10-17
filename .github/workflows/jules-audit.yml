@@ -2,8 +2,8 @@ name: Jules Repository Audit
 
 on:
   schedule:
-    # Run weekly every Monday at 03:00 UTC
-    - cron: '0 3 * * 1'
+    # Run daily at 03:00 UTC
+    - cron: '0 3 * * *'
   workflow_dispatch:
     inputs:
       audit_scope:

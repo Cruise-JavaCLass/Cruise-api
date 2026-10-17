@@ -44,18 +44,18 @@ async function main() {
   const startingBranch = defaultBranch || discoveredBranch || 'main';
   console.log(sanitizeLog(`Discovered source: "${sourceName}" (Starting branch: "${startingBranch}")`));
 
-  // Step 2: Check for duplicate audit in the last 24 hours
+  // Step 2: Check for duplicate audit in the last 20 hours (daily cadence)
   console.log('Checking for recent duplicate audit sessions...');
   const { isDuplicate, existingSession } = await checkDuplicateSession(apiKey, {
     auditType: scope,
-    maxAgeHours: 24
+    maxAgeHours: 20
   });
 
   if (isDuplicate && existingSession && process.env.FORCE_AUDIT !== 'true') {
     const msg = `Skipping duplicate audit session. A recent session "${existingSession.title || existingSession.name}" already exists (${existingSession.state}) created at ${existingSession.createTime}. Set FORCE_AUDIT=true to override.`;
     console.log(sanitizeLog(msg));
     writeStepSummary(`### ⏭️ Jules Repository Audit Skipped
-- **Reason:** Duplicate session detected within the last 24 hours.
+- **Reason:** Duplicate session detected within the last 20 hours.
 - **Existing Session:** [${existingSession.title || existingSession.id}](${existingSession.url || '#'})
 - **State:** \`${existingSession.state}\`
 - **Created At:** ${existingSession.createTime}
@@ -66,7 +66,7 @@ async function main() {
   // Step 3: Construct prompt
   console.log('Generating audit prompt...');
   const prompt = generateAuditPrompt({ scope, defaultBranch: startingBranch, repoName });
-  const title = `Weekly Repository Audit: ${scope.toUpperCase()} (${new Date().toISOString().split('T')[0]})`;
+  const title = `Daily Repository Audit: ${scope.toUpperCase()} (${new Date().toISOString().split('T')[0]})`;
 
   // Step 4: Create Jules session
   console.log(`Creating Jules session with automationMode: AUTO_CREATE_PR...`);
