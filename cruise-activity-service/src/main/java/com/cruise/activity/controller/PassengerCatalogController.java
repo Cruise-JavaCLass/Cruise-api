@@ -37,4 +37,13 @@ public class PassengerCatalogController {
         );
         return ApiResponse.ok("Lấy danh mục hoạt động và tour bờ thành công", result);
     }
+
+    @GetMapping("/detail/{itemType}/{id}")
+    public ApiResponse<PassengerCatalogItemResponse> getCatalogItemDetail(
+            @PathVariable CatalogItemType itemType,
+            @PathVariable Long id
+    ) {
+        return ApiResponse.ok("Lấy thông tin chi tiết và lịch trình thành công",
+                catalogService.getCatalogItemDetail(itemType, id));
+    }
 }

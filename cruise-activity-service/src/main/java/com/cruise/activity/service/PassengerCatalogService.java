@@ -30,6 +30,19 @@ public class PassengerCatalogService {
     private final OnboardActivityRepository activityRepository;
     private final ShoreExcursionRepository excursionRepository;
 
+    public PassengerCatalogItemResponse getCatalogItemDetail(CatalogItemType itemType, Long id) {
+        if (itemType == CatalogItemType.ONBOARD_ACTIVITY) {
+            OnboardActivity activity = activityRepository.findById(id)
+                    .orElseThrow(() -> new com.cruise.activity.exception.ResourceNotFoundException("Không tìm thấy hoạt động trên tàu với ID: " + id));
+            return mapFromActivity(activity);
+        } else if (itemType == CatalogItemType.SHORE_EXCURSION) {
+            ShoreExcursion excursion = excursionRepository.findById(id)
+                    .orElseThrow(() -> new com.cruise.activity.exception.ResourceNotFoundException("Không tìm thấy tour bờ với ID: " + id));
+            return mapFromExcursion(excursion);
+        }
+        throw new IllegalArgumentException("Loại hình danh mục không hợp lệ: " + itemType);
+    }
+
     public Page<PassengerCatalogItemResponse> searchCatalog(
             Long tourId,
             Integer dayNumber,
