@@ -172,4 +172,54 @@ class PassengerCatalogControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.gatheringTime").value("08:00:00"))
                 .andExpect(jsonPath("$.data.returnToShipTime").value("16:00:00"));
     }
+
+    @Test
+    @DisplayName("GET /api/passenger-portal/catalog/tour/{tourId} - Filter by dayNumber and portId")
+    void shouldFilterByDayNumberAndPortId() throws Exception {
+        mockMvc.perform(get("/api/passenger-portal/catalog/tour/{tourId}", tourId)
+                        .param("dayNumber", "2")
+                        .param("portId", "101"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].id").value(excursion1.getId()));
+    }
+
+    @Test
+    @DisplayName("GET /api/passenger-portal/catalog/tour/{tourId} - Filter by keyword matching description and location")
+    void shouldFilterByKeywordMatchingDescAndLocation() throws Exception {
+        // match activity description
+        mockMvc.perform(get("/api/passenger-portal/catalog/tour/{tourId}", tourId)
+                        .param("keyword", "jazz"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].id").value(activity1.getId()));
+
+        // match activity location
+        mockMvc.perform(get("/api/passenger-portal/catalog/tour/{tourId}", tourId)
+                        .param("keyword", "Lounge"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].id").value(activity1.getId()));
+
+        // match excursion meeting point
+        mockMvc.perform(get("/api/passenger-portal/catalog/tour/{tourId}", tourId)
+                        .param("keyword", "Pier 3"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].id").value(excursion1.getId()));
+    }
+
+    @Test
+    @DisplayName("GET /api/passenger-portal/catalog/detail/ONBOARD_ACTIVITY/{id} - Not found throws exception")
+    void shouldThrowNotFoundForNonExistentActivity() throws Exception {
+        mockMvc.perform(get("/api/passenger-portal/catalog/detail/ONBOARD_ACTIVITY/{id}", 999999L))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /api/passenger-portal/catalog/detail/SHORE_EXCURSION/{id} - Not found throws exception")
+    void shouldThrowNotFoundForNonExistentExcursion() throws Exception {
+        mockMvc.perform(get("/api/passenger-portal/catalog/detail/SHORE_EXCURSION/{id}", 999999L))
+                .andExpect(status().isNotFound());
+    }
 }
