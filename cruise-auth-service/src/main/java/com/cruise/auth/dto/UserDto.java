@@ -18,5 +18,7 @@ public class UserDto {
     private Role role;
     private String cabinNumber;
     private String rfidTag;
+
+    @Builder.Default
     private Boolean active = true;
 }
