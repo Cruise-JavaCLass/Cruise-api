@@ -634,6 +634,16 @@ Cung cấp bộ REST API, thuật toán phân bổ hành khách tự động và
   - **`ExcursionGroupGenerationUnitTest` (11 tests — KAN-178):** Kiểm thử độc lập tầng Service cho việc phân nhóm, tự động sinh nhóm theo cấu hình, xử lý danh sách rỗng, xuất CSV chuẩn UTF-8 BOM, phòng chống tấn công CSV Injection và kiểm thử DTOs.
   - **`ExcursionGroupGenerationApiTest` (6 tests — KAN-178):** Kiểm thử tích hợp REST API End-to-End cho cả 3 endpoint (`manifest`, `auto-generate`, `export/csv`), kiểm tra status code 200/404, định dạng header CSV và cấu trúc JSON trả về.
 
+### 6.13. Kiểm thử Đơn vị Toàn diện Quy tắc Phân nhóm Tour Bờ (Group Assignment Rules Unit Tests — KAN-179):
+Kiểm thử chuyên sâu các quy tắc nghiệp vụ, thuật toán điều phối và toàn vẹn dữ liệu cho hoạt động phân nhóm tour bờ:
+* **Bộ Kiểm thử Đơn vị KAN-179:**
+  - **`ExcursionGroupAssignmentRulesUnitTest` (17 tests — KAN-179):**
+    - *Quy tắc gán nhóm đơn lẻ (Single Assignment Rules):* Gán nhóm mới, chuyển đổi đoàn/xe cho hành khách đã có nhóm (re-assignment), chuẩn hóa chuỗi trim whitespace, xử lý ngoại lệ tour không tồn tại (`404`) hoặc hành khách không thuộc tour.
+    - *Quy tắc gán nhóm hàng loạt (Bulk Assignment Rules):* Gán thành công toàn bộ danh sách ID, xử lý gán một phần (partial match) khi có ID không tồn tại, từ chối khi không tìm thấy hành khách hợp lệ nào (`BusinessRuleException`).
+    - *Quy tắc thuật toán tự động sinh nhóm (Auto-Generation Rules):* Phân bổ đều vòng tròn Round-Robin theo `targetGroupCount`, tự động gán vòng tròn theo mã xe khả dụng khi `autoAssignVehicles = true`, tự động xác định số nhóm theo số lượng xe khi không truyền `targetGroupCount`, tự động tính nhóm theo trần `maxPassengersPerGroup` khi không có xe, giới hạn số nhóm mục tiêu không vượt quá tổng số khách khả dụng.
+    - *Quy tắc sức chứa xe và toàn vẹn dữ liệu (Capacity & Integrity Rules):* Từ chối thêm/cập nhật xe khi `assignedPassengers` âm hoặc vượt quá sức chứa phương tiện, kiểm tra giảm số người tham gia an toàn khi xóa hành khách.
+    - *Quy tắc thống kê chỉ số Manifest (Manifest Summary Metrics Rules):* Tổng hợp chính xác và riêng biệt từng nhóm trạng thái (`CHECKED_IN`, `ON_TOUR`, `RETURNED_SAFE`, `REGISTERED/pending`).
+
 ---
 
 ## 7. Tài liệu đặc tả nghiệp vụ
