@@ -117,6 +117,14 @@ public class DailyItineraryService {
         return toResponse(findItineraryByIdAndTourId(itineraryId, tourId));
     }
 
+    @Transactional(readOnly = true)
+    public DailyItineraryResponse getDailyItineraryByDayNumber(Long tourId, Integer dayNumber) {
+        findTourById(tourId);
+        DailyItinerary itinerary = dailyItineraryRepository.findByTourIdAndDayNumberAndActiveTrue(tourId, dayNumber)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lịch trình cho ngày " + dayNumber));
+        return toResponse(itinerary);
+    }
+
     public List<DailyItineraryResponse> reorderDailyItineraries(Long tourId, com.cruise.itinerary.dto.ReorderItineraryRequest request) {
         CruiseTour tour = findTourById(tourId);
         List<DailyItinerary> currentItineraries = dailyItineraryRepository.findByTourIdAndActiveTrueOrderByDayNumberAsc(tourId);

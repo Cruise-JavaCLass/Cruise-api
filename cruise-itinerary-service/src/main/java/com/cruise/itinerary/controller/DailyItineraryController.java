@@ -73,13 +73,22 @@ public class DailyItineraryController {
                 dailyItineraryService.getDailyItinerariesByTourId(tourId));
     }
 
-    @GetMapping("/{itineraryId}")
+    @GetMapping("/{itineraryId:\\d+}")
     public ApiResponse<DailyItineraryResponse> getDailyItineraryById(
             @PathVariable Long tourId,
             @PathVariable Long itineraryId
     ) {
         return ApiResponse.ok("Lấy chi tiết lịch trình ngày thành công",
                 dailyItineraryService.getDailyItineraryById(tourId, itineraryId));
+    }
+
+    @GetMapping("/day/{dayNumber}")
+    public ApiResponse<DailyItineraryResponse> getDailyItineraryByDayNumber(
+            @PathVariable Long tourId,
+            @PathVariable Integer dayNumber
+    ) {
+        return ApiResponse.ok("Lấy chi tiết lịch trình theo ngày thành công",
+                dailyItineraryService.getDailyItineraryByDayNumber(tourId, dayNumber));
     }
 
     @DeleteMapping("/{itineraryId}")
