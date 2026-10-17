@@ -33,14 +33,16 @@ async function fetchFailedJobsAndLogs(githubToken, owner, repo, runId) {
 
   let nextUrl = `https://api.github.com/repos/${owner}/${repo}/actions/runs/${runId}/jobs?filter=latest&per_page=100`;
   const allJobs = [];
+  const logSections = [];
 
   while (nextUrl) {
     const jobsRes = await fetch(nextUrl, { headers });
 
     if (!jobsRes.ok) {
       const txt = await jobsRes.text();
-      console.warn(`Could not retrieve jobs for run ${runId} (HTTP ${jobsRes.status}): ${txt}`);
-      return { failedJobs: [], combinedLogs: 'No log output could be retrieved from GitHub Actions API.' };
+      console.warn(`Could not retrieve jobs page for run ${runId} (HTTP ${jobsRes.status}): ${txt}`);
+      logSections.push(`[WARNING] Failed to fetch jobs page (${nextUrl}): HTTP ${jobsRes.status} - ${txt}`);
+      break;
     }
 
     const jobsData = await jobsRes.json();
@@ -55,7 +57,6 @@ async function fetchFailedJobsAndLogs(githubToken, owner, repo, runId) {
   }
 
   const failedJobs = [];
-  const logSections = [];
 
   for (const job of allJobs) {
     if (job.conclusion === 'failure') {
@@ -87,7 +88,7 @@ async function fetchFailedJobsAndLogs(githubToken, owner, repo, runId) {
 
   return {
     failedJobs,
-    combinedLogs: logSections.join('\n\n')
+    combinedLogs: logSections.length > 0 ? logSections.join('\n\n') : 'No failed job logs available.'
   };
 }
 
