@@ -31,20 +31,33 @@ async function fetchFailedJobsAndLogs(githubToken, owner, repo, runId) {
     'User-Agent': 'jules-autonomous-maintainer'
   };
 
-  const jobsUrl = `https://api.github.com/repos/${owner}/${repo}/actions/runs/${runId}/jobs?filter=latest`;
-  const jobsRes = await fetch(jobsUrl, { headers });
+  let nextUrl = `https://api.github.com/repos/${owner}/${repo}/actions/runs/${runId}/jobs?filter=latest&per_page=100`;
+  const allJobs = [];
 
-  if (!jobsRes.ok) {
-    const txt = await jobsRes.text();
-    console.warn(`Could not retrieve jobs for run ${runId} (HTTP ${jobsRes.status}): ${txt}`);
-    return { failedJobs: [], combinedLogs: 'No log output could be retrieved from GitHub Actions API.' };
+  while (nextUrl) {
+    const jobsRes = await fetch(nextUrl, { headers });
+
+    if (!jobsRes.ok) {
+      const txt = await jobsRes.text();
+      console.warn(`Could not retrieve jobs for run ${runId} (HTTP ${jobsRes.status}): ${txt}`);
+      return { failedJobs: [], combinedLogs: 'No log output could be retrieved from GitHub Actions API.' };
+    }
+
+    const jobsData = await jobsRes.json();
+    if (Array.isArray(jobsData.jobs)) {
+      allJobs.push(...jobsData.jobs);
+    }
+
+    // Check Link header for rel="next"
+    const linkHeader = jobsRes.headers.get('link') || '';
+    const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/i);
+    nextUrl = nextMatch ? nextMatch[1] : null;
   }
 
-  const jobsData = await jobsRes.json();
   const failedJobs = [];
   const logSections = [];
 
-  for (const job of (jobsData.jobs || [])) {
+  for (const job of allJobs) {
     if (job.conclusion === 'failure') {
       const failedStep = (job.steps || []).find(s => s.conclusion === 'failure');
       const stepName = failedStep ? failedStep.name : 'Unknown step';
