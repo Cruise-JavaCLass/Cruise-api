@@ -1,6 +1,68 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    ":semanticCommits",
+    ":rebaseStalePrs"
+  ],
+  "timezone": "Asia/Ho_Chi_Minh",
+  "schedule": [
+    "before 8am on monday"
+  ],
+  "prHourlyLimit": 2,
+  "prConcurrentLimit": 5,
+  "packageRules": [
+    {
+      "description": "Ignore internal multi-module dependencies from lookup",
+      "matchPackagePatterns": [
+        "^com\\.cruise:"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Group minor and patch updates for Spring Framework & Spring Boot",
+      "matchPackagePatterns": [
+        "^org\\.springframework"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "spring-framework"
+    },
+    {
+      "description": "Group GitHub Actions updates",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "github-actions"
+    },
+    {
+      "description": "Group Maven build plugins and tooling",
+      "matchManagers": [
+        "maven"
+      ],
+      "matchPackagePatterns": [
+        "^org\\.apache\\.maven\\.plugins:",
+        "^org\\.jacoco:",
+        "^org\\.sonarsource\\.scanner\\.maven:"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "maven-build-plugins"
+    },
+    {
+      "description": "Separate major updates requiring manual review",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "labels": [
+        "dependencies",
+        "breaking-change"
+      ],
+      "commitMessagePrefix": "chore(deps-breaking):"
+    }
   ]
 }
