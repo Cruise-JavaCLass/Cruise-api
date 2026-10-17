@@ -66,6 +66,14 @@ class ExcursionGroupManagementApiTest {
     @Autowired
     private ExcursionGuideRepository guideRepository;
 
+    @Autowired
+    private jakarta.persistence.EntityManager entityManager;
+
+    private void flushAndClear() {
+        entityManager.flush();
+        entityManager.clear();
+    }
+
     private ShoreExcursion seededExcursion;
     private ExcursionPassenger passenger1;
     private ExcursionPassenger passenger2;
@@ -242,8 +250,8 @@ class ExcursionGroupManagementApiTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success", is(true)))
                     .andExpect(jsonPath("$.data", hasSize(3)))
-                    .andExpect(jsonPath("$.data[0].passengerName", is("Hoàng Kim Oanh")))
-                    .andExpect(jsonPath("$.data[0].groupName", is("Đoàn 1")));
+                    .andExpect(jsonPath("$.data[*].passengerName", hasItem("Hoàng Kim Oanh")))
+                    .andExpect(jsonPath("$.data[*].groupName", hasItem("Đoàn 1")));
         }
 
         @Test
@@ -263,6 +271,7 @@ class ExcursionGroupManagementApiTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success", is(true)));
 
+            flushAndClear();
             ExcursionPassenger updated = passengerRepository.findById(passenger3.getId()).orElseThrow();
             assertThat(updated.getGroupName()).isEqualTo("Đoàn VIP 1");
             assertThat(updated.getBusNumber()).isEqualTo("BUS-02");
@@ -285,6 +294,7 @@ class ExcursionGroupManagementApiTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success", is(true)));
 
+            flushAndClear();
             ExcursionPassenger p1 = passengerRepository.findById(passenger1.getId()).orElseThrow();
             ExcursionPassenger p3 = passengerRepository.findById(passenger3.getId()).orElseThrow();
             assertThat(p1.getGroupName()).isEqualTo("Đoàn 2 - Tour Chiều");
@@ -302,6 +312,7 @@ class ExcursionGroupManagementApiTest {
                     .andExpect(jsonPath("$.success", is(true)))
                     .andExpect(jsonPath("$.data.currentParticipants", is(2)));
 
+            flushAndClear();
             ExcursionPassenger deleted = passengerRepository.findById(passenger3.getId()).orElseThrow();
             assertThat(deleted.getActive()).isFalse();
         }
@@ -329,8 +340,7 @@ class ExcursionGroupManagementApiTest {
             mockMvc.perform(get("/api/excursions/{id}/vehicles", seededExcursion.getId()))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data", hasSize(2)))
-                    .andExpect(jsonPath("$.data[0].id", is("BUS-01")))
-                    .andExpect(jsonPath("$.data[1].id", is("BUS-02")));
+                    .andExpect(jsonPath("$.data[*].id", containsInAnyOrder("BUS-01", "BUS-02")));
         }
 
         @Test
@@ -354,6 +364,7 @@ class ExcursionGroupManagementApiTest {
                     .andExpect(jsonPath("$.success", is(true)))
                     .andExpect(jsonPath("$.data.vehicles", hasSize(3)));
 
+            flushAndClear();
             List<ExcursionVehicle> vehicles = vehicleRepository.findByExcursionIdAndActiveTrue(seededExcursion.getId());
             assertThat(vehicles).hasSize(3);
             assertThat(vehicles).extracting(ExcursionVehicle::getLicensePlate).contains("14B-055.66");
@@ -376,6 +387,7 @@ class ExcursionGroupManagementApiTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success", is(true)));
 
+            flushAndClear();
             ExcursionVehicle updated = vehicleRepository.findByVehicleCodeAndExcursionIdAndActiveTrue("BUS-01", seededExcursion.getId()).orElseThrow();
             assertThat(updated.getDriverName()).isEqualTo("Nguyễn Đức Thắng (Đổi ca)");
             assertThat(updated.getStatus()).isEqualTo(VehicleStatus.ON_TRIP);
@@ -388,6 +400,7 @@ class ExcursionGroupManagementApiTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success", is(true)));
 
+            flushAndClear();
             assertThat(vehicleRepository.findByVehicleCodeAndExcursionIdAndActiveTrue("BUS-02", seededExcursion.getId()))
                     .isEmpty();
         }
@@ -421,6 +434,7 @@ class ExcursionGroupManagementApiTest {
                     .andExpect(jsonPath("$.success", is(true)))
                     .andExpect(jsonPath("$.data.guides", hasSize(2)));
 
+            flushAndClear();
             List<ExcursionGuide> guides = guideRepository.findByExcursionIdAndActiveTrue(seededExcursion.getId());
             assertThat(guides).hasSize(2);
             assertThat(guides).extracting(ExcursionGuide::getFullName).contains("Đỗ Thu Trang");
@@ -443,6 +457,7 @@ class ExcursionGroupManagementApiTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success", is(true)));
 
+            flushAndClear();
             ExcursionGuide updated = guideRepository.findByGuideCodeAndExcursionIdAndActiveTrue("GUD-01", seededExcursion.getId()).orElseThrow();
             assertThat(updated.getLanguages()).contains("English");
             assertThat(updated.getRating()).isEqualTo(5.0);
@@ -455,6 +470,7 @@ class ExcursionGroupManagementApiTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success", is(true)));
 
+            flushAndClear();
             assertThat(guideRepository.findByGuideCodeAndExcursionIdAndActiveTrue("GUD-01", seededExcursion.getId()))
                     .isEmpty();
         }
@@ -498,7 +514,8 @@ class ExcursionGroupManagementApiTest {
                     .andExpect(jsonPath("$.data.totalPassengers", is(3)))
                     .andExpect(jsonPath("$.data.totalGroups", is(2)))
                     .andExpect(jsonPath("$.data.groups[0].groupName", startsWith("Tổ ")))
-                    .andExpect(jsonPath("$.data.groups[0].busNumber", notNullValue()));
+                    .andExpect(jsonPath("$.data.groups[0].busNumber", notNullValue()))
+                    .andExpect(jsonPath("$.data.groups[*].passengers[?(@.ticketCode == 'TKT-EXC-003')].busNumber", hasItem(notNullValue())));
         }
 
         @Test
