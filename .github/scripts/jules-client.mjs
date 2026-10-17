@@ -110,69 +110,81 @@ export function truncateLog(text, maxLines = 250, maxBytes = 25000) {
  */
 export async function discoverSource(apiKey, repoOwner, repoName, options = {}) {
   const baseUrl = options.baseUrl || JULES_API_BASE;
-  const url = `${baseUrl}/sources?pageSize=100`;
-
-  let response;
-  try {
-    response = await (options.fetchFn || fetch)(url, {
-      method: 'GET',
-      headers: {
-        'X-Goog-Api-Key': apiKey,
-        'Content-Type': 'application/json'
-      }
-    });
-  } catch (err) {
-    throw new Error(`Failed to connect to Jules Sources API at ${url}: ${err.message}`);
-  }
-
-  if (response.status === 401 || response.status === 403) {
-    throw new Error(`Jules API Authentication failed (HTTP ${response.status}). Verify that JULES_API_KEY secret is valid and has Jules API permissions.`);
-  }
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Jules Sources API returned HTTP ${response.status}: ${errorText}`);
-  }
-
-  const data = await response.json();
-  const sources = data.sources || [];
-
   const targetOwner = repoOwner.toLowerCase().trim();
   const targetRepo = repoName.toLowerCase().trim();
 
-  const matched = sources.find(s => {
-    const gh = s.githubRepo;
-    if (!gh) return false;
-    return (
-      (gh.owner || '').toLowerCase().trim() === targetOwner &&
-      (gh.repo || '').toLowerCase().trim() === targetRepo
-    );
-  });
+  let pageToken = '';
+  let allSources = [];
 
-  if (!matched) {
-    const available = sources.map(s => {
+  do {
+    const url = new URL(`${baseUrl}/sources`);
+    url.searchParams.set('pageSize', '100');
+    if (pageToken) {
+      url.searchParams.set('pageToken', pageToken);
+    }
+
+    let response;
+    try {
+      response = await (options.fetchFn || fetch)(url.toString(), {
+        method: 'GET',
+        headers: {
+          'X-Goog-Api-Key': apiKey,
+          'Content-Type': 'application/json'
+        }
+      });
+    } catch (err) {
+      throw new Error(`Failed to connect to Jules Sources API at ${url.toString()}: ${err.message}`);
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(`Jules API Authentication failed (HTTP ${response.status}). Verify that JULES_API_KEY secret is valid and has Jules API permissions.`);
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Jules Sources API returned HTTP ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+    const sources = data.sources || [];
+    allSources = allSources.concat(sources);
+
+    const matched = sources.find(s => {
       const gh = s.githubRepo;
-      return gh ? `${gh.owner}/${gh.repo} (${s.name})` : s.name;
+      if (!gh) return false;
+      return (
+        (gh.owner || '').toLowerCase().trim() === targetOwner &&
+        (gh.repo || '').toLowerCase().trim() === targetRepo
+      );
     });
 
-    throw new Error(
-      `No connected Jules source matches repository "${repoOwner}/${repoName}".\n` +
-      `Available connected sources (${sources.length}): ${available.length ? available.join(', ') : 'None'}.\n` +
-      `Ensure the repository is connected to Jules via the web interface at https://jules.google.`
-    );
-  }
+    if (matched) {
+      const defaultBranch = matched.githubRepo?.defaultBranch?.displayName || 'main';
+      return {
+        sourceName: matched.name,
+        defaultBranch,
+        rawSource: matched
+      };
+    }
 
-  const defaultBranch = matched.githubRepo?.defaultBranch?.displayName || 'main';
+    pageToken = data.nextPageToken || '';
+  } while (pageToken);
 
-  return {
-    sourceName: matched.name,
-    defaultBranch,
-    rawSource: matched
-  };
+  const available = allSources.map(s => {
+    const gh = s.githubRepo;
+    return gh ? `${gh.owner}/${gh.repo} (${s.name})` : s.name;
+  });
+
+  throw new Error(
+    `No connected Jules source matches repository "${repoOwner}/${repoName}".\n` +
+    `Available connected sources (${allSources.length}): ${available.length ? available.join(', ') : 'None'}.\n` +
+    `Ensure the repository is connected to Jules via the web interface at https://jules.google.`
+  );
 }
 
 /**
  * Checks existing sessions from the Jules API to prevent duplicate sessions.
+ * Follows nextPageToken until a duplicate is found or all pages within maxAgeHours are checked.
  * 
  * @param {string} apiKey 
  * @param {object} criteria 
@@ -181,59 +193,69 @@ export async function discoverSource(apiKey, repoOwner, repoName, options = {}) 
  */
 export async function checkDuplicateSession(apiKey, criteria, options = {}) {
   const baseUrl = options.baseUrl || JULES_API_BASE;
-  const url = `${baseUrl}/sessions?pageSize=50`;
-
-  let response;
-  try {
-    response = await (options.fetchFn || fetch)(url, {
-      method: 'GET',
-      headers: {
-        'X-Goog-Api-Key': apiKey,
-        'Content-Type': 'application/json'
-      }
-    });
-  } catch (err) {
-    console.warn(`Warning: Could not fetch existing sessions for deduplication: ${err.message}`);
-    return { isDuplicate: false, existingSession: null };
-  }
-
-  if (!response.ok) {
-    console.warn(`Warning: Sessions API returned HTTP ${response.status} during deduplication check.`);
-    return { isDuplicate: false, existingSession: null };
-  }
-
-  const data = await response.json();
-  const sessions = data.sessions || [];
-
   const { runId, commitSha, auditType, maxAgeHours = 48 } = criteria;
   const cutoffTime = Date.now() - (maxAgeHours * 60 * 60 * 1000);
 
-  for (const s of sessions) {
-    const createdTime = s.createTime ? new Date(s.createTime).getTime() : 0;
-    if (createdTime < cutoffTime) continue;
+  let pageToken = '';
 
-    const title = (s.title || '').toLowerCase();
-    const prompt = (s.prompt || '').toLowerCase();
-
-    // Check CI failure duplicate by Run ID
-    if (runId && (title.includes(`run ${runId}`) || prompt.includes(`run id: ${runId}`) || prompt.includes(`run-id: ${runId}`))) {
-      return { isDuplicate: true, existingSession: s };
+  do {
+    const url = new URL(`${baseUrl}/sessions`);
+    url.searchParams.set('pageSize', '50');
+    if (pageToken) {
+      url.searchParams.set('pageToken', pageToken);
     }
 
-    // Check CI failure duplicate by Commit SHA if in active state
-    if (commitSha && (prompt.includes(commitSha.toLowerCase())) && ['QUEUED', 'IN_PROGRESS', 'PLANNING'].includes(s.state)) {
-      return { isDuplicate: true, existingSession: s };
+    let response;
+    try {
+      response = await (options.fetchFn || fetch)(url.toString(), {
+        method: 'GET',
+        headers: {
+          'X-Goog-Api-Key': apiKey,
+          'Content-Type': 'application/json'
+        }
+      });
+    } catch (err) {
+      console.warn(`Warning: Could not fetch existing sessions for deduplication: ${err.message}`);
+      return { isDuplicate: false, existingSession: null };
     }
 
-    // Check weekly audit duplicate (if already run within past maxAgeHours)
-    if (auditType && ['QUEUED', 'PLANNING', 'IN_PROGRESS', 'COMPLETED'].includes(s.state)) {
-      const isScopeMatch = title.startsWith(`weekly repository audit: ${String(auditType).toLowerCase()} `);
-      const isGenericWeekly = auditType === 'weekly' && title.includes('weekly repository audit');
-      if (isScopeMatch || isGenericWeekly) {
+    if (!response.ok) {
+      console.warn(`Warning: Sessions API returned HTTP ${response.status} during deduplication check.`);
+      return { isDuplicate: false, existingSession: null };
+    }
+
+    const data = await response.json();
+    const sessions = data.sessions || [];
+
+    for (const s of sessions) {
+      const createdTime = s.createTime ? new Date(s.createTime).getTime() : 0;
+      if (createdTime < cutoffTime) continue;
+
+      const title = (s.title || '').toLowerCase();
+      const prompt = (s.prompt || '').toLowerCase();
+
+      // Check CI failure duplicate by Run ID
+      if (runId && (title.includes(`run ${runId}`) || prompt.includes(`run id: ${runId}`) || prompt.includes(`run-id: ${runId}`))) {
         return { isDuplicate: true, existingSession: s };
       }
+
+      // Check CI failure duplicate by Commit SHA if in active state
+      if (commitSha && (prompt.includes(commitSha.toLowerCase())) && ['QUEUED', 'IN_PROGRESS', 'PLANNING'].includes(s.state)) {
+        return { isDuplicate: true, existingSession: s };
+      }
+
+      // Check weekly audit duplicate (if already run within past maxAgeHours)
+      if (auditType && ['QUEUED', 'PLANNING', 'IN_PROGRESS', 'COMPLETED'].includes(s.state)) {
+        const isScopeMatch = title.startsWith(`weekly repository audit: ${String(auditType).toLowerCase()} `);
+        const isGenericWeekly = auditType === 'weekly' && title.includes('weekly repository audit');
+        if (isScopeMatch || isGenericWeekly) {
+          return { isDuplicate: true, existingSession: s };
+        }
+      }
     }
-  }
+
+    pageToken = data.nextPageToken || '';
+  } while (pageToken);
 
   return { isDuplicate: false, existingSession: null };
 }

@@ -124,6 +124,50 @@ test('3. Jules Source Discovery Tests', async (t) => {
     assert.equal(result.defaultBranch, 'main');
   });
 
+  await t.test('Discovers source across multiple pages using nextPageToken', async () => {
+    let callCount = 0;
+    const mockFetch = async (url) => {
+      callCount++;
+      const parsedUrl = new URL(url);
+      const token = parsedUrl.searchParams.get('pageToken');
+
+      if (!token) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            sources: [
+              { name: 'sources/page1-repo', githubRepo: { owner: 'other', repo: 'other' } }
+            ],
+            nextPageToken: 'token-page-2'
+          })
+        };
+      } else if (token === 'token-page-2') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            sources: [
+              {
+                name: 'sources/github-Cruise-JavaCLass-Cruise-api',
+                githubRepo: {
+                  owner: 'Cruise-JavaCLass',
+                  repo: 'Cruise-api',
+                  defaultBranch: { displayName: 'main' }
+                }
+              }
+            ]
+          })
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({ sources: [] }) };
+    };
+
+    const result = await discoverSource('test-key', 'Cruise-JavaCLass', 'Cruise-api', { fetchFn: mockFetch });
+    assert.equal(result.sourceName, 'sources/github-Cruise-JavaCLass-Cruise-api');
+    assert.equal(callCount, 2);
+  });
+
   await t.test('Throws descriptive error when source is not connected', async () => {
     const mockFetch = async () => ({
       ok: true,
@@ -244,6 +288,45 @@ test('4. Session Deduplication Tests', async (t) => {
     const result = await checkDuplicateSession('test-key', { auditType: 'security', maxAgeHours: 24 }, { fetchFn: mockFetch });
     assert.equal(result.isDuplicate, true);
     assert.equal(result.existingSession.id, 'sess-planning');
+  });
+
+  await t.test('Searches multiple session pages and stops paging immediately upon finding duplicate', async () => {
+    let callCount = 0;
+    const mockFetch = async (url) => {
+      callCount++;
+      const parsedUrl = new URL(url);
+      const token = parsedUrl.searchParams.get('pageToken');
+
+      if (!token) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            sessions: [
+              { id: 'sess-p1', title: 'Other run 111', createTime: new Date().toISOString(), state: 'COMPLETED' }
+            ],
+            nextPageToken: 'sess-page-2'
+          })
+        };
+      } else if (token === 'sess-page-2') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            sessions: [
+              { id: 'sess-p2-target', title: 'Fix CI Failure: Run 777', createTime: new Date().toISOString(), state: 'IN_PROGRESS' }
+            ],
+            nextPageToken: 'sess-page-3'
+          })
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({ sessions: [] }) };
+    };
+
+    const result = await checkDuplicateSession('test-key', { runId: '777' }, { fetchFn: mockFetch });
+    assert.equal(result.isDuplicate, true);
+    assert.equal(result.existingSession.id, 'sess-p2-target');
+    assert.equal(callCount, 2, 'Must stop paging as soon as duplicate is found on page 2');
   });
 
   await t.test('Allows session creation when no duplicate exists', async () => {
