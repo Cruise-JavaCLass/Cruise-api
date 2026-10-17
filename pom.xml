@@ -21,7 +21,7 @@
 		<java.version>21</java.version>
 		<maven.compiler.proc>full</maven.compiler.proc>
 		<jacoco.version>0.8.15</jacoco.version>
-		<sonar.version>5.0.0.4389</sonar.version>
+		<sonar.version>5.8.0.7211</sonar.version>
 
 		<!-- SonarCloud Quality Gate Configuration -->
 		<sonar.organization>cruise-javaclass</sonar.organization>
