@@ -19,6 +19,17 @@ export const JULES_API_BASE = 'https://jules.googleapis.com/v1alpha';
  * @param {string[]} extraSecrets 
  * @returns {string}
  */
+/**
+ * Sanitizes log output by removing newline and carriage return characters
+ * to prevent Log Injection vulnerabilities.
+ * @param {string} msg
+ * @returns {string}
+ */
+export function sanitizeLog(msg) {
+  if (typeof msg !== 'string') return '';
+  return msg.replace(/[\r\n]+/g, ' ');
+}
+
 export function redactSensitiveData(text, extraSecrets = []) {
   if (!text || typeof text !== 'string') return '';
 
@@ -224,12 +235,12 @@ export async function checkDuplicateSession(apiKey, criteria, options = {}) {
         }
       });
     } catch (err) {
-      console.warn(`Warning: Could not fetch existing sessions for deduplication: ${err.message}`);
+      console.warn(sanitizeLog(`Warning: Could not fetch existing sessions for deduplication: ${err.message}`));
       return { isDuplicate: false, existingSession: null };
     }
 
     if (!response.ok) {
-      console.warn(`Warning: Sessions API returned HTTP ${response.status} during deduplication check.`);
+      console.warn(sanitizeLog(`Warning: Sessions API returned HTTP ${response.status} during deduplication check.`));
       return { isDuplicate: false, existingSession: null };
     }
 
@@ -265,7 +276,7 @@ export async function checkDuplicateSession(apiKey, criteria, options = {}) {
 
     const nextToken = data.nextPageToken || '';
     if (nextToken && seenPageTokens.has(nextToken)) {
-      console.warn(`Warning: Repeating pageToken "${nextToken}" detected in Sessions API during deduplication. Aborting pagination.`);
+      console.warn(sanitizeLog(`Warning: Repeating pageToken "${nextToken}" detected in Sessions API during deduplication. Aborting pagination.`));
       return { isDuplicate: false, existingSession: null };
     }
     if (nextToken) {
@@ -479,7 +490,7 @@ export function writeStepSummary(markdown) {
     try {
       appendFileSync(summaryFile, markdown + '\n', 'utf8');
     } catch (err) {
-      console.warn('Could not write to GITHUB_STEP_SUMMARY:', err.message);
+      console.warn('Could not write to GITHUB_STEP_SUMMARY:', sanitizeLog(err.message));
     }
   }
 }

@@ -11,7 +11,8 @@ import {
   createSession,
   redactSensitiveData,
   truncateLog,
-  writeStepSummary
+  writeStepSummary,
+  sanitizeLog
 } from './jules-client.mjs';
 
 /**
@@ -40,7 +41,7 @@ async function fetchFailedJobsAndLogs(githubToken, owner, repo, runId) {
 
     if (!jobsRes.ok) {
       const txt = await jobsRes.text();
-      console.warn(`Could not retrieve jobs page for run ${runId} (HTTP ${jobsRes.status}): ${txt}`);
+      console.warn(sanitizeLog(`Could not retrieve jobs page for run ${runId} (HTTP ${jobsRes.status}): ${txt}`));
       logSections.push(`[WARNING] Failed to fetch jobs page (${nextUrl}): HTTP ${jobsRes.status} - ${txt}`);
       break;
     }
@@ -143,29 +144,29 @@ async function main() {
         const runInfo = await runRes.json();
         commitSha = runInfo.head_sha || commitSha;
         branch = runInfo.head_branch || branch;
-        console.log(`Resolved from Actions API -> commitSha: ${commitSha}, branch: ${branch}`);
+        console.log(sanitizeLog(`Resolved from Actions API -> commitSha: ${commitSha}, branch: ${branch}`));
       } else {
         const errMsg = `Could not fetch run metadata for run ${runId} (HTTP ${runRes.status}).`;
         if (isWorkflowDispatch) {
           throw new Error(`${errMsg} Failed to resolve target commit and branch for manual dispatch.`);
         }
-        console.warn(`${errMsg} Using fallback values.`);
+        console.warn(sanitizeLog(`${errMsg} Using fallback values.`));
       }
     } catch (err) {
       if (isWorkflowDispatch) {
         throw err;
       }
-      console.warn(`Error fetching run metadata: ${err.message}. Using fallback values.`);
+      console.warn(sanitizeLog(`Error fetching run metadata: ${err.message}. Using fallback values.`));
     }
   }
 
   commitSha = commitSha || 'HEAD';
   branch = branch || 'main';
 
-  console.log(`Failed Run ID: ${runId}`);
-  console.log(`Run URL: ${runUrl}`);
-  console.log(`Commit SHA: ${commitSha}`);
-  console.log(`Branch: ${branch} (Default: ${defaultBranch})`);
+  console.log(sanitizeLog(`Failed Run ID: ${runId}`));
+  console.log(sanitizeLog(`Run URL: ${runUrl}`));
+  console.log(sanitizeLog(`Commit SHA: ${commitSha}`));
+  console.log(sanitizeLog(`Branch: ${branch} (Default: ${defaultBranch})`));
 
   // Step 1: Safety & Deduplication check
   console.log('Checking for existing Jules repair sessions for this run...');
@@ -177,7 +178,7 @@ async function main() {
 
   if (isDuplicate && existingSession) {
     const msg = `Skipping repair. An existing Jules session "${existingSession.title || existingSession.name}" already exists (${existingSession.state}) for run ID ${runId}.`;
-    console.log(msg);
+    console.log(sanitizeLog(msg));
     writeStepSummary(`### ⏭️ Jules CI Repair Skipped
 - **Reason:** Duplicate session already exists for this CI failure.
 - **Existing Session:** [${existingSession.title || existingSession.id}](${existingSession.url || '#'})
@@ -200,7 +201,7 @@ async function main() {
   // Step 4: Discover connected Jules source
   console.log('Discovering connected Jules source via Sources API...');
   const { sourceName } = await discoverSource(apiKey, repoOwner, repoName);
-  console.log(`Discovered source: "${sourceName}"`);
+  console.log(sanitizeLog(`Discovered source: "${sourceName}"`));
 
   // Step 5: Construct CI repair prompt
   console.log('Generating CI repair prompt...');
@@ -226,9 +227,9 @@ async function main() {
     automationMode: 'AUTO_CREATE_PR'
   });
 
-  console.log(`Successfully created Jules repair session! ID: ${session.id || session.name}`);
+  console.log(sanitizeLog(`Successfully created Jules repair session! ID: ${session.id || session.name}`));
   const sessionUrl = session.url || `https://jules.google.com/session/${session.id || ''}`;
-  console.log(`Session URL: ${sessionUrl}`);
+  console.log(sanitizeLog(`Session URL: ${sessionUrl}`));
 
   // Step 7: Output Step Summary
   const failedJobsSummary = failedJobs.map(j => `- **${j.name}** (Failed step: \`${j.failedStep}\`)`).join('\n') || 'None recorded';
@@ -253,7 +254,7 @@ ${failedJobsSummary}
 }
 
 main().catch(err => {
-  console.error(`Error during Jules CI repair: ${err.message}`);
+  console.error(sanitizeLog(`Error during Jules CI repair: ${err.message}`));
   writeStepSummary(`### ❌ Jules CI Repair Launch Failed
 \`\`\`
 ${err.message}
