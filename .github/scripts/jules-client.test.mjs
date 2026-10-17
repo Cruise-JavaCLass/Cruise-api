@@ -225,6 +225,27 @@ test('4. Session Deduplication Tests', async (t) => {
     assert.equal(fullResult.existingSession.id, 'sess-full');
   });
 
+  await t.test('Deduplicates weekly audit when session is in PLANNING state', async () => {
+    const mockSessions = [
+      {
+        id: 'sess-planning',
+        title: 'Weekly Repository Audit: SECURITY (2026-10-17)',
+        state: 'PLANNING',
+        createTime: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString()
+      }
+    ];
+
+    const mockFetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ sessions: mockSessions })
+    });
+
+    const result = await checkDuplicateSession('test-key', { auditType: 'security', maxAgeHours: 24 }, { fetchFn: mockFetch });
+    assert.equal(result.isDuplicate, true);
+    assert.equal(result.existingSession.id, 'sess-planning');
+  });
+
   await t.test('Allows session creation when no duplicate exists', async () => {
     const mockSessions = [
       {

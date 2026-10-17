@@ -226,7 +226,7 @@ export async function checkDuplicateSession(apiKey, criteria, options = {}) {
     }
 
     // Check weekly audit duplicate (if already run within past maxAgeHours)
-    if (auditType && ['QUEUED', 'IN_PROGRESS', 'COMPLETED'].includes(s.state)) {
+    if (auditType && ['QUEUED', 'PLANNING', 'IN_PROGRESS', 'COMPLETED'].includes(s.state)) {
       const isScopeMatch = title.startsWith(`weekly repository audit: ${String(auditType).toLowerCase()} `);
       const isGenericWeekly = auditType === 'weekly' && title.includes('weekly repository audit');
       if (isScopeMatch || isGenericWeekly) {
