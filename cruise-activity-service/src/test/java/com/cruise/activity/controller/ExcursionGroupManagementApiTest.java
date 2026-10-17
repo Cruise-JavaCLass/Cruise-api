@@ -251,7 +251,7 @@ class ExcursionGroupManagementApiTest {
                     .andExpect(jsonPath("$.success", is(true)))
                     .andExpect(jsonPath("$.data", hasSize(3)))
                     .andExpect(jsonPath("$.data[*].passengerName", hasItem("Hoàng Kim Oanh")))
-                    .andExpect(jsonPath("$.data[*].groupName", hasItem("Đoàn 1")));
+                    .andExpect(jsonPath("$.data[?(@.ticketCode == 'TKT-EXC-001')].groupName", hasItem("Đoàn 1")));
         }
 
         @Test
@@ -514,8 +514,8 @@ class ExcursionGroupManagementApiTest {
                     .andExpect(jsonPath("$.data.totalPassengers", is(3)))
                     .andExpect(jsonPath("$.data.totalGroups", is(2)))
                     .andExpect(jsonPath("$.data.groups[0].groupName", startsWith("Tổ ")))
-                    .andExpect(jsonPath("$.data.groups[0].busNumber", notNullValue()))
-                    .andExpect(jsonPath("$.data.groups[*].passengers[?(@.ticketCode == 'TKT-EXC-003')].busNumber", hasItem(notNullValue())));
+                    .andExpect(jsonPath("$.data.groups[*].busNumber", everyItem(isOneOf("BUS-01", "BUS-02"))))
+                    .andExpect(jsonPath("$.data.groups[*].passengers[?(@.ticketCode == 'TKT-EXC-003')].busNumber", hasItem(isOneOf("BUS-01", "BUS-02"))));
         }
 
         @Test
