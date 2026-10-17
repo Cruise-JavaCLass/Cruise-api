@@ -28,13 +28,6 @@
 		<sonar.projectKey>Cruise-JavaCLass_Cruise-api</sonar.projectKey>
 		<sonar.host.url>https://sonarcloud.io</sonar.host.url>
 		<sonar.coverage.jacoco.xmlReportPaths>
-			${project.basedir}/cruise-common/target/site/jacoco/jacoco.xml,
-			${project.basedir}/cruise-gateway/target/site/jacoco/jacoco.xml,
-			${project.basedir}/cruise-auth-service/target/site/jacoco/jacoco.xml,
-			${project.basedir}/cruise-itinerary-service/target/site/jacoco/jacoco.xml,
-			${project.basedir}/cruise-activity-service/target/site/jacoco/jacoco.xml,
-			${project.basedir}/cruise-pos-service/target/site/jacoco/jacoco.xml,
-			${project.basedir}/target/site/jacoco/jacoco.xml
 			${maven.multiModuleProjectDirectory}/cruise-common/target/site/jacoco/jacoco.xml,
 			${maven.multiModuleProjectDirectory}/cruise-gateway/target/site/jacoco/jacoco.xml,
 			${maven.multiModuleProjectDirectory}/cruise-auth-service/target/site/jacoco/jacoco.xml,
