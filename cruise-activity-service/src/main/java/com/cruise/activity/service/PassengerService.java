@@ -29,6 +29,13 @@ public class PassengerService {
     private final ExcursionPassengerRepository excursionPassengerRepository;
     private final ShoreExcursionRepository shoreExcursionRepository;
 
+    /**
+     * Creates a service with repositories for passengers, bookings, and excursion details.
+     *
+     * @param passengerRepository passenger persistence and lookup repository
+     * @param excursionPassengerRepository excursion booking lookup repository
+     * @param shoreExcursionRepository excursion details lookup repository
+     */
     public PassengerService(
             PassengerRepository passengerRepository,
             ExcursionPassengerRepository excursionPassengerRepository,
@@ -112,6 +119,16 @@ public class PassengerService {
         return toResponse(p);
     }
 
+    /**
+     * Builds an active passenger's booking summary using active excursion bookings
+     * matched by cabin number, falling back to a case-insensitive name match when
+     * no cabin bookings exist. Included excursions, missing excursions, and missing
+     * prices contribute zero to the total excursion spend.
+     *
+     * @param passengerId ID of the passenger to summarize
+     * @return passenger details, matched excursion logistics, and total excursion spend
+     * @throws ResourceNotFoundException if the passenger is missing or inactive
+     */
     @Transactional(readOnly = true)
     public PassengerBookingSummaryResponse getPassengerBookingSummary(Long passengerId) {
         Passenger p = passengerRepository.findById(passengerId)
@@ -172,6 +189,12 @@ public class PassengerService {
                 .build();
     }
 
+    /**
+     * Infers a cabin category from suite, balcony, or oceanview text in the cabin number.
+     *
+     * @param cabinNumber cabin label, or {@code null} if unavailable
+     * @return the matched category, Standard Cabin for null, or Deluxe Stateroom otherwise
+     */
     private String extractCabinCategory(String cabinNumber) {
         if (cabinNumber == null) return "Standard Cabin";
         String lower = cabinNumber.toLowerCase();

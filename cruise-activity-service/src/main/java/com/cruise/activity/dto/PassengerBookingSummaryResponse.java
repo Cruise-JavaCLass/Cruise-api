@@ -39,6 +39,9 @@ public class PassengerBookingSummaryResponse {
     private BigDecimal totalExcursionSpent;
     private List<ExcursionSummaryItem> registeredExcursions;
 
+    /**
+     * Booking ticket, group and transport logistics, schedule, and charge for a matched excursion.
+     */
     @Data
     @Builder
     @NoArgsConstructor

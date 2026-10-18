@@ -211,6 +211,11 @@ class PassengerControllerTest {
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().bytes(csvBytes));
     }
 
+    /**
+     * Verifies the path-ID summary endpoint serializes passenger details and an excursion.
+     *
+     * @throws Exception if the MockMvc request fails
+     */
     @Test
     @DisplayName("GET /api/activities/passengers/{id}/summary - Lấy tổng quan booking hành khách thành công (KAN-197, KAN-200)")
     void getPassengerBookingSummarySuccess() throws Exception {
@@ -246,6 +251,11 @@ class PassengerControllerTest {
                 .andExpect(jsonPath("$.data.registeredExcursions[0].excursionTitle").value("Khám phá Hang Sửng Sốt"));
     }
 
+    /**
+     * Verifies the query-ID summary endpoint returns the service's passenger details.
+     *
+     * @throws Exception if the MockMvc request fails
+     */
     @Test
     @DisplayName("GET /api/activities/passengers/summary - Lấy tổng quan booking hành khách theo query param")
     void getCurrentPassengerBookingSummarySuccess() throws Exception {

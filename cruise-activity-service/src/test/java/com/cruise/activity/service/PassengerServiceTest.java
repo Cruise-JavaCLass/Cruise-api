@@ -256,6 +256,10 @@ class PassengerServiceTest {
         verify(passengerRepository, times(1)).findByTourIdAndRegistrationStatusAndActiveTrue(1L, com.cruise.activity.enums.RegistrationStatus.CONFIRMED);
     }
 
+    /**
+     * Verifies the summary retains passenger details and reports no excursions
+     * when both cabin and passenger-name lookups return no bookings.
+     */
     @Test
     @DisplayName("getPassengerBookingSummary - Lấy thông tin tổng quan booking thành công")
     void getPassengerBookingSummarySuccess() {
@@ -272,6 +276,9 @@ class PassengerServiceTest {
         assertThat(summary.getTotalRegisteredExcursions()).isZero();
     }
 
+    /**
+     * Verifies a summary request for a missing passenger raises ResourceNotFoundException.
+     */
     @Test
     @DisplayName("getPassengerBookingSummary - Báo lỗi khi không tìm thấy hành khách")
     void getPassengerBookingSummaryNotFound() {

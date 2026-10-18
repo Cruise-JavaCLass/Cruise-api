@@ -27,7 +27,19 @@ public interface ExcursionPassengerRepository extends JpaRepository<ExcursionPas
 
     long countByExcursionId(Long excursionId);
 
+    /**
+     * Finds active excursion bookings with the given cabin number.
+     *
+     * @param cabinNumber cabin number to match
+     * @return matching active bookings, or an empty list if none match
+     */
     List<ExcursionPassenger> findByCabinNumberAndActiveTrue(String cabinNumber);
 
+    /**
+     * Finds active excursion bookings by passenger name, ignoring case.
+     *
+     * @param passengerName passenger name to match
+     * @return matching active bookings, or an empty list if none match
+     */
     List<ExcursionPassenger> findByPassengerNameIgnoreCaseAndActiveTrue(String passengerName);
 }
