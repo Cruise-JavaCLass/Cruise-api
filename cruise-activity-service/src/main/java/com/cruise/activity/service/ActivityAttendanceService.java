@@ -206,7 +206,7 @@ public class ActivityAttendanceService {
 
         ActivityAttendance saved;
         try {
-            saved = attendanceRepository.save(attendance);
+            saved = attendanceRepository.saveAndFlush(attendance);
         } catch (ObjectOptimisticLockingFailureException ex) {
             throw new DuplicateCheckInException("Hành khách " + passenger.getFullName() + " đang được check-in đồng thời bởi thiết bị khác");
         } catch (DataIntegrityViolationException ex) {
@@ -275,12 +275,10 @@ public class ActivityAttendanceService {
         if (request.getPassengerId() != null) {
             passenger = passengerRepository.findById(request.getPassengerId())
                     .filter(Passenger::getActive)
-                    .orElse(null);
-        }
-        if (passenger == null && request.getRfidTag() != null && !request.getRfidTag().isBlank()) {
+                    .orElseThrow(() -> new BusinessRuleException("Hành khách với ID " + request.getPassengerId() + " không tồn tại hoặc đã bị vô hiệu"));
+        } else if (request.getRfidTag() != null && !request.getRfidTag().isBlank()) {
             passenger = passengerRepository.findByRfidTagAndActiveTrue(request.getRfidTag().trim()).orElse(null);
-        }
-        if (passenger == null && request.getCabinNumber() != null && !request.getCabinNumber().isBlank()) {
+        } else if (request.getCabinNumber() != null && !request.getCabinNumber().isBlank()) {
             List<Passenger> list = passengerRepository.findByCabinNumberAndActiveTrue(request.getCabinNumber().trim());
             if (list.size() > 1) {
                 throw new BusinessRuleException("Cabin " + request.getCabinNumber() + " có " + list.size() +
@@ -351,7 +349,7 @@ public class ActivityAttendanceService {
 
         ActivityAttendance saved;
         try {
-            saved = attendanceRepository.save(attendance);
+            saved = attendanceRepository.saveAndFlush(attendance);
         } catch (ObjectOptimisticLockingFailureException ex) {
             throw new DuplicateCheckInException("Hành khách " + passengerName + " đang được xử lý đồng thời bởi thiết bị khác");
         } catch (DataIntegrityViolationException ex) {
@@ -491,18 +489,21 @@ public class ActivityAttendanceService {
         int duplicate = 0;
         int failed = 0;
 
+        TransactionTemplate itemTx = new TransactionTemplate(transactionManager);
+        itemTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
         for (OfflineCheckInBatchRequest.OfflineCheckInItem item : request.getCheckIns()) {
             try {
-                int result = processSingleOfflineItem(activityId, item);
-                if (result == 1) {
+                Integer result = itemTx.execute(txStatus -> processSingleOfflineItem(activityId, item));
+                if (result != null && result == 1) {
                     processed++;
-                } else if (result == 2) {
+                } else if (result != null && result == 2) {
                     duplicate++;
                 } else {
                     failed++;
                 }
             } catch (Exception ex) {
-                log.error("Lỗi khi xử lý bản ghi offline sync item {}: {}", item.getOfflineQueueId(), ex.getMessage());
+                log.error("Lỗi khi xử lý bản ghi offline sync item {}: {}", item.getOfflineQueueId(), ex.getMessage(), ex);
                 failed++;
             }
         }
@@ -556,6 +557,7 @@ public class ActivityAttendanceService {
         }
 
         if (passId == null) {
+            log.warn("Offline item failed: passId is null for item {}", item.getOfflineQueueId());
             return 0;
         }
 
@@ -563,6 +565,7 @@ public class ActivityAttendanceService {
                 .filter(Passenger::getActive)
                 .orElse(null);
         if (passenger == null) {
+            log.warn("Offline item failed: passenger not found or inactive for passId={}", passId);
             return 0;
         }
 
@@ -596,7 +599,7 @@ public class ActivityAttendanceService {
         attendance.setNote("Đồng bộ ngoại tuyến từ hàng đợi: " + item.getOfflineQueueId());
 
         try {
-            attendanceRepository.save(attendance);
+            attendanceRepository.saveAndFlush(attendance);
         } catch (ObjectOptimisticLockingFailureException | DataIntegrityViolationException ex) {
             return 2;
         }

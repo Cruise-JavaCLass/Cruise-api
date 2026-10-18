@@ -30,4 +30,4 @@ spring:
 cruise:
   security:
     qr:
-      secret: ${CRUISE_QR_SECRET:CruiseActivityDynamicQRHMACSecretKey2026!@#$%^&*}
+      secret: ${CRUISE_QR_SECRET}

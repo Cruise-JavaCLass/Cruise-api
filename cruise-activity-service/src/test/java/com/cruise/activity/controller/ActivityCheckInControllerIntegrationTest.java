@@ -32,7 +32,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Transactional
 @DisplayName("Activity Check-in & Attendance Controller Integration Tests (KAN-223)")
 class ActivityCheckInControllerIntegrationTest {
 
@@ -101,6 +100,9 @@ class ActivityCheckInControllerIntegrationTest {
                 .qrCode("QR-PASS-MAI")
                 .active(true)
                 .build());
+
+        activityRepository.flush();
+        passengerRepository.flush();
     }
 
     @Test
@@ -279,5 +281,13 @@ class ActivityCheckInControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.processedCount").value(2))
                 .andExpect(jsonPath("$.data.duplicateCount").value(0))
                 .andExpect(jsonPath("$.data.failedCount").value(0));
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void tearDown() {
+        checkInLogRepository.deleteAll();
+        attendanceRepository.deleteAll();
+        activityRepository.deleteAll();
+        passengerRepository.deleteAll();
     }
 }

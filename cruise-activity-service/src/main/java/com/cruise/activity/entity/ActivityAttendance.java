@@ -77,8 +77,9 @@ public class ActivityAttendance extends BaseEntity {
     private String note;
 
     @Version
-    @Column(name = "version")
-    private Long version;
+    @Column(name = "version", nullable = false)
+    @Builder.Default
+    private Long version = 0L;
 
     @Column(name = "active", nullable = false)
     @Builder.Default

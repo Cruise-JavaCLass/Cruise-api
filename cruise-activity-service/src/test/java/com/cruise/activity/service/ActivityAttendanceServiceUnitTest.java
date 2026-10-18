@@ -118,6 +118,15 @@ class ActivityAttendanceServiceUnitTest {
                 .active(true)
                 .build();
         sampleAttendance.setId(500L);
+
+        org.mockito.Mockito.lenient().when(attendanceRepository.saveAndFlush(any(ActivityAttendance.class)))
+                .thenAnswer(invocation -> {
+                    ActivityAttendance att = invocation.getArgument(0);
+                    if (att.getId() == null) {
+                        att.setId(999L);
+                    }
+                    return att;
+                });
     }
 
     @Nested
@@ -212,7 +221,6 @@ class ActivityAttendanceServiceUnitTest {
             when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
             when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L))
                     .thenReturn(Optional.of(sampleAttendance));
-            when(attendanceRepository.save(any(ActivityAttendance.class))).thenAnswer(invocation -> invocation.getArgument(0));
             when(attendanceRepository.countByActivityIdAndStatusAndActiveTrue(100L, ActivityAttendanceStatus.CHECKED_IN))
                     .thenReturn(1L);
 
@@ -243,7 +251,6 @@ class ActivityAttendanceServiceUnitTest {
             when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
             when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L))
                     .thenReturn(Optional.of(sampleAttendance));
-            when(attendanceRepository.save(any(ActivityAttendance.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
             ActivityCheckInRequest request = ActivityCheckInRequest.builder()
                     .rfidTag("RFID-VIP-9941")
@@ -305,7 +312,7 @@ class ActivityAttendanceServiceUnitTest {
             when(activityRepository.findById(100L)).thenReturn(Optional.of(sampleActivity));
             when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
             when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.of(sampleAttendance));
-            when(attendanceRepository.save(any(ActivityAttendance.class)))
+            when(attendanceRepository.saveAndFlush(any(ActivityAttendance.class)))
                     .thenThrow(new org.springframework.orm.ObjectOptimisticLockingFailureException(ActivityAttendance.class, 500L));
 
             ActivityCheckInRequest request = ActivityCheckInRequest.builder()
@@ -323,7 +330,7 @@ class ActivityAttendanceServiceUnitTest {
             when(activityRepository.findById(100L)).thenReturn(Optional.of(sampleActivity));
             when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
             when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.of(sampleAttendance));
-            when(attendanceRepository.save(any(ActivityAttendance.class)))
+            when(attendanceRepository.saveAndFlush(any(ActivityAttendance.class)))
                     .thenThrow(new org.springframework.dao.DataIntegrityViolationException("unique constraint uk_activity_passenger violated"));
 
             ActivityCheckInRequest request = ActivityCheckInRequest.builder()
@@ -350,7 +357,6 @@ class ActivityAttendanceServiceUnitTest {
             when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
             when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L))
                     .thenReturn(Optional.empty());
-            when(attendanceRepository.save(any(ActivityAttendance.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
             WalkInCheckInRequest request = WalkInCheckInRequest.builder()
                     .passengerId(1L)
@@ -396,7 +402,6 @@ class ActivityAttendanceServiceUnitTest {
                     .thenReturn(6L);
             when(passengerRepository.findByRfidTagAndActiveTrue("RFID-VIP-9941")).thenReturn(Optional.of(samplePassenger));
             when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.of(sampleAttendance));
-            when(attendanceRepository.save(any(ActivityAttendance.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
             WalkInCheckInRequest request = WalkInCheckInRequest.builder()
                     .rfidTag("RFID-VIP-9941")
@@ -546,7 +551,7 @@ class ActivityAttendanceServiceUnitTest {
             assertThat(result.getDuplicateCount()).isEqualTo(1);
             assertThat(result.getFailedCount()).isEqualTo(0);
 
-            verify(attendanceRepository, times(1)).save(att1);
+            verify(attendanceRepository, times(1)).saveAndFlush(att1);
             assertThat(att1.getStatus()).isEqualTo(ActivityAttendanceStatus.CHECKED_IN);
         }
 
@@ -598,7 +603,7 @@ class ActivityAttendanceServiceUnitTest {
                     throw new org.springframework.dao.DataIntegrityViolationException("unique");
                 }
                 return att;
-            }).when(attendanceRepository).save(any(ActivityAttendance.class));
+            }).when(attendanceRepository).saveAndFlush(any(ActivityAttendance.class));
 
             OfflineCheckInBatchRequest batchRequest = OfflineCheckInBatchRequest.builder()
                     .checkIns(List.of(
