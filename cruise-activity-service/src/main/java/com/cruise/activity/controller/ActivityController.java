@@ -23,6 +23,7 @@ import java.util.Map;
 public class ActivityController {
 
     private final OnboardActivityService activityService;
+    private final com.cruise.activity.service.ActivityAttendanceService attendanceService;
 
     @GetMapping("/health")
     public ApiResponse<Map<String, Object>> health() {
@@ -116,4 +117,33 @@ public class ActivityController {
         activityService.deleteActivity(id);
         return ApiResponse.ok("Xóa hoạt động thành công", null);
     }
+
+    // ==========================================
+    // ACTIVITY QR CHECK-IN & ATTENDANCE APIS (KAN-219)
+    // ==========================================
+
+    /**
+     * Sinh mã QR Pass động bảo mật có TTL 60s cho hành khách (KAN-222)
+     */
+    @GetMapping("/{id}/passengers/{passengerId}/qr-pass")
+    public ApiResponse<com.cruise.activity.dto.ActivityPassResponse> generateQrPass(
+            @PathVariable Long id,
+            @PathVariable Long passengerId
+    ) {
+        return ApiResponse.ok("Sinh mã QR Pass hoạt động thành công",
+                attendanceService.generateQrPass(id, passengerId));
+    }
+
+    /**
+     * Soát vé và điểm danh hoạt động đa kênh (QR, RFID, ID thủ công - KAN-222)
+     */
+    @PostMapping("/{id}/check-in")
+    public ApiResponse<com.cruise.activity.dto.ActivityCheckInResponse> checkIn(
+            @PathVariable Long id,
+            @Valid @RequestBody com.cruise.activity.dto.ActivityCheckInRequest request
+    ) {
+        return ApiResponse.ok("Điểm danh hoạt động thành công",
+                attendanceService.checkIn(id, request));
+    }
+
 }
