@@ -18,8 +18,11 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import com.cruise.activity.entity.ExcursionPassenger;
+import com.cruise.activity.entity.ShoreExcursion;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -286,5 +289,132 @@ class PassengerServiceTest {
 
         assertThatThrownBy(() -> passengerService.getPassengerBookingSummary(999L))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("getPassengerBookingSummary - Tính đúng tổng chi phí, map tour và phân loại các loại cabin")
+    void getPassengerBookingSummaryWithExcursionsAndCabinCategories() {
+        Passenger suitePassenger = Passenger.builder()
+                .tourId(1L)
+                .fullName("Lê Hoàng Nam")
+                .email("nam@cruise.com")
+                .phoneNumber("0912345678")
+                .cabinNumber("Suite 1205")
+                .rfidTag("RFID-SUITE")
+                .qrCode("QR-SUITE")
+                .tourPackage("VIP")
+                .bleZone("Deck 12")
+                .registrationStatus(com.cruise.activity.enums.RegistrationStatus.CONFIRMED)
+                .checkInStatus(CheckInStatus.BOARDED)
+                .boardedAt(java.time.Instant.now())
+                .active(true)
+                .build();
+        suitePassenger.setId(101L);
+
+        when(passengerRepository.findById(101L)).thenReturn(Optional.of(suitePassenger));
+
+        ExcursionPassenger ep1 = ExcursionPassenger.builder()
+                .excursionId(501L)
+                .passengerName("Lê Hoàng Nam")
+                .cabinNumber("Suite 1205")
+                .ticketCode("TCK-501")
+                .groupName("Đoàn VIP")
+                .busNumber("BUS-01")
+                .status(com.cruise.activity.enums.ExcursionPassengerStatus.REGISTERED)
+                .active(true)
+                .build();
+
+        ExcursionPassenger ep2 = ExcursionPassenger.builder()
+                .excursionId(502L)
+                .passengerName("Lê Hoàng Nam")
+                .cabinNumber("Suite 1205")
+                .ticketCode("TCK-502")
+                .groupName(null)
+                .busNumber(null)
+                .status(null)
+                .active(true)
+                .build();
+
+        when(excursionPassengerRepository.findByCabinNumberAndActiveTrue("Suite 1205")).thenReturn(List.of(ep1, ep2));
+
+        ShoreExcursion exc1 = ShoreExcursion.builder()
+                .title("Tour Trực Thăng Vịnh Hạ Long")
+                .price(new BigDecimal("2500000"))
+                .isIncluded(false)
+                .portName("Cảng Hạ Long")
+                .gatheringTime(java.time.LocalTime.of(8, 0))
+                .returnToShipTime(java.time.LocalTime.of(12, 0))
+                .build();
+
+        ShoreExcursion exc2 = ShoreExcursion.builder()
+                .title("Tour Thuyền Kayak (Đã bao gồm)")
+                .price(new BigDecimal("500000"))
+                .isIncluded(true)
+                .portName("Vịnh Lan Hạ")
+                .build();
+
+        when(shoreExcursionRepository.findById(501L)).thenReturn(Optional.of(exc1));
+        when(shoreExcursionRepository.findById(502L)).thenReturn(Optional.of(exc2));
+
+        com.cruise.activity.dto.PassengerBookingSummaryResponse summary = passengerService.getPassengerBookingSummary(101L);
+
+        assertThat(summary).isNotNull();
+        assertThat(summary.getCabinCategory()).isEqualTo("Royal Suite");
+        assertThat(summary.getTotalRegisteredExcursions()).isEqualTo(2);
+        assertThat(summary.getTotalExcursionSpent()).isEqualByComparingTo(new BigDecimal("2500000"));
+        assertThat(summary.getRegisteredExcursions()).hasSize(2);
+        assertThat(summary.getRegisteredExcursions().get(0).getExcursionTitle()).isEqualTo("Tour Trực Thăng Vịnh Hạ Long");
+        assertThat(summary.getRegisteredExcursions().get(1).getGroupName()).isEqualTo("Chưa xếp nhóm");
+        assertThat(summary.getRegisteredExcursions().get(1).getBusNumber()).isEqualTo("Chưa phân xe");
+        assertThat(summary.getRegisteredExcursions().get(1).getStatus()).isEqualTo("REGISTERED");
+    }
+
+    @Test
+    @DisplayName("getPassengerBookingSummary - Kiểm tra fallback tên và phân loại các loại cabin khác")
+    void getPassengerBookingSummaryCabinFallbacks() {
+        Passenger balconyPassenger = Passenger.builder()
+                .tourId(1L)
+                .fullName("Trần Thị Mai")
+                .cabinNumber("Balcony 301")
+                .active(true)
+                .build();
+        balconyPassenger.setId(102L);
+
+        when(passengerRepository.findById(102L)).thenReturn(Optional.of(balconyPassenger));
+        when(excursionPassengerRepository.findByCabinNumberAndActiveTrue("Balcony 301")).thenReturn(List.of());
+
+        ExcursionPassenger ep = ExcursionPassenger.builder()
+                .excursionId(999L)
+                .passengerName("Trần Thị Mai")
+                .active(true)
+                .build();
+        when(excursionPassengerRepository.findByPassengerNameIgnoreCaseAndActiveTrue("Trần Thị Mai")).thenReturn(List.of(ep));
+        when(shoreExcursionRepository.findById(999L)).thenReturn(Optional.empty());
+
+        com.cruise.activity.dto.PassengerBookingSummaryResponse summary = passengerService.getPassengerBookingSummary(102L);
+
+        assertThat(summary.getCabinCategory()).isEqualTo("Balcony Stateroom");
+        assertThat(summary.getRegisteredExcursions()).hasSize(1);
+        assertThat(summary.getRegisteredExcursions().get(0).getExcursionTitle()).isEqualTo("Tour bờ #999");
+        assertThat(summary.getTotalExcursionSpent()).isEqualByComparingTo(BigDecimal.ZERO);
+
+        // Test Oceanview and null cabin
+        Passenger oceanviewPassenger = Passenger.builder().cabinNumber("Oceanview 204").active(true).build();
+        oceanviewPassenger.setId(103L);
+        when(passengerRepository.findById(103L)).thenReturn(Optional.of(oceanviewPassenger));
+        when(excursionPassengerRepository.findByCabinNumberAndActiveTrue("Oceanview 204")).thenReturn(List.of());
+        when(excursionPassengerRepository.findByPassengerNameIgnoreCaseAndActiveTrue(any())).thenReturn(List.of());
+
+        com.cruise.activity.dto.PassengerBookingSummaryResponse sOcean = passengerService.getPassengerBookingSummary(103L);
+        assertThat(sOcean.getCabinCategory()).isEqualTo("Oceanview Stateroom");
+
+        Passenger nullCabin = Passenger.builder().cabinNumber(null).active(true).build();
+        nullCabin.setId(104L);
+        when(passengerRepository.findById(104L)).thenReturn(Optional.of(nullCabin));
+        when(excursionPassengerRepository.findByCabinNumberAndActiveTrue(null)).thenReturn(List.of());
+        when(excursionPassengerRepository.findByPassengerNameIgnoreCaseAndActiveTrue(any())).thenReturn(List.of());
+
+        com.cruise.activity.dto.PassengerBookingSummaryResponse sNull = passengerService.getPassengerBookingSummary(104L);
+        assertThat(sNull.getCabinCategory()).isEqualTo("Standard Cabin");
     }
 }
