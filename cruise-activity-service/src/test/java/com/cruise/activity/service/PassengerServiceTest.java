@@ -33,6 +33,12 @@ class PassengerServiceTest {
     @Mock
     private PassengerRepository passengerRepository;
 
+    @Mock
+    private com.cruise.activity.repository.ExcursionPassengerRepository excursionPassengerRepository;
+
+    @Mock
+    private com.cruise.activity.repository.ShoreExcursionRepository shoreExcursionRepository;
+
     @InjectMocks
     private PassengerService passengerService;
 
@@ -248,5 +254,30 @@ class PassengerServiceTest {
         String csvContent = new String(csvBytes, java.nio.charset.StandardCharsets.UTF_8);
         assertThat(csvContent).contains("Nguyễn Văn Minh");
         verify(passengerRepository, times(1)).findByTourIdAndRegistrationStatusAndActiveTrue(1L, com.cruise.activity.enums.RegistrationStatus.CONFIRMED);
+    }
+
+    @Test
+    @DisplayName("getPassengerBookingSummary - Lấy thông tin tổng quan booking thành công")
+    void getPassengerBookingSummarySuccess() {
+        when(passengerRepository.findById(100L)).thenReturn(Optional.of(samplePassenger));
+        when(excursionPassengerRepository.findByCabinNumberAndActiveTrue("402")).thenReturn(List.of());
+        when(excursionPassengerRepository.findByPassengerNameIgnoreCaseAndActiveTrue("Nguyễn Văn Minh")).thenReturn(List.of());
+
+        com.cruise.activity.dto.PassengerBookingSummaryResponse summary = passengerService.getPassengerBookingSummary(100L);
+
+        assertThat(summary).isNotNull();
+        assertThat(summary.getPassengerId()).isEqualTo(100L);
+        assertThat(summary.getFullName()).isEqualTo("Nguyễn Văn Minh");
+        assertThat(summary.getCabinNumber()).isEqualTo("402");
+        assertThat(summary.getTotalRegisteredExcursions()).isZero();
+    }
+
+    @Test
+    @DisplayName("getPassengerBookingSummary - Báo lỗi khi không tìm thấy hành khách")
+    void getPassengerBookingSummaryNotFound() {
+        when(passengerRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> passengerService.getPassengerBookingSummary(999L))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 }
