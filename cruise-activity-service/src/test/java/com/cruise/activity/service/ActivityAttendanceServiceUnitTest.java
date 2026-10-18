@@ -549,5 +549,75 @@ class ActivityAttendanceServiceUnitTest {
             verify(attendanceRepository, times(1)).save(att1);
             assertThat(att1.getStatus()).isEqualTo(ActivityAttendanceStatus.CHECKED_IN);
         }
+
+        @Test
+        @DisplayName("Đồng bộ ngoại tuyến xử lý các trường hợp: QR Token, RFID, Cabin 1 khách, Cabin nhiều khách, không tìm thấy khách, lỗi lưu concurrency")
+        void testSyncOfflineCheckInsEdgeCases() {
+            when(activityRepository.findById(100L)).thenReturn(Optional.of(sampleActivity));
+
+            // Item 1: Resolve qua QR Token
+            String qrToken = qrTokenService.generateToken(100L, 1L, "Suite-1402");
+            when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.empty());
+
+            // Item 2: Resolve qua RFID
+            Passenger p2 = Passenger.builder().fullName("Nguyễn Văn B").cabinNumber("A101").active(true).build();
+            p2.setId(2L);
+            when(passengerRepository.findByRfidTagAndActiveTrue("RFID-TAG-2")).thenReturn(Optional.of(p2));
+            when(passengerRepository.findById(2L)).thenReturn(Optional.of(p2));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 2L)).thenReturn(Optional.empty());
+
+            // Item 3: Resolve qua Cabin (1 khách)
+            Passenger p3 = Passenger.builder().fullName("Trần C").cabinNumber("B202").active(true).build();
+            p3.setId(3L);
+            when(passengerRepository.findByCabinNumberAndActiveTrue("B202")).thenReturn(List.of(p3));
+            when(passengerRepository.findById(3L)).thenReturn(Optional.of(p3));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 3L)).thenReturn(Optional.empty());
+
+            // Item 4: Cabin có nhiều hơn 1 khách -> passId null -> failed
+            Passenger p4a = Passenger.builder().fullName("Khách 4A").cabinNumber("C303").active(true).build();
+            Passenger p4b = Passenger.builder().fullName("Khách 4B").cabinNumber("C303").active(true).build();
+            when(passengerRepository.findByCabinNumberAndActiveTrue("C303")).thenReturn(List.of(p4a, p4b));
+
+            // Item 5: Không có thông tin định danh nào -> failed
+
+            // Item 6: Passenger inactive -> failed
+            Passenger p6 = Passenger.builder().fullName("Khách Không Active").cabinNumber("D404").active(false).build();
+            p6.setId(6L);
+            when(passengerRepository.findById(6L)).thenReturn(Optional.of(p6));
+
+            // Item 7: Concurrency exception khi lưu -> xem như duplicate
+            Passenger p7 = Passenger.builder().fullName("Khách Trùng Ghi Nhận").cabinNumber("E505").active(true).build();
+            p7.setId(7L);
+            when(passengerRepository.findById(7L)).thenReturn(Optional.of(p7));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 7L)).thenReturn(Optional.empty());
+
+            doAnswer(invocation -> {
+                ActivityAttendance att = invocation.getArgument(0);
+                if (att != null && Long.valueOf(7L).equals(att.getPassengerId())) {
+                    throw new org.springframework.dao.DataIntegrityViolationException("unique");
+                }
+                return att;
+            }).when(attendanceRepository).save(any(ActivityAttendance.class));
+
+            OfflineCheckInBatchRequest batchRequest = OfflineCheckInBatchRequest.builder()
+                    .checkIns(List.of(
+                            OfflineCheckInBatchRequest.OfflineCheckInItem.builder().qrToken(qrToken).offlineQueueId("Q1").build(),
+                            OfflineCheckInBatchRequest.OfflineCheckInItem.builder().rfidTag("RFID-TAG-2").offlineQueueId("Q2").build(),
+                            OfflineCheckInBatchRequest.OfflineCheckInItem.builder().cabinNumber("B202").offlineQueueId("Q3").build(),
+                            OfflineCheckInBatchRequest.OfflineCheckInItem.builder().cabinNumber("C303").offlineQueueId("Q4").build(),
+                            OfflineCheckInBatchRequest.OfflineCheckInItem.builder().offlineQueueId("Q5").build(),
+                            OfflineCheckInBatchRequest.OfflineCheckInItem.builder().passengerId(6L).offlineQueueId("Q6").build(),
+                            OfflineCheckInBatchRequest.OfflineCheckInItem.builder().passengerId(7L).offlineQueueId("Q7").build()
+                    ))
+                    .build();
+
+            OfflineCheckInBatchResponse result = attendanceService.syncOfflineCheckIns(100L, batchRequest);
+
+            assertThat(result).isNotNull();
+            assertThat(result.getProcessedCount()).isEqualTo(3); // Q1, Q2, Q3
+            assertThat(result.getDuplicateCount()).isEqualTo(1); // Q7 (DataIntegrityViolation)
+            assertThat(result.getFailedCount()).isEqualTo(3);    // Q4, Q5, Q6
+        }
     }
 }
