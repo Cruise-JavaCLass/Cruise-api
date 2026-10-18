@@ -36,6 +36,8 @@ public interface PassengerRepository extends JpaRepository<Passenger, Long> {
 
     Optional<Passenger> findByQrCodeAndActiveTrue(String qrCode);
 
+    List<Passenger> findByCabinNumberAndActiveTrue(String cabinNumber);
+
     @Query("SELECT p FROM Passenger p WHERE p.tourId = :tourId AND p.active = true AND " +
             "(:status IS NULL OR p.registrationStatus = :status) AND " +
             "(:keyword IS NULL OR LOWER(p.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +

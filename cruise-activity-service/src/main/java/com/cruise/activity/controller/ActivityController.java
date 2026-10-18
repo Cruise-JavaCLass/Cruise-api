@@ -23,6 +23,7 @@ import java.util.Map;
 public class ActivityController {
 
     private final OnboardActivityService activityService;
+    private final com.cruise.activity.service.ActivityAttendanceService attendanceService;
 
     @GetMapping("/health")
     public ApiResponse<Map<String, Object>> health() {
@@ -115,5 +116,88 @@ public class ActivityController {
     public ApiResponse<Void> deleteActivity(@PathVariable Long id) {
         activityService.deleteActivity(id);
         return ApiResponse.ok("Xóa hoạt động thành công", null);
+    }
+
+    // ==========================================
+    // ACTIVITY QR CHECK-IN & ATTENDANCE APIS (KAN-219)
+    // ==========================================
+
+    /**
+     * Sinh mã QR Pass động bảo mật có TTL 60s cho hành khách (KAN-222)
+     */
+    @GetMapping("/{id}/passengers/{passengerId}/qr-pass")
+    public ApiResponse<com.cruise.activity.dto.ActivityPassResponse> generateQrPass(
+            @PathVariable Long id,
+            @PathVariable Long passengerId
+    ) {
+        return ApiResponse.ok("Sinh mã QR Pass hoạt động thành công",
+                attendanceService.generateQrPass(id, passengerId));
+    }
+
+    /**
+     * Soát vé và điểm danh hoạt động đa kênh (QR, RFID, ID thủ công - KAN-222)
+     */
+    @PostMapping("/{id}/check-in")
+    public ApiResponse<com.cruise.activity.dto.ActivityCheckInResponse> checkIn(
+            @PathVariable Long id,
+            @Valid @RequestBody com.cruise.activity.dto.ActivityCheckInRequest request
+    ) {
+        return ApiResponse.ok("Điểm danh hoạt động thành công",
+                attendanceService.checkIn(id, request));
+    }
+
+    /**
+     * Đăng ký và điểm danh khách vãng lai (Walk-in) tại cửa (KAN-320)
+     */
+    @PostMapping("/{id}/check-in/walk-in")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<com.cruise.activity.dto.WalkInCheckInResponse> walkInCheckIn(
+            @PathVariable Long id,
+            @Valid @RequestBody com.cruise.activity.dto.WalkInCheckInRequest request
+    ) {
+        return ApiResponse.ok("Đăng ký và điểm danh khách vãng lai thành công",
+                attendanceService.walkInCheckIn(id, request));
+    }
+
+    /**
+     * Thống kê tổng hợp số liệu điểm danh sự kiện theo thời gian thực (KAN-321)
+     */
+    @GetMapping("/{id}/attendance/summary")
+    public ApiResponse<com.cruise.activity.dto.ActivityAttendanceSummaryResponse> getAttendanceSummary(
+            @PathVariable Long id
+    ) {
+        return ApiResponse.ok("Lấy thống kê điểm danh hoạt động thành công",
+                attendanceService.getAttendanceSummary(id));
+    }
+
+    /**
+     * Danh sách hành khách điểm danh phân trang (Roster) có bộ lọc (KAN-321)
+     */
+    @GetMapping("/{id}/attendance/roster")
+    public ApiResponse<Page<com.cruise.activity.dto.ActivityRosterPassengerResponse>> getActivityRoster(
+            @PathVariable Long id,
+            @RequestParam(required = false) com.cruise.activity.enums.ActivityAttendanceStatus status,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "15") int size,
+            @RequestParam(defaultValue = "checkedInAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir
+    ) {
+        Sort sort = sortDir.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
+        Pageable pageable = PageRequest.of(page, size, sort);
+        return ApiResponse.ok("Lấy danh sách điểm danh hoạt động thành công",
+                attendanceService.getActivityRoster(id, status, keyword, pageable));
+    }
+
+    /**
+     * Đồng bộ hàng loạt lượt quét điểm danh ngoại tuyến khi phục hồi kết nối (KAN-321)
+     */
+    @PostMapping("/{id}/check-in/offline-sync")
+    public ApiResponse<com.cruise.activity.dto.OfflineCheckInBatchResponse> syncOfflineCheckIns(
+            @PathVariable Long id,
+            @Valid @RequestBody com.cruise.activity.dto.OfflineCheckInBatchRequest request
+    ) {
+        return ApiResponse.ok("Đồng bộ điểm danh ngoại tuyến thành công",
+                attendanceService.syncOfflineCheckIns(id, request));
     }
 }
