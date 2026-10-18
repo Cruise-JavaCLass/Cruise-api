@@ -170,6 +170,14 @@ class ActivityAttendanceServiceUnitTest {
                     .isInstanceOf(BusinessRuleException.class)
                     .hasMessageContaining("không thuộc hoạt động hiện tại");
         }
+
+        @Test
+        @DisplayName("Khởi tạo QrTokenService với secret dưới 32 bytes ném IllegalArgumentException")
+        void testShortSecretThrowsException() {
+            assertThatThrownBy(() -> new QrTokenService("short-secret"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("must be configured with at least 32 UTF-8 bytes");
+        }
     }
 
     @Nested
@@ -272,6 +280,60 @@ class ActivityAttendanceServiceUnitTest {
 
             verify(checkInLogRepository, times(1)).save(any(ActivityCheckInLog.class));
         }
+
+        @Test
+        @DisplayName("Check-in qua Cabin Number ném BusinessRuleException nếu có nhiều hơn 1 khách")
+        void testCheckInMultipleGuestsInCabinThrows() {
+            when(activityRepository.findById(100L)).thenReturn(Optional.of(sampleActivity));
+            Passenger p2 = Passenger.builder().fullName("Trần Thị Mai").cabinNumber("Suite-1402").active(true).build();
+            p2.setId(2L);
+            when(passengerRepository.findByCabinNumberAndActiveTrue("Suite-1402"))
+                    .thenReturn(List.of(samplePassenger, p2));
+
+            ActivityCheckInRequest request = ActivityCheckInRequest.builder()
+                    .cabinNumber("Suite-1402")
+                    .build();
+
+            assertThatThrownBy(() -> attendanceService.checkIn(100L, request))
+                    .isInstanceOf(BusinessRuleException.class)
+                    .hasMessageContaining("có 2 hành khách");
+        }
+
+        @Test
+        @DisplayName("Check-in bắt ObjectOptimisticLockingFailureException dịch thành DuplicateCheckInException")
+        void testCheckInOptimisticLockingThrows() {
+            when(activityRepository.findById(100L)).thenReturn(Optional.of(sampleActivity));
+            when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.of(sampleAttendance));
+            when(attendanceRepository.save(any(ActivityAttendance.class)))
+                    .thenThrow(new org.springframework.orm.ObjectOptimisticLockingFailureException(ActivityAttendance.class, 500L));
+
+            ActivityCheckInRequest request = ActivityCheckInRequest.builder()
+                    .passengerId(1L)
+                    .build();
+
+            assertThatThrownBy(() -> attendanceService.checkIn(100L, request))
+                    .isInstanceOf(DuplicateCheckInException.class)
+                    .hasMessageContaining("đang được check-in đồng thời");
+        }
+
+        @Test
+        @DisplayName("Check-in bắt DataIntegrityViolationException uk_activity_passenger dịch thành DuplicateCheckInException")
+        void testCheckInDataIntegrityViolationThrows() {
+            when(activityRepository.findById(100L)).thenReturn(Optional.of(sampleActivity));
+            when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.of(sampleAttendance));
+            when(attendanceRepository.save(any(ActivityAttendance.class)))
+                    .thenThrow(new org.springframework.dao.DataIntegrityViolationException("unique constraint uk_activity_passenger violated"));
+
+            ActivityCheckInRequest request = ActivityCheckInRequest.builder()
+                    .passengerId(1L)
+                    .build();
+
+            assertThatThrownBy(() -> attendanceService.checkIn(100L, request))
+                    .isInstanceOf(DuplicateCheckInException.class)
+                    .hasMessageContaining("đã được điểm danh trước đó");
+        }
     }
 
     @Nested
@@ -323,6 +385,64 @@ class ActivityAttendanceServiceUnitTest {
             assertThatThrownBy(() -> attendanceService.walkInCheckIn(100L, request))
                     .isInstanceOf(BusinessRuleException.class)
                     .hasMessageContaining("Hoạt động đã hết chỗ");
+        }
+
+        @Test
+        @DisplayName("Walk-in với RFID tìm thấy khách thành công và cập nhật lại bản ghi cũ chưa điểm danh")
+        void testWalkInWithRfidReusingExistingRecord() {
+            when(activityRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(sampleActivity));
+            when(attendanceRepository.countByActivityIdAndStatusAndActiveTrue(100L, ActivityAttendanceStatus.CHECKED_IN))
+                    .thenReturn(5L)
+                    .thenReturn(6L);
+            when(passengerRepository.findByRfidTagAndActiveTrue("RFID-VIP-9941")).thenReturn(Optional.of(samplePassenger));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.of(sampleAttendance));
+            when(attendanceRepository.save(any(ActivityAttendance.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            WalkInCheckInRequest request = WalkInCheckInRequest.builder()
+                    .rfidTag("RFID-VIP-9941")
+                    .staffId("STAFF-01")
+                    .build();
+
+            WalkInCheckInResponse response = attendanceService.walkInCheckIn(100L, request);
+
+            assertThat(response).isNotNull();
+            assertThat(response.getPassengerId()).isEqualTo(1L);
+            assertThat(response.getStatus()).isEqualTo("CHECKED_IN");
+        }
+
+        @Test
+        @DisplayName("Walk-in ném BusinessRuleException khi không tìm thấy hành khách hợp lệ")
+        void testWalkInUnresolvedPassengerThrows() {
+            when(activityRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(sampleActivity));
+            when(attendanceRepository.countByActivityIdAndStatusAndActiveTrue(100L, ActivityAttendanceStatus.CHECKED_IN))
+                    .thenReturn(0L);
+
+            WalkInCheckInRequest request = WalkInCheckInRequest.builder()
+                    .rfidTag("UNKNOWN-RFID")
+                    .build();
+
+            assertThatThrownBy(() -> attendanceService.walkInCheckIn(100L, request))
+                    .isInstanceOf(BusinessRuleException.class)
+                    .hasMessageContaining("Không thể xác định hành khách hợp lệ");
+        }
+
+        @Test
+        @DisplayName("Walk-in ném DuplicateCheckInException khi hành khách đã check-in trước đó")
+        void testWalkInAlreadyCheckedInThrows() {
+            sampleAttendance.setStatus(ActivityAttendanceStatus.CHECKED_IN);
+            when(activityRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(sampleActivity));
+            when(attendanceRepository.countByActivityIdAndStatusAndActiveTrue(100L, ActivityAttendanceStatus.CHECKED_IN))
+                    .thenReturn(5L);
+            when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.of(sampleAttendance));
+
+            WalkInCheckInRequest request = WalkInCheckInRequest.builder()
+                    .passengerId(1L)
+                    .build();
+
+            assertThatThrownBy(() -> attendanceService.walkInCheckIn(100L, request))
+                    .isInstanceOf(DuplicateCheckInException.class)
+                    .hasMessageContaining("đã check-in hoạt động này trước đó");
         }
     }
 
