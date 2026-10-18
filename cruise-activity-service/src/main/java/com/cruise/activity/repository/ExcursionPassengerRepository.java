@@ -26,4 +26,8 @@ public interface ExcursionPassengerRepository extends JpaRepository<ExcursionPas
     long countByExcursionIdAndActiveTrue(Long excursionId);
 
     long countByExcursionId(Long excursionId);
+
+    List<ExcursionPassenger> findByCabinNumberAndActiveTrue(String cabinNumber);
+
+    List<ExcursionPassenger> findByPassengerNameIgnoreCaseAndActiveTrue(String passengerName);
 }

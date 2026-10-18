@@ -61,6 +61,20 @@ public class PassengerController {
         return ApiResponse.ok("Lấy chi tiết hành khách thành công", passengerService.getPassengerById(id));
     }
 
+    @GetMapping("/{id}/summary")
+    public ApiResponse<com.cruise.activity.dto.PassengerBookingSummaryResponse> getPassengerBookingSummary(@PathVariable Long id) {
+        return ApiResponse.ok("Lấy thông tin tổng quan booking hành khách thành công",
+                passengerService.getPassengerBookingSummary(id));
+    }
+
+    @GetMapping("/summary")
+    public ApiResponse<com.cruise.activity.dto.PassengerBookingSummaryResponse> getCurrentPassengerBookingSummary(
+            @RequestParam(defaultValue = "1") Long passengerId
+    ) {
+        return ApiResponse.ok("Lấy thông tin tổng quan booking hành khách hiện tại thành công",
+                passengerService.getPassengerBookingSummary(passengerId));
+    }
+
     @GetMapping("/rfid/{rfidTag}")
     public ApiResponse<PassengerResponse> getPassengerByRfidTag(@PathVariable String rfidTag) {
         return ApiResponse.ok("Tìm thấy hành khách theo mã RFID", passengerService.getPassengerByRfidTag(rfidTag));
