@@ -22,5 +22,6 @@ public class BulkExcursionAttendanceResponse {
     private int totalUpdated;
     private ExcursionPassengerStatus targetStatus;
     private List<Long> updatedPassengerIds;
+    private List<Long> skippedPassengerIds;
     private String message;
 }
