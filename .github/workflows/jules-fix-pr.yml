@@ -1,11 +1,6 @@
 name: Jules PR Auto-Fixer
 
 on:
-  workflow_run:
-    workflows:
-      - 'Backend CI Pipeline'
-    types:
-      - completed
   issue_comment:
     types:
       - created
@@ -25,7 +20,7 @@ on:
         default: 'manual-trigger'
 
 concurrency:
-  group: jules-fix-pr-${{ github.event.workflow_run.id || github.event.issue.number || inputs.pr_number }}
+  group: jules-fix-pr-${{ github.event.issue.number || inputs.pr_number }}
   cancel-in-progress: false
 
 permissions:
@@ -40,10 +35,15 @@ jobs:
     timeout-minutes: 20
     # Process only if:
     # 1. Manual trigger via workflow_dispatch
-    # 2. Or issue_comment on a PR explicitly mentioning '@jules fix'
+    # 2. Or issue_comment on a PR explicitly mentioning '@jules fix' from a trusted collaborator
     if: >
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'issue_comment' && github.event.issue.pull_request && contains(github.event.comment.body, '@jules fix'))
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        contains(github.event.comment.body, '@jules fix') &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+      )
 
     steps:
       - name: Checkout Repository
@@ -76,9 +76,9 @@ jobs:
           JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ inputs.pr_number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number }}
-          PR_BRANCH: ${{ inputs.pr_branch || steps.pr.outputs.branch || github.event.workflow_run.head_branch }}
+          PR_NUMBER: ${{ inputs.pr_number || github.event.issue.number }}
+          PR_BRANCH: ${{ inputs.pr_branch || steps.pr.outputs.branch }}
           FAILURE_TYPE: ${{ inputs.failure_type || (github.event_name == 'issue_comment' && 'user-comment-request') || 'ci-failure-or-review' }}
-          FAILURE_DETAILS: ${{ github.event.comment.body || format('Workflow {0} (Run ID {1}) failed on branch {2}', github.event.workflow_run.name, github.event.workflow_run.id, github.event.workflow_run.head_branch) }}
+          FAILURE_DETAILS: ${{ github.event.comment.body || format('Manual trigger for PR {0}', inputs.pr_number) }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: node .github/scripts/run-fix-pr.mjs
