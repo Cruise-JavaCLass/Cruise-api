@@ -319,4 +319,13 @@ public class ShoreExcursionController {
         return ApiResponse.ok("Điểm danh hàng loạt thành công",
                 excursionService.bulkCheckInPassengers(id, request));
     }
+
+    /**
+     * Thống kê tỷ lệ điểm danh và cảnh báo hành khách chưa về tàu (KAN-317)
+     */
+    @GetMapping("/{id}/attendance/summary")
+    public ApiResponse<ExcursionAttendanceSummaryResponse> getAttendanceSummary(@PathVariable Long id) {
+        return ApiResponse.ok("Lấy thống kê điểm danh tour bờ thành công",
+                excursionService.getAttendanceSummary(id));
+    }
 }

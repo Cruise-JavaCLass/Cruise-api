@@ -1031,4 +1031,104 @@ public class ShoreExcursionService {
                         updatedIds.size(), targetList.size(), targetStatus))
                 .build();
     }
+
+    // ==========================================
+    // ATTENDANCE SUMMARY & MISSING ALERTS (KAN-317)
+    // ==========================================
+
+    @Transactional(readOnly = true)
+    public ExcursionAttendanceSummaryResponse getAttendanceSummary(Long excursionId) {
+        ShoreExcursion excursion = findActiveExcursion(excursionId);
+        List<ExcursionPassenger> passengers = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
+
+        int totalRegistered = passengers.size();
+        int totalCheckedIn = 0;
+        int totalOnTour = 0;
+        int totalReturnedSafe = 0;
+        List<ExcursionAttendanceSummaryResponse.MissingPassengerItem> missingPassengers = new java.util.ArrayList<>();
+
+        // Grouping by Bus & Group
+        Map<String, List<ExcursionPassenger>> byBus = new java.util.LinkedHashMap<>();
+        Map<String, List<ExcursionPassenger>> byGroup = new java.util.LinkedHashMap<>();
+
+        for (ExcursionPassenger p : passengers) {
+            String bus = (p.getBusNumber() != null && !p.getBusNumber().isBlank()) ? p.getBusNumber() : "Chưa phân xe";
+            String group = (p.getGroupName() != null && !p.getGroupName().isBlank()) ? p.getGroupName() : "Chưa xếp nhóm";
+
+            byBus.computeIfAbsent(bus, k -> new java.util.ArrayList<>()).add(p);
+            byGroup.computeIfAbsent(group, k -> new java.util.ArrayList<>()).add(p);
+
+            if (p.getStatus() == ExcursionPassengerStatus.CHECKED_IN) {
+                totalCheckedIn++;
+            } else if (p.getStatus() == ExcursionPassengerStatus.ON_TOUR) {
+                totalOnTour++;
+            } else if (p.getStatus() == ExcursionPassengerStatus.RETURNED_SAFE) {
+                totalReturnedSafe++;
+            }
+
+            // A passenger is considered missing if not safely returned
+            if (p.getStatus() != ExcursionPassengerStatus.RETURNED_SAFE) {
+                missingPassengers.add(ExcursionAttendanceSummaryResponse.MissingPassengerItem.builder()
+                        .excursionPassengerId(p.getId())
+                        .passengerId(p.getPassengerId())
+                        .passengerName(p.getPassengerName())
+                        .cabinNumber(p.getCabinNumber())
+                        .ticketCode(p.getTicketCode())
+                        .rfidTag(p.getRfidTag())
+                        .busNumber(p.getBusNumber())
+                        .groupName(p.getGroupName())
+                        .emergencyPhone(p.getEmergencyPhone())
+                        .currentStatus(p.getStatus())
+                        .build());
+            }
+        }
+
+        int totalPendingDeparture = totalRegistered - (totalCheckedIn + totalOnTour + totalReturnedSafe);
+        int totalMissingReturn = totalRegistered - totalReturnedSafe;
+
+        List<ExcursionAttendanceSummaryResponse.BusAttendanceStat> busStats = byBus.entrySet().stream()
+                .map(e -> {
+                    int bTotal = e.getValue().size();
+                    int bChecked = (int) e.getValue().stream().filter(p -> p.getStatus() == ExcursionPassengerStatus.CHECKED_IN || p.getStatus() == ExcursionPassengerStatus.ON_TOUR || p.getStatus() == ExcursionPassengerStatus.RETURNED_SAFE).count();
+                    int bSafe = (int) e.getValue().stream().filter(p -> p.getStatus() == ExcursionPassengerStatus.RETURNED_SAFE).count();
+                    return ExcursionAttendanceSummaryResponse.BusAttendanceStat.builder()
+                            .busNumber(e.getKey())
+                            .total(bTotal)
+                            .checkedIn(bChecked)
+                            .returnedSafe(bSafe)
+                            .missing(bTotal - bSafe)
+                            .build();
+                })
+                .toList();
+
+        List<ExcursionAttendanceSummaryResponse.GroupAttendanceStat> groupStats = byGroup.entrySet().stream()
+                .map(e -> {
+                    int gTotal = e.getValue().size();
+                    int gChecked = (int) e.getValue().stream().filter(p -> p.getStatus() == ExcursionPassengerStatus.CHECKED_IN || p.getStatus() == ExcursionPassengerStatus.ON_TOUR || p.getStatus() == ExcursionPassengerStatus.RETURNED_SAFE).count();
+                    int gSafe = (int) e.getValue().stream().filter(p -> p.getStatus() == ExcursionPassengerStatus.RETURNED_SAFE).count();
+                    return ExcursionAttendanceSummaryResponse.GroupAttendanceStat.builder()
+                            .groupName(e.getKey())
+                            .total(gTotal)
+                            .checkedIn(gChecked)
+                            .returnedSafe(gSafe)
+                            .missing(gTotal - gSafe)
+                            .build();
+                })
+                .toList();
+
+        return ExcursionAttendanceSummaryResponse.builder()
+                .excursionId(excursionId)
+                .excursionTitle(excursion.getTitle())
+                .returnToShipTime(excursion.getReturnToShipTime() != null ? excursion.getReturnToShipTime().toString() : null)
+                .totalRegistered(totalRegistered)
+                .totalCheckedIn(totalCheckedIn)
+                .totalOnTour(totalOnTour)
+                .totalReturnedSafe(totalReturnedSafe)
+                .totalPendingDeparture(Math.max(0, totalPendingDeparture))
+                .totalMissingReturn(Math.max(0, totalMissingReturn))
+                .busStats(busStats)
+                .groupStats(groupStats)
+                .missingPassengers(missingPassengers)
+                .build();
+    }
 }
