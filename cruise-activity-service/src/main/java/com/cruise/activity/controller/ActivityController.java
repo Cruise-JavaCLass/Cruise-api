@@ -159,4 +159,45 @@ public class ActivityController {
                 attendanceService.walkInCheckIn(id, request));
     }
 
+    /**
+     * Thống kê tổng hợp số liệu điểm danh sự kiện theo thời gian thực (KAN-321)
+     */
+    @GetMapping("/{id}/attendance/summary")
+    public ApiResponse<com.cruise.activity.dto.ActivityAttendanceSummaryResponse> getAttendanceSummary(
+            @PathVariable Long id
+    ) {
+        return ApiResponse.ok("Lấy thống kê điểm danh hoạt động thành công",
+                attendanceService.getAttendanceSummary(id));
+    }
+
+    /**
+     * Danh sách hành khách điểm danh phân trang (Roster) có bộ lọc (KAN-321)
+     */
+    @GetMapping("/{id}/attendance/roster")
+    public ApiResponse<Page<com.cruise.activity.dto.ActivityRosterPassengerResponse>> getActivityRoster(
+            @PathVariable Long id,
+            @RequestParam(required = false) com.cruise.activity.enums.ActivityAttendanceStatus status,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "15") int size,
+            @RequestParam(defaultValue = "checkedInAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir
+    ) {
+        Sort sort = sortDir.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
+        Pageable pageable = PageRequest.of(page, size, sort);
+        return ApiResponse.ok("Lấy danh sách điểm danh hoạt động thành công",
+                attendanceService.getActivityRoster(id, status, keyword, pageable));
+    }
+
+    /**
+     * Đồng bộ hàng loạt lượt quét điểm danh ngoại tuyến khi phục hồi kết nối (KAN-321)
+     */
+    @PostMapping("/{id}/check-in/offline-sync")
+    public ApiResponse<com.cruise.activity.dto.OfflineCheckInBatchResponse> syncOfflineCheckIns(
+            @PathVariable Long id,
+            @Valid @RequestBody com.cruise.activity.dto.OfflineCheckInBatchRequest request
+    ) {
+        return ApiResponse.ok("Đồng bộ điểm danh ngoại tuyến thành công",
+                attendanceService.syncOfflineCheckIns(id, request));
+    }
 }

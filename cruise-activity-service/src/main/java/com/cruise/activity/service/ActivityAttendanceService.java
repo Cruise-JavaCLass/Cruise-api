@@ -332,6 +332,179 @@ public class ActivityAttendanceService {
                 .build();
     }
 
+    /**
+     * Thống kê tổng hợp số liệu điểm danh thời gian thực (KAN-321)
+     */
+    @Transactional(readOnly = true)
+    public ActivityAttendanceSummaryResponse getAttendanceSummary(Long activityId) {
+        OnboardActivity activity = activityRepository.findById(activityId)
+                .filter(OnboardActivity::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Hoạt động với ID " + activityId + " không tồn tại"));
+
+        long totalRegistered = attendanceRepository.countByActivityIdAndActiveTrue(activityId);
+        long checkedInCount = attendanceRepository.countByActivityIdAndStatusAndActiveTrue(activityId, ActivityAttendanceStatus.CHECKED_IN);
+        long walkInCount = attendanceRepository.countByActivityIdAndIsWalkInTrueAndActiveTrue(activityId);
+        long pendingCount = Math.max(0, totalRegistered - checkedInCount);
+
+        int maxCapacity = activity.getMaxCapacity() != null ? activity.getMaxCapacity() : 100;
+        int remainingCapacity = Math.max(0, maxCapacity - (int) checkedInCount);
+        double attendanceRate = maxCapacity > 0
+                ? Math.round(((double) checkedInCount / maxCapacity) * 1000.0) / 10.0
+                : 0.0;
+
+        return ActivityAttendanceSummaryResponse.builder()
+                .activityId(activity.getId())
+                .activityTitle(activity.getTitle())
+                .maxCapacity(maxCapacity)
+                .totalRegistered(totalRegistered)
+                .checkedInCount(checkedInCount)
+                .remainingCapacity(remainingCapacity)
+                .attendanceRate(attendanceRate)
+                .walkInCount(walkInCount)
+                .pendingCount(pendingCount)
+                .totalPrice(activity.getPrice() != null ? activity.getPrice() : BigDecimal.ZERO)
+                .isCapacityFull(remainingCapacity <= 0)
+                .build();
+    }
+
+    /**
+     * Truy xuất danh sách hành khách điểm danh phân trang (Roster) có bộ lọc (KAN-321)
+     */
+    @Transactional(readOnly = true)
+    public Page<ActivityRosterPassengerResponse> getActivityRoster(
+            Long activityId,
+            ActivityAttendanceStatus status,
+            String keyword,
+            Pageable pageable
+    ) {
+        if (!activityRepository.existsById(activityId)) {
+            throw new ResourceNotFoundException("Hoạt động với ID " + activityId + " không tồn tại");
+        }
+
+        String cleanKeyword = (keyword != null && !keyword.isBlank()) ? keyword.trim() : null;
+        Page<ActivityAttendance> page = attendanceRepository.searchRoster(activityId, status, cleanKeyword, pageable);
+
+        return page.map(att -> ActivityRosterPassengerResponse.builder()
+                .attendanceId(att.getId())
+                .passengerId(att.getPassengerId())
+                .passengerName(att.getPassengerName())
+                .cabinNumber(att.getCabinNumber())
+                .rfidTag(att.getRfidTag())
+                .status(att.getStatus().name())
+                .checkedInAt(att.getCheckedInAt())
+                .checkedInByStaffId(att.getCheckedInByStaffId())
+                .checkInMethod(att.getCheckInMethod() != null ? att.getCheckInMethod().name() : null)
+                .isWalkIn(att.getIsWalkIn())
+                .chargedAmount(att.getChargedAmount())
+                .transactionId(att.getTransactionId())
+                .build());
+    }
+
+    /**
+     * Đồng bộ hàng loạt lượt quét điểm danh ngoại tuyến khi kết nối lại mạng (KAN-321)
+     */
+    @Transactional
+    public OfflineCheckInBatchResponse syncOfflineCheckIns(Long activityId, OfflineCheckInBatchRequest request) {
+        OnboardActivity activity = activityRepository.findById(activityId)
+                .filter(OnboardActivity::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Hoạt động với ID " + activityId + " không tồn tại"));
+
+        if (request.getCheckIns() == null || request.getCheckIns().isEmpty()) {
+            return OfflineCheckInBatchResponse.builder()
+                    .activityId(activityId)
+                    .processedCount(0)
+                    .duplicateCount(0)
+                    .failedCount(0)
+                    .message("Không có dữ liệu ngoại tuyến cần đồng bộ")
+                    .build();
+        }
+
+        int processed = 0;
+        int duplicate = 0;
+        int failed = 0;
+
+        for (OfflineCheckInBatchRequest.OfflineCheckInItem item : request.getCheckIns()) {
+            try {
+                Long passId = item.getPassengerId();
+                if (passId == null && item.getRfidTag() != null) {
+                    passId = passengerRepository.findByRfidTagAndActiveTrue(item.getRfidTag())
+                            .map(Passenger::getId)
+                            .orElse(null);
+                }
+
+                if (passId == null) {
+                    failed++;
+                    continue;
+                }
+
+                Passenger passenger = passengerRepository.findById(passId).orElse(null);
+                if (passenger == null) {
+                    failed++;
+                    continue;
+                }
+
+                ActivityAttendance attendance = attendanceRepository.findByActivityIdAndPassengerIdAndActiveTrue(activityId, passId)
+                        .orElseGet(() -> ActivityAttendance.builder()
+                                .activityId(activityId)
+                                .passengerId(passenger.getId())
+                                .passengerName(passenger.getFullName())
+                                .cabinNumber(passenger.getCabinNumber())
+                                .rfidTag(passenger.getRfidTag())
+                                .status(ActivityAttendanceStatus.REGISTERED)
+                                .active(true)
+                                .build());
+
+                if (attendance.getStatus() == ActivityAttendanceStatus.CHECKED_IN) {
+                    duplicate++;
+                    continue;
+                }
+
+                Instant scanTime = item.getScannedAt() != null ? item.getScannedAt() : Instant.now();
+                attendance.setStatus(ActivityAttendanceStatus.CHECKED_IN);
+                attendance.setCheckedInAt(scanTime);
+                attendance.setCheckedInByStaffId(item.getStaffId() != null ? item.getStaffId() : "OFFLINE-DEVICE");
+                attendance.setCheckInMethod(item.getMethod() != null ? item.getMethod() : ActivityCheckInMethod.RFID);
+                attendance.setDeviceId(item.getDeviceId());
+                attendance.setNote("Đồng bộ ngoại tuyến từ hàng đợi: " + item.getOfflineQueueId());
+
+                attendanceRepository.save(attendance);
+
+                checkInLogRepository.save(ActivityCheckInLog.builder()
+                        .activityId(activityId)
+                        .passengerId(passId)
+                        .passengerName(passenger.getFullName())
+                        .cabinNumber(passenger.getCabinNumber())
+                        .staffId(item.getStaffId())
+                        .deviceId(item.getDeviceId())
+                        .checkInTime(scanTime)
+                        .method(item.getMethod() != null ? item.getMethod() : ActivityCheckInMethod.RFID)
+                        .status("SUCCESS_OFFLINE_SYNC")
+                        .note("Đồng bộ ngoại tuyến thành công")
+                        .active(true)
+                        .build());
+
+                processed++;
+            } catch (Exception ex) {
+                log.error("Lỗi khi xử lý bản ghi offline sync: {}", ex.getMessage());
+                failed++;
+            }
+        }
+
+        long currentTotal = attendanceRepository.countByActivityIdAndStatusAndActiveTrue(activityId, ActivityAttendanceStatus.CHECKED_IN);
+        activity.setCurrentParticipants((int) currentTotal);
+        activityRepository.save(activity);
+
+        log.info("Offline batch sync completed for activity {}: processed={}, duplicates={}, failed={}",
+                activityId, processed, duplicate, failed);
+
+        return OfflineCheckInBatchResponse.builder()
+                .activityId(activityId)
+                .processedCount(processed)
+                .duplicateCount(duplicate)
+                .failedCount(failed)
+                .message(String.format("Đồng bộ hoàn tất: %d thành công, %d trùng lặp, %d lỗi", processed, duplicate, failed))
+                .build();
+    }
 
     private String extractDeckFromLocation(String location) {
         if (location == null) return "Deck 5";
