@@ -17,6 +17,8 @@ public interface ActivityAttendanceRepository extends JpaRepository<ActivityAtte
 
     List<ActivityAttendance> findByActivityIdAndActiveTrue(Long activityId);
 
+    Optional<ActivityAttendance> findByActivityIdAndPassengerId(Long activityId, Long passengerId);
+
     Optional<ActivityAttendance> findByActivityIdAndPassengerIdAndActiveTrue(Long activityId, Long passengerId);
 
     Optional<ActivityAttendance> findByActivityIdAndRfidTagAndActiveTrue(Long activityId, String rfidTag);

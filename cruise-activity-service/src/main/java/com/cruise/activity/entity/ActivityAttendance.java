@@ -76,6 +76,11 @@ public class ActivityAttendance extends BaseEntity {
     @Column(name = "note", length = 500)
     private String note;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    @Builder.Default
+    private Long version = 0L;
+
     @Column(name = "active", nullable = false)
     @Builder.Default
     private Boolean active = true;

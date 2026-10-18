@@ -27,3 +27,7 @@ spring:
       hibernate:
         format_sql: true
     open-in-view: false
+cruise:
+  security:
+    qr:
+      secret: ${CRUISE_QR_SECRET}

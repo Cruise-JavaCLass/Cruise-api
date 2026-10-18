@@ -32,7 +32,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Transactional
 @DisplayName("Activity Check-in & Attendance Controller Integration Tests (KAN-223)")
 class ActivityCheckInControllerIntegrationTest {
 
@@ -101,6 +100,9 @@ class ActivityCheckInControllerIntegrationTest {
                 .qrCode("QR-PASS-MAI")
                 .active(true)
                 .build());
+
+        activityRepository.flush();
+        passengerRepository.flush();
     }
 
     @Test
@@ -197,7 +199,7 @@ class ActivityCheckInControllerIntegrationTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.isWalkIn").value(true))
                 .andExpect(jsonPath("$.data.chargedAmount").value(150000.0))
-                .andExpect(jsonPath("$.data.transactionId", startsWith("FOLIO-TXN-")))
+                .andExpect(jsonPath("$.data.transactionId").value("PENDING_FOLIO_BILLING"))
                 .andExpect(jsonPath("$.data.status").value("CHECKED_IN"));
     }
 
@@ -279,5 +281,49 @@ class ActivityCheckInControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.processedCount").value(2))
                 .andExpect(jsonPath("$.data.duplicateCount").value(0))
                 .andExpect(jsonPath("$.data.failedCount").value(0));
+    }
+
+    @Test
+    @DisplayName("POST /api/activities/{id}/check-in/offline-sync - Cách ly lỗi giao dịch (Failure Isolation) per-item")
+    void testOfflineBatchSyncFailureIsolationApi() throws Exception {
+        // Gửi batch gồm 1 item lỗi (passengerId 999999 không tồn tại) đứng TRƯỚC 1 item hợp lệ (passenger1)
+        String batchJson = String.format("""
+                {
+                    "checkIns": [
+                        {
+                            "passengerId": 999999,
+                            "staffId": "DEVICE-FAIL-1",
+                            "offlineQueueId": "Q-FAIL-01"
+                        },
+                        {
+                            "passengerId": %d,
+                            "staffId": "DEVICE-SUCCESS-1",
+                            "offlineQueueId": "Q-PASS-01"
+                        }
+                    ]
+                }
+                """, passenger1.getId());
+
+        mockMvc.perform(post("/api/activities/{id}/check-in/offline-sync", activity.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(batchJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.processedCount").value(1))
+                .andExpect(jsonPath("$.data.duplicateCount").value(0))
+                .andExpect(jsonPath("$.data.failedCount").value(1));
+
+        // Kiểm tra chắc chắn item hợp lệ đã được commit vào DB thành công bất chấp item trước bị rollback
+        var att = attendanceRepository.findByActivityIdAndPassengerId(activity.getId(), passenger1.getId());
+        org.assertj.core.api.Assertions.assertThat(att).isPresent();
+        org.assertj.core.api.Assertions.assertThat(att.get().getStatus()).isEqualTo(com.cruise.activity.enums.ActivityAttendanceStatus.CHECKED_IN);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void tearDown() {
+        checkInLogRepository.deleteAll();
+        attendanceRepository.deleteAll();
+        activityRepository.deleteAll();
+        passengerRepository.deleteAll();
     }
 }

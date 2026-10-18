@@ -37,8 +37,11 @@ public class QrTokenService {
     private final byte[] secretKeyBytes;
 
     public QrTokenService(
-            @Value("${cruise.security.qr.secret:CruiseActivityDynamicQRHMACSecretKey2026!@#$%^&*}") String secret
+            @Value("${cruise.security.qr.secret}") String secret
     ) {
+        if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalArgumentException("cruise.security.qr.secret must be configured with at least 32 UTF-8 bytes for HMAC-SHA256 security");
+        }
         this.secretKeyBytes = secret.getBytes(StandardCharsets.UTF_8);
     }
 

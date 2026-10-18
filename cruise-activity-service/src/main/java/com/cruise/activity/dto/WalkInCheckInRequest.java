@@ -23,14 +23,11 @@ public class WalkInCheckInRequest {
 
     private String rfidTag;
 
-    @Builder.Default
-    private String staffId = "STAFF-01";
+    private String staffId;
 
-    @Builder.Default
-    private String staffName = "Nguyễn Văn Điều Phối";
+    private String staffName;
 
-    @Builder.Default
-    private String deviceId = "POS-WALKIN-01";
+    private String deviceId;
 
     private String note;
 }

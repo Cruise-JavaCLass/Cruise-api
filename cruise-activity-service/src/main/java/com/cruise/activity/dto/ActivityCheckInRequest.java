@@ -22,14 +22,11 @@ public class ActivityCheckInRequest {
 
     private String cabinNumber;
 
-    @Builder.Default
-    private String staffId = "STAFF-01";
+    private String staffId;
 
-    @Builder.Default
-    private String staffName = "Nguyễn Văn Điều Phối";
+    private String staffName;
 
-    @Builder.Default
-    private String deviceId = "GATE-POS-01";
+    private String deviceId;
 
     private String note;
 }

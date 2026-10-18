@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface OnboardActivityRepository extends JpaRepository<OnboardActivity, Long> {
@@ -22,6 +23,10 @@ public interface OnboardActivityRepository extends JpaRepository<OnboardActivity
     List<OnboardActivity> findByTourIdAndActivityDateAndActiveTrueOrderByStartTimeAsc(Long tourId, LocalDate activityDate);
 
     List<OnboardActivity> findByLocationAndActivityDateAndActiveTrue(String location, LocalDate activityDate);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM OnboardActivity a WHERE a.id = :id")
+    Optional<OnboardActivity> findByIdForUpdate(@Param("id") Long id);
 
     @Query("SELECT a FROM OnboardActivity a WHERE a.tourId = :tourId AND a.active = true " +
             "AND (:dayNumber IS NULL OR a.dayNumber = :dayNumber) " +
