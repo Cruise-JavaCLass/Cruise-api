@@ -346,7 +346,7 @@ class ActivityAttendanceServiceUnitTest {
         void testCheckInDataIntegrityViolationThrows() {
             when(activityRepository.findById(100L)).thenReturn(Optional.of(sampleActivity));
             when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
-            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.of(sampleAttendance));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.empty());
             when(attendanceRepository.saveAndFlush(any(ActivityAttendance.class)))
                     .thenThrow(new org.springframework.dao.DataIntegrityViolationException("unique constraint uk_activity_passenger violated"));
 
@@ -577,7 +577,7 @@ class ActivityAttendanceServiceUnitTest {
             when(attendanceRepository.countByActivityIdAndStatusAndActiveTrue(100L, ActivityAttendanceStatus.CHECKED_IN))
                     .thenReturn(5L);
             when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
-            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.of(sampleAttendance));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.empty());
             when(attendanceRepository.saveAndFlush(any(ActivityAttendance.class)))
                     .thenThrow(new org.springframework.dao.DataIntegrityViolationException("unique constraint uk_activity_passenger"));
 
