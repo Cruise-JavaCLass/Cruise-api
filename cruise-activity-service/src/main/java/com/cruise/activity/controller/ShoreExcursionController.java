@@ -295,4 +295,16 @@ public class ShoreExcursionController {
                 .header(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
                 .body(csvData);
     }
+
+    /**
+     * Điểm danh hành khách tour bờ theo vé QR / RFID / ID (KAN-224)
+     */
+    @PostMapping("/{id}/check-in")
+    public ApiResponse<ExcursionCheckInResponse> checkInPassenger(
+            @PathVariable Long id,
+            @Valid @RequestBody ExcursionCheckInRequest request
+    ) {
+        return ApiResponse.ok("Điểm danh hành khách thành công",
+                excursionService.checkInPassenger(id, request));
+    }
 }

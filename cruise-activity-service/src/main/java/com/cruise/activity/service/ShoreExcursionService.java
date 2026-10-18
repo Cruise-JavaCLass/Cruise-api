@@ -911,4 +911,69 @@ public class ShoreExcursionService {
                 .filter(ShoreExcursion::getActive)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tour bờ với ID: " + id));
     }
+
+    // ==========================================
+    // ATTENDANCE & CHECK-IN (KAN-224)
+    // ==========================================
+
+    @Transactional
+    public ExcursionCheckInResponse checkInPassenger(Long excursionId, ExcursionCheckInRequest request) {
+        findActiveExcursion(excursionId);
+
+        ExcursionPassenger passenger = resolveExcursionPassenger(excursionId, request);
+        ExcursionPassengerStatus prevStatus = passenger.getStatus();
+        ExcursionPassengerStatus targetStatus = request.getTargetStatus();
+
+        validateStatusTransition(prevStatus, targetStatus, passenger.getPassengerName());
+
+        passenger.setStatus(targetStatus);
+        java.time.Instant now = java.time.Instant.now();
+
+        if (targetStatus == ExcursionPassengerStatus.CHECKED_IN && passenger.getCheckedInAt() == null) {
+            passenger.setCheckedInAt(now);
+        } else if (targetStatus == ExcursionPassengerStatus.RETURNED_SAFE) {
+            passenger.setReturnedSafeAt(now);
+        }
+
+        passengerRepository.save(passenger);
+        log.info("Check-in passenger ID={} ('{}') in excursion ID={}: {} -> {}",
+                passenger.getId(), passenger.getPassengerName(), excursionId, prevStatus, targetStatus);
+
+        String message = String.format("Điểm danh thành công hành khách %s sang trạng thái %s",
+                passenger.getPassengerName(), targetStatus);
+
+        return ExcursionCheckInResponse.fromEntity(passenger, prevStatus, message);
+    }
+
+    private ExcursionPassenger resolveExcursionPassenger(Long excursionId, ExcursionCheckInRequest req) {
+        if (req.getExcursionPassengerId() != null) {
+            return passengerRepository.findByIdAndExcursionIdAndActiveTrue(req.getExcursionPassengerId(), excursionId)
+                    .orElseThrow(() -> new ResourceNotFoundException(String.format("Không tìm thấy hành khách ID=%d trong tour bờ ID=%d", req.getExcursionPassengerId(), excursionId)));
+        }
+        if (req.getTicketCode() != null && !req.getTicketCode().trim().isEmpty()) {
+            return passengerRepository.findByExcursionIdAndTicketCodeAndActiveTrue(excursionId, req.getTicketCode().trim())
+                    .orElseThrow(() -> new ResourceNotFoundException(String.format("Vé tour '%s' không tồn tại hoặc không thuộc tour bờ ID=%d", req.getTicketCode().trim(), excursionId)));
+        }
+        if (req.getRfidTag() != null && !req.getRfidTag().trim().isEmpty()) {
+            return passengerRepository.findByExcursionIdAndRfidTagAndActiveTrue(excursionId, req.getRfidTag().trim())
+                    .orElseThrow(() -> new ResourceNotFoundException(String.format("Thẻ RFID '%s' không tìm thấy trong tour bờ ID=%d", req.getRfidTag().trim(), excursionId)));
+        }
+        if (req.getCabinNumber() != null && !req.getCabinNumber().trim().isEmpty()) {
+            List<ExcursionPassenger> passengers = passengerRepository.findByCabinNumberAndActiveTrue(req.getCabinNumber().trim());
+            return passengers.stream()
+                    .filter(p -> p.getExcursionId().equals(excursionId))
+                    .findFirst()
+                    .orElseThrow(() -> new ResourceNotFoundException(String.format("Cabin '%s' không có hành khách đăng ký tour bờ ID=%d", req.getCabinNumber().trim(), excursionId)));
+        }
+        throw new BusinessRuleException("Vui lòng cung cấp ít nhất một thông tin nhận diện (ID, Mã vé QR, Mã thẻ RFID hoặc Số cabin)");
+    }
+
+    private void validateStatusTransition(ExcursionPassengerStatus from, ExcursionPassengerStatus to, String passengerName) {
+        if (from == to) {
+            throw new BusinessRuleException(String.format("Hành khách %s đã ở trạng thái %s", passengerName, to));
+        }
+        if (from == ExcursionPassengerStatus.RETURNED_SAFE) {
+            throw new BusinessRuleException(String.format("Hành khách %s đã hoàn tất tour và về tàu an toàn", passengerName));
+        }
+    }
 }

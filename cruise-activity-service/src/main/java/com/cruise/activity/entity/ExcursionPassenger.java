@@ -35,6 +35,12 @@ public class ExcursionPassenger extends BaseEntity {
     @Column(name = "ticket_code", nullable = false, unique = true, length = 100)
     private String ticketCode;
 
+    @Column(name = "passenger_id")
+    private Long passengerId;
+
+    @Column(name = "rfid_tag", length = 100)
+    private String rfidTag;
+
     @Column(name = "bus_number", length = 100)
     private String busNumber;
 
@@ -48,6 +54,12 @@ public class ExcursionPassenger extends BaseEntity {
     @Column(name = "status", nullable = false, length = 30)
     @Builder.Default
     private ExcursionPassengerStatus status = ExcursionPassengerStatus.REGISTERED;
+
+    @Column(name = "checked_in_at")
+    private java.time.Instant checkedInAt;
+
+    @Column(name = "returned_safe_at")
+    private java.time.Instant returnedSafeAt;
 
     @Column(name = "special_requirements", length = 500)
     private String specialRequirements;
