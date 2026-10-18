@@ -210,4 +210,71 @@ class PassengerControllerTest {
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().contentType("text/csv; charset=UTF-8"))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().bytes(csvBytes));
     }
+
+    /**
+     * Verifies the path-ID summary endpoint serializes passenger details and an excursion.
+     *
+     * @throws Exception if the MockMvc request fails
+     */
+    @Test
+    @DisplayName("GET /api/activities/passengers/{id}/summary - Lấy tổng quan booking hành khách thành công (KAN-197, KAN-200)")
+    void getPassengerBookingSummarySuccess() throws Exception {
+        com.cruise.activity.dto.PassengerBookingSummaryResponse summaryResponse = com.cruise.activity.dto.PassengerBookingSummaryResponse.builder()
+                .passengerId(1L)
+                .tourId(10L)
+                .fullName("Trần Thị Thu Thảo")
+                .cabinNumber("718")
+                .cabinCategory("Royal Suite")
+                .tourPackage("All-Inclusive VIP")
+                .totalRegisteredExcursions(1)
+                .totalExcursionSpent(java.math.BigDecimal.valueOf(120.0))
+                .registeredExcursions(List.of(
+                        com.cruise.activity.dto.PassengerBookingSummaryResponse.ExcursionSummaryItem.builder()
+                                .excursionId(5L)
+                                .excursionTitle("Khám phá Hang Sửng Sốt")
+                                .ticketCode("TCK-001")
+                                .price(java.math.BigDecimal.valueOf(120.0))
+                                .build()
+                ))
+                .build();
+
+        when(passengerService.getPassengerBookingSummary(1L)).thenReturn(summaryResponse);
+
+        mockMvc.perform(get("/api/activities/passengers/1/summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.passengerId").value(1))
+                .andExpect(jsonPath("$.data.fullName").value("Trần Thị Thu Thảo"))
+                .andExpect(jsonPath("$.data.cabinNumber").value("718"))
+                .andExpect(jsonPath("$.data.cabinCategory").value("Royal Suite"))
+                .andExpect(jsonPath("$.data.totalRegisteredExcursions").value(1))
+                .andExpect(jsonPath("$.data.registeredExcursions[0].excursionTitle").value("Khám phá Hang Sửng Sốt"));
+    }
+
+    /**
+     * Verifies the query-ID summary endpoint returns the service's passenger details.
+     *
+     * @throws Exception if the MockMvc request fails
+     */
+    @Test
+    @DisplayName("GET /api/activities/passengers/summary - Lấy tổng quan booking hành khách theo query param")
+    void getCurrentPassengerBookingSummarySuccess() throws Exception {
+        com.cruise.activity.dto.PassengerBookingSummaryResponse summaryResponse = com.cruise.activity.dto.PassengerBookingSummaryResponse.builder()
+                .passengerId(1L)
+                .tourId(10L)
+                .fullName("Nguyễn Văn Minh")
+                .cabinNumber("402")
+                .totalRegisteredExcursions(0)
+                .totalExcursionSpent(java.math.BigDecimal.ZERO)
+                .registeredExcursions(List.of())
+                .build();
+
+        when(passengerService.getPassengerBookingSummary(1L)).thenReturn(summaryResponse);
+
+        mockMvc.perform(get("/api/activities/passengers/summary?passengerId=1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.passengerId").value(1))
+                .andExpect(jsonPath("$.data.fullName").value("Nguyễn Văn Minh"));
+    }
 }

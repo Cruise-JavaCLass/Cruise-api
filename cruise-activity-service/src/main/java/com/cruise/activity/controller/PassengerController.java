@@ -61,6 +61,34 @@ public class PassengerController {
         return ApiResponse.ok("Lấy chi tiết hành khách thành công", passengerService.getPassengerById(id));
     }
 
+    /**
+     * Returns booking details and an excursion summary for the requested passenger.
+     *
+     * @param id passenger ID from the request path
+     * @return a success response containing the booking summary
+     * @throws com.cruise.activity.exception.ResourceNotFoundException if the passenger is missing or inactive
+     */
+    @GetMapping("/{id}/summary")
+    public ApiResponse<com.cruise.activity.dto.PassengerBookingSummaryResponse> getPassengerBookingSummary(@PathVariable Long id) {
+        return ApiResponse.ok("Lấy thông tin tổng quan booking hành khách thành công",
+                passengerService.getPassengerBookingSummary(id));
+    }
+
+    /**
+     * Returns a booking summary for the query parameter's passenger ID.
+     *
+     * @param passengerId passenger ID, defaulting to 1 when omitted from the request
+     * @return a success response containing the booking summary
+     * @throws com.cruise.activity.exception.ResourceNotFoundException if the passenger is missing or inactive
+     */
+    @GetMapping("/summary")
+    public ApiResponse<com.cruise.activity.dto.PassengerBookingSummaryResponse> getCurrentPassengerBookingSummary(
+            @RequestParam(defaultValue = "1") Long passengerId
+    ) {
+        return ApiResponse.ok("Lấy thông tin tổng quan booking hành khách hiện tại thành công",
+                passengerService.getPassengerBookingSummary(passengerId));
+    }
+
     @GetMapping("/rfid/{rfidTag}")
     public ApiResponse<PassengerResponse> getPassengerByRfidTag(@PathVariable String rfidTag) {
         return ApiResponse.ok("Tìm thấy hành khách theo mã RFID", passengerService.getPassengerByRfidTag(rfidTag));

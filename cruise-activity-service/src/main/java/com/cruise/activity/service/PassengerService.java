@@ -11,6 +11,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.cruise.activity.dto.PassengerBookingSummaryResponse;
+import com.cruise.activity.entity.ExcursionPassenger;
+import com.cruise.activity.entity.ShoreExcursion;
+import com.cruise.activity.repository.ExcursionPassengerRepository;
+import com.cruise.activity.repository.ShoreExcursionRepository;
+
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
@@ -19,9 +26,24 @@ import java.util.List;
 public class PassengerService {
 
     private final PassengerRepository passengerRepository;
+    private final ExcursionPassengerRepository excursionPassengerRepository;
+    private final ShoreExcursionRepository shoreExcursionRepository;
 
-    public PassengerService(PassengerRepository passengerRepository) {
+    /**
+     * Creates a service with repositories for passengers, bookings, and excursion details.
+     *
+     * @param passengerRepository passenger persistence and lookup repository
+     * @param excursionPassengerRepository excursion booking lookup repository
+     * @param shoreExcursionRepository excursion details lookup repository
+     */
+    public PassengerService(
+            PassengerRepository passengerRepository,
+            ExcursionPassengerRepository excursionPassengerRepository,
+            ShoreExcursionRepository shoreExcursionRepository
+    ) {
         this.passengerRepository = passengerRepository;
+        this.excursionPassengerRepository = excursionPassengerRepository;
+        this.shoreExcursionRepository = shoreExcursionRepository;
     }
 
     public PassengerResponse registerPassenger(RegisterPassengerRequest request) {
@@ -95,6 +117,91 @@ public class PassengerService {
         Passenger p = passengerRepository.findByRfidTagAndActiveTrue(rfidTag)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hành khách với thẻ RFID: " + rfidTag));
         return toResponse(p);
+    }
+
+    /**
+     * Builds an active passenger's booking summary using active excursion bookings
+     * matched by cabin number, falling back to a case-insensitive name match when
+     * no cabin bookings exist. Included excursions, missing excursions, and missing
+     * prices contribute zero to the total excursion spend.
+     *
+     * @param passengerId ID of the passenger to summarize
+     * @return passenger details, matched excursion logistics, and total excursion spend
+     * @throws ResourceNotFoundException if the passenger is missing or inactive
+     */
+    @Transactional(readOnly = true)
+    public PassengerBookingSummaryResponse getPassengerBookingSummary(Long passengerId) {
+        Passenger p = passengerRepository.findById(passengerId)
+                .filter(Passenger::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Hành khách với ID " + passengerId + " không tồn tại"));
+
+        // Match registered excursions by cabin number or passenger name
+        List<ExcursionPassenger> excursionBookings = excursionPassengerRepository.findByCabinNumberAndActiveTrue(p.getCabinNumber());
+        if (excursionBookings.isEmpty()) {
+            excursionBookings = excursionPassengerRepository.findByPassengerNameIgnoreCaseAndActiveTrue(p.getFullName());
+        }
+
+        BigDecimal totalSpent = BigDecimal.ZERO;
+        List<PassengerBookingSummaryResponse.ExcursionSummaryItem> excursionItems = new java.util.ArrayList<>();
+
+        for (ExcursionPassenger ep : excursionBookings) {
+            ShoreExcursion exc = shoreExcursionRepository.findById(ep.getExcursionId()).orElse(null);
+            BigDecimal price = (exc != null && exc.getPrice() != null) ? exc.getPrice() : BigDecimal.ZERO;
+            if (exc != null && Boolean.TRUE.equals(exc.getIsIncluded())) {
+                price = BigDecimal.ZERO;
+            }
+            totalSpent = totalSpent.add(price);
+
+            excursionItems.add(PassengerBookingSummaryResponse.ExcursionSummaryItem.builder()
+                    .excursionId(ep.getExcursionId())
+                    .excursionTitle(exc != null ? exc.getTitle() : "Tour bờ #" + ep.getExcursionId())
+                    .ticketCode(ep.getTicketCode())
+                    .groupName(ep.getGroupName() != null ? ep.getGroupName() : "Chưa xếp nhóm")
+                    .busNumber(ep.getBusNumber() != null ? ep.getBusNumber() : "Chưa phân xe")
+                    .status(ep.getStatus() != null ? ep.getStatus().name() : "REGISTERED")
+                    .gatheringTime(exc != null && exc.getGatheringTime() != null ? exc.getGatheringTime().toString() : null)
+                    .returnToShipTime(exc != null && exc.getReturnToShipTime() != null ? exc.getReturnToShipTime().toString() : null)
+                    .portName(exc != null ? exc.getPortName() : null)
+                    .price(price)
+                    .build());
+        }
+
+        return PassengerBookingSummaryResponse.builder()
+                .passengerId(p.getId())
+                .tourId(p.getTourId())
+                .tourName("Hải trình Di sản Vịnh Hạ Long - Đà Nẵng")
+                .tourCode("CRUISE-" + p.getTourId())
+                .fullName(p.getFullName())
+                .email(p.getEmail())
+                .phoneNumber(p.getPhoneNumber())
+                .cabinNumber(p.getCabinNumber())
+                .cabinCategory(extractCabinCategory(p.getCabinNumber()))
+                .rfidTag(p.getRfidTag())
+                .qrCode(p.getQrCode())
+                .tourPackage(p.getTourPackage())
+                .bleZone(p.getBleZone())
+                .registrationStatus(p.getRegistrationStatus())
+                .checkInStatus(p.getCheckInStatus())
+                .boardedAt(p.getBoardedAt() != null ? p.getBoardedAt().toString() : null)
+                .totalRegisteredExcursions(excursionItems.size())
+                .totalExcursionSpent(totalSpent)
+                .registeredExcursions(excursionItems)
+                .build();
+    }
+
+    /**
+     * Infers a cabin category from suite, balcony, or oceanview text in the cabin number.
+     *
+     * @param cabinNumber cabin label, or {@code null} if unavailable
+     * @return the matched category, Standard Cabin for null, or Deluxe Stateroom otherwise
+     */
+    private String extractCabinCategory(String cabinNumber) {
+        if (cabinNumber == null) return "Standard Cabin";
+        String lower = cabinNumber.toLowerCase();
+        if (lower.contains("suite")) return "Royal Suite";
+        if (lower.contains("ban công") || lower.contains("balcony")) return "Balcony Stateroom";
+        if (lower.contains("oceanview")) return "Oceanview Stateroom";
+        return "Deluxe Stateroom";
     }
 
     public PassengerResponse updateCheckInStatus(Long passengerId, CheckInStatus status) {
