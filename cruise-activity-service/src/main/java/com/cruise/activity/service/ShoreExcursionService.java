@@ -976,4 +976,59 @@ public class ShoreExcursionService {
             throw new BusinessRuleException(String.format("Hành khách %s đã hoàn tất tour và về tàu an toàn", passengerName));
         }
     }
+
+    // ==========================================
+    // BULK ATTENDANCE & RETURN-TO-SHIP (KAN-316)
+    // ==========================================
+
+    @Transactional
+    public BulkExcursionAttendanceResponse bulkCheckInPassengers(Long excursionId, BulkExcursionAttendanceRequest request) {
+        findActiveExcursion(excursionId);
+
+        List<ExcursionPassenger> targetList;
+        if (request.getPassengerIds() != null && !request.getPassengerIds().isEmpty()) {
+            targetList = passengerRepository.findByExcursionIdAndIdInAndActiveTrue(excursionId, request.getPassengerIds());
+        } else if (request.getBusNumber() != null && !request.getBusNumber().trim().isEmpty()) {
+            targetList = passengerRepository.findByExcursionIdAndBusNumberAndActiveTrue(excursionId, request.getBusNumber().trim());
+        } else if (request.getGroupName() != null && !request.getGroupName().trim().isEmpty()) {
+            targetList = passengerRepository.findByExcursionIdAndGroupNameAndActiveTrue(excursionId, request.getGroupName().trim());
+        } else {
+            throw new BusinessRuleException("Vui lòng cung cấp danh sách ID hành khách, số xe buýt hoặc tên đoàn để điểm danh hàng loạt");
+        }
+
+        if (targetList.isEmpty()) {
+            throw new BusinessRuleException("Không tìm thấy hành khách nào phù hợp với điều kiện để điểm danh");
+        }
+
+        ExcursionPassengerStatus targetStatus = request.getTargetStatus();
+        java.time.Instant now = java.time.Instant.now();
+        List<Long> updatedIds = new java.util.ArrayList<>();
+
+        for (ExcursionPassenger p : targetList) {
+            if (p.getStatus() == targetStatus || p.getStatus() == ExcursionPassengerStatus.RETURNED_SAFE) {
+                continue; // Skip already completed or already in target status
+            }
+            p.setStatus(targetStatus);
+            if (targetStatus == ExcursionPassengerStatus.CHECKED_IN && p.getCheckedInAt() == null) {
+                p.setCheckedInAt(now);
+            } else if (targetStatus == ExcursionPassengerStatus.RETURNED_SAFE) {
+                p.setReturnedSafeAt(now);
+            }
+            updatedIds.add(p.getId());
+        }
+
+        passengerRepository.saveAll(targetList);
+        log.info("Bulk updated attendance for {}/{} passengers in excursion ID={} to status={}",
+                updatedIds.size(), targetList.size(), excursionId, targetStatus);
+
+        return BulkExcursionAttendanceResponse.builder()
+                .excursionId(excursionId)
+                .totalRequested(targetList.size())
+                .totalUpdated(updatedIds.size())
+                .targetStatus(targetStatus)
+                .updatedPassengerIds(updatedIds)
+                .message(String.format("Cập nhật thành công %d/%d hành khách sang trạng thái %s",
+                        updatedIds.size(), targetList.size(), targetStatus))
+                .build();
+    }
 }

@@ -307,4 +307,16 @@ public class ShoreExcursionController {
         return ApiResponse.ok("Điểm danh hành khách thành công",
                 excursionService.checkInPassenger(id, request));
     }
+
+    /**
+     * Điểm danh hàng loạt hành khách tour bờ theo ID, xe hoặc đoàn (KAN-316)
+     */
+    @PostMapping("/{id}/attendance/bulk")
+    public ApiResponse<BulkExcursionAttendanceResponse> bulkCheckInPassengers(
+            @PathVariable Long id,
+            @Valid @RequestBody BulkExcursionAttendanceRequest request
+    ) {
+        return ApiResponse.ok("Điểm danh hàng loạt thành công",
+                excursionService.bulkCheckInPassengers(id, request));
+    }
 }
