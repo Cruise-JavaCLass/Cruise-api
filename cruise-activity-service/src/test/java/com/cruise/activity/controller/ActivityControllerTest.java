@@ -340,7 +340,7 @@ class ActivityControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/activities/{id}/status/allowed-transitions: returns allowed transitions (KAN-136)")
+    @DisplayName("PATCH /api/activities/{id}/status/allowed-transitions: returns allowed transitions (KAN-136)")
     void getAllowedStatusTransitions_Success() throws Exception {
         when(activityService.getAllowedStatusTransitions(1L))
                 .thenReturn(java.util.Set.of(ActivityStatus.IN_PROGRESS, ActivityStatus.CANCELLED));
@@ -349,5 +349,167 @@ class ActivityControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data", hasSize(2)));
+    }
+
+    @Test
+    @DisplayName("GET /api/activities/{id}/passengers/{passengerId}/qr-pass: returns pass response (KAN-222)")
+    void getPassengerPass_Success() throws Exception {
+        var passResponse = com.cruise.activity.dto.ActivityPassResponse.builder()
+                .activityId(1L)
+                .activityTitle("Yoga Bình Minh")
+                .token("SAMPLE-QR-TOKEN")
+                .expiresAt(java.time.Instant.now().plusSeconds(60))
+                .passengerId(10L)
+                .passengerName("Trần Văn A")
+                .cabinNumber("A101")
+                .build();
+
+        when(attendanceService.generateQrPass(1L, 10L)).thenReturn(passResponse);
+
+        mockMvc.perform(get("/api/activities/1/passengers/10/qr-pass"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.token").value("SAMPLE-QR-TOKEN"));
+    }
+
+    @Test
+    @DisplayName("POST /api/activities/{id}/check-in: check in success (KAN-222)")
+    void checkIn_Success() throws Exception {
+        var checkInResponse = com.cruise.activity.dto.ActivityCheckInResponse.builder()
+                .attendanceId(100L)
+                .activityId(1L)
+                .passengerId(10L)
+                .passengerName("Trần Văn A")
+                .status("CHECKED_IN")
+                .message("Điểm danh thành công")
+                .build();
+
+        when(attendanceService.checkIn(eq(1L), any())).thenReturn(checkInResponse);
+
+        mockMvc.perform(post("/api/activities/1/check-in")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "passengerId": 10,
+                                    "rfidTag": "RFID-123"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("CHECKED_IN"));
+    }
+
+    @Test
+    @DisplayName("POST /api/activities/{id}/check-in: returns 409 on DuplicateCheckInException (KAN-222)")
+    void checkIn_Duplicate_Returns409() throws Exception {
+        when(attendanceService.checkIn(eq(1L), any()))
+                .thenThrow(new com.cruise.activity.exception.DuplicateCheckInException("Hành khách đã check-in"));
+
+        mockMvc.perform(post("/api/activities/1/check-in")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "passengerId": 10
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Hành khách đã check-in"));
+    }
+
+    @Test
+    @DisplayName("POST /api/activities/{id}/check-in/walk-in: returns 201 Created (KAN-320)")
+    void walkInCheckIn_Returns201() throws Exception {
+        var walkInResp = com.cruise.activity.dto.WalkInCheckInResponse.builder()
+                .attendanceId(101L)
+                .activityId(1L)
+                .passengerId(10L)
+                .passengerName("Trần Văn A")
+                .status("CHECKED_IN")
+                .chargedAmount(BigDecimal.ZERO)
+                .isWalkIn(true)
+                .message("Đăng ký thành công")
+                .build();
+
+        when(attendanceService.walkInCheckIn(eq(1L), any())).thenReturn(walkInResp);
+
+        mockMvc.perform(post("/api/activities/1/check-in/walk-in")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "passengerId": 10,
+                                    "cabinNumber": "A101"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.attendanceId").value(101L));
+    }
+
+    @Test
+    @DisplayName("GET /api/activities/{id}/attendance/summary: returns summary (KAN-321)")
+    void getAttendanceSummary_Success() throws Exception {
+        var summaryResp = com.cruise.activity.dto.ActivityAttendanceSummaryResponse.builder()
+                .activityId(1L)
+                .maxCapacity(50)
+                .checkedInCount(10L)
+                .remainingCapacity(40)
+                .build();
+
+        when(attendanceService.getAttendanceSummary(1L)).thenReturn(summaryResp);
+
+        mockMvc.perform(get("/api/activities/1/attendance/summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.remainingCapacity").value(40));
+    }
+
+    @Test
+    @DisplayName("GET /api/activities/{id}/attendance/roster: binds status enum and pagination (KAN-321)")
+    void getActivityRoster_BindsStatusEnum() throws Exception {
+        var rosterItem = com.cruise.activity.dto.ActivityRosterPassengerResponse.builder()
+                .attendanceId(100L)
+                .passengerId(10L)
+                .passengerName("Trần Văn A")
+                .status("CHECKED_IN")
+                .build();
+
+        when(attendanceService.getActivityRoster(eq(1L), eq(com.cruise.activity.enums.ActivityAttendanceStatus.CHECKED_IN), any(), any()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(rosterItem)));
+
+        mockMvc.perform(get("/api/activities/1/attendance/roster")
+                        .param("status", "CHECKED_IN")
+                        .param("page", "0")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content[0].status").value("CHECKED_IN"));
+    }
+
+    @Test
+    @DisplayName("POST /api/activities/{id}/check-in/offline-sync: processes offline batch (KAN-321)")
+    void syncOfflineCheckIns_Success() throws Exception {
+        var batchResp = com.cruise.activity.dto.OfflineCheckInBatchResponse.builder()
+                .activityId(1L)
+                .processedCount(2)
+                .duplicateCount(0)
+                .failedCount(0)
+                .message("Đồng bộ thành công")
+                .build();
+
+        when(attendanceService.syncOfflineCheckIns(eq(1L), any())).thenReturn(batchResp);
+
+        mockMvc.perform(post("/api/activities/1/check-in/offline-sync")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "checkIns": [
+                                        { "passengerId": 10, "rfidTag": "RFID-10" }
+                                    ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.processedCount").value(2));
     }
 }

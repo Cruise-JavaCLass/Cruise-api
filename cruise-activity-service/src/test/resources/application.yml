@@ -14,3 +14,7 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: false
+cruise:
+  security:
+    qr:
+      secret: "CruiseActivityDynamicQRHMACSecretKey2026!@#$%^&*"

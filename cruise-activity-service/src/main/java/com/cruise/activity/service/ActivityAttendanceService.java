@@ -16,17 +16,21 @@ import com.cruise.activity.repository.OnboardActivityRepository;
 import com.cruise.activity.repository.PassengerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.UUID;
 
 @Slf4j
 @Service
@@ -42,6 +46,7 @@ public class ActivityAttendanceService {
     private final ActivityAttendanceRepository attendanceRepository;
     private final ActivityCheckInLogRepository checkInLogRepository;
     private final QrTokenService qrTokenService;
+    private final PlatformTransactionManager transactionManager;
 
     /**
      * Sinh mã QR Pass động bảo mật có TTL 60s cho hành khách (KAN-222)
@@ -56,8 +61,15 @@ public class ActivityAttendanceService {
                 .filter(Passenger::getActive)
                 .orElseThrow(() -> new ResourceNotFoundException("Hành khách với ID " + passengerId + " không tồn tại"));
 
-        // Đảm bảo có bản ghi ActivityAttendance (nếu chưa có thì tự động khởi tạo)
-        attendanceRepository.findByActivityIdAndPassengerIdAndActiveTrue(activityId, passengerId)
+        // Đảm bảo có bản ghi ActivityAttendance (tra cứu không lọc active để tránh lỗi unique constraint)
+        attendanceRepository.findByActivityIdAndPassengerId(activityId, passengerId)
+                .map(existing -> {
+                    if (!Boolean.TRUE.equals(existing.getActive())) {
+                        existing.setActive(true);
+                        return attendanceRepository.save(existing);
+                    }
+                    return existing;
+                })
                 .orElseGet(() -> attendanceRepository.save(ActivityAttendance.builder()
                         .activityId(activityId)
                         .passengerId(passengerId)
@@ -94,7 +106,7 @@ public class ActivityAttendanceService {
     /**
      * Soát vé và điểm danh đơn lẻ hỗ trợ đa kênh (QR, RFID, ID thủ công - KAN-222)
      */
-    @Transactional
+    @Transactional(noRollbackFor = DuplicateCheckInException.class)
     public ActivityCheckInResponse checkIn(Long activityId, ActivityCheckInRequest request) {
         OnboardActivity activity = activityRepository.findById(activityId)
                 .filter(OnboardActivity::getActive)
@@ -121,6 +133,10 @@ public class ActivityAttendanceService {
             if (passengers.isEmpty()) {
                 throw new ResourceNotFoundException("Không tìm thấy hành khách tại cabin: " + request.getCabinNumber());
             }
+            if (passengers.size() > 1) {
+                throw new BusinessRuleException("Cabin " + request.getCabinNumber() + " có " + passengers.size() +
+                        " hành khách. Vui lòng cung cấp chính xác ID hành khách hoặc quẹt thẻ RFID.");
+            }
             passengerId = passengers.get(0).getId();
             method = ActivityCheckInMethod.MANUAL;
         } else {
@@ -132,8 +148,14 @@ public class ActivityAttendanceService {
                 .filter(Passenger::getActive)
                 .orElseThrow(() -> new ResourceNotFoundException("Hành khách với ID " + resolvedPassengerId + " không tồn tại"));
 
-        // 2. Tìm hoặc khởi tạo bản ghi điểm danh
-        ActivityAttendance attendance = attendanceRepository.findByActivityIdAndPassengerIdAndActiveTrue(activityId, resolvedPassengerId)
+        // 2. Tìm hoặc khởi tạo bản ghi điểm danh (unfiltered lookup để tránh lỗi unique constraint)
+        ActivityAttendance attendance = attendanceRepository.findByActivityIdAndPassengerId(activityId, resolvedPassengerId)
+                .map(existing -> {
+                    if (!Boolean.TRUE.equals(existing.getActive())) {
+                        existing.setActive(true);
+                    }
+                    return existing;
+                })
                 .orElseGet(() -> ActivityAttendance.builder()
                         .activityId(activityId)
                         .passengerId(passenger.getId())
@@ -151,7 +173,7 @@ public class ActivityAttendanceService {
                     : "trước đó";
             String staff = attendance.getCheckedInByStaffId() != null ? attendance.getCheckedInByStaffId() : "Hệ thống";
 
-            // Ghi nhận log trùng lặp
+            // Ghi nhận log trùng lặp (không bị rollback nhờ noRollbackFor)
             checkInLogRepository.save(ActivityCheckInLog.builder()
                     .activityId(activityId)
                     .passengerId(passenger.getId())
@@ -182,7 +204,17 @@ public class ActivityAttendanceService {
             attendance.setNote(request.getNote());
         }
 
-        ActivityAttendance saved = attendanceRepository.save(attendance);
+        ActivityAttendance saved;
+        try {
+            saved = attendanceRepository.save(attendance);
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            throw new DuplicateCheckInException("Hành khách " + passenger.getFullName() + " đang được check-in đồng thời bởi thiết bị khác");
+        } catch (DataIntegrityViolationException ex) {
+            if (ex.getMessage() != null && ex.getMessage().contains("uk_activity_passenger")) {
+                throw new DuplicateCheckInException("Hành khách " + passenger.getFullName() + " đã được điểm danh trước đó");
+            }
+            throw ex;
+        }
 
         // 5. Ghi nhận nhật ký kiểm toán bất biến
         checkInLogRepository.save(ActivityCheckInLog.builder()
@@ -228,71 +260,106 @@ public class ActivityAttendanceService {
      */
     @Transactional
     public WalkInCheckInResponse walkInCheckIn(Long activityId, WalkInCheckInRequest request) {
-        OnboardActivity activity = activityRepository.findById(activityId)
+        // 1. Pessimistic Write Lock trên OnboardActivity để chống race condition sức chứa
+        OnboardActivity activity = activityRepository.findByIdForUpdate(activityId)
                 .filter(OnboardActivity::getActive)
                 .orElseThrow(() -> new ResourceNotFoundException("Hoạt động với ID " + activityId + " không tồn tại"));
 
-        // 1. Kiểm tra sức chứa còn lại nguyên tử
         long currentCheckedIn = attendanceRepository.countByActivityIdAndStatusAndActiveTrue(activityId, ActivityAttendanceStatus.CHECKED_IN);
         if (activity.getMaxCapacity() != null && currentCheckedIn >= activity.getMaxCapacity()) {
             throw new BusinessRuleException("Hoạt động đã hết chỗ (Activity is at full capacity)");
         }
 
-        // 2. Định danh hành khách
+        // 2. Định danh hành khách bắt buộc phải hợp lệ và Active
         Passenger passenger = null;
         if (request.getPassengerId() != null) {
-            passenger = passengerRepository.findById(request.getPassengerId()).orElse(null);
+            passenger = passengerRepository.findById(request.getPassengerId())
+                    .filter(Passenger::getActive)
+                    .orElse(null);
         }
         if (passenger == null && request.getRfidTag() != null && !request.getRfidTag().isBlank()) {
             passenger = passengerRepository.findByRfidTagAndActiveTrue(request.getRfidTag().trim()).orElse(null);
         }
         if (passenger == null && request.getCabinNumber() != null && !request.getCabinNumber().isBlank()) {
             List<Passenger> list = passengerRepository.findByCabinNumberAndActiveTrue(request.getCabinNumber().trim());
-            if (!list.isEmpty()) passenger = list.get(0);
-        }
-
-        String passengerName = passenger != null ? passenger.getFullName() : (request.getFullName() != null ? request.getFullName().trim() : "Khách Vãng Lai");
-        String cabinNumber = passenger != null ? passenger.getCabinNumber() : (request.getCabinNumber() != null ? request.getCabinNumber().trim() : "Chưa xác định");
-        Long passId = passenger != null ? passenger.getId() : System.currentTimeMillis();
-
-        // 3. Kiểm tra xem hành khách này đã check-in chưa
-        if (passenger != null) {
-            ActivityAttendance existing = attendanceRepository.findByActivityIdAndPassengerIdAndActiveTrue(activityId, passenger.getId()).orElse(null);
-            if (existing != null && existing.getStatus() == ActivityAttendanceStatus.CHECKED_IN) {
-                throw new DuplicateCheckInException("Hành khách " + passengerName + " đã check-in hoạt động này trước đó");
+            if (list.size() > 1) {
+                throw new BusinessRuleException("Cabin " + request.getCabinNumber() + " có " + list.size() +
+                        " hành khách. Vui lòng cung cấp chính xác ID hành khách hoặc quẹt thẻ RFID.");
+            }
+            if (list.size() == 1) {
+                passenger = list.get(0);
             }
         }
 
-        // 4. Tính toán ghi nợ tài khoản cabin folio
+        if (passenger == null) {
+            throw new BusinessRuleException("Không thể xác định hành khách hợp lệ trên tàu để đăng ký walk-in. Vui lòng cung cấp Passenger ID hoặc RFID chính xác.");
+        }
+
+        Long passId = passenger.getId();
+        String passengerName = passenger.getFullName();
+        String cabinNumber = passenger.getCabinNumber();
+
+        // 3. Kiểm tra bản ghi điểm danh hiện có (unfiltered lookup để tái sử dụng row)
+        ActivityAttendance attendance = attendanceRepository.findByActivityIdAndPassengerId(activityId, passId).orElse(null);
+        if (attendance != null && attendance.getStatus() == ActivityAttendanceStatus.CHECKED_IN) {
+            throw new DuplicateCheckInException("Hành khách " + passengerName + " đã check-in hoạt động này trước đó");
+        }
+
+        // 4. Tính toán ghi nợ tài khoản cabin folio (không dùng synthetic ID)
         BigDecimal chargedAmount = BigDecimal.ZERO;
         String transactionId = "INCLUDED";
         if (activity.getPrice() != null && activity.getPrice().compareTo(BigDecimal.ZERO) > 0 && !Boolean.TRUE.equals(activity.getIsIncluded())) {
             chargedAmount = activity.getPrice();
-            transactionId = "FOLIO-TXN-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+            transactionId = "PENDING_FOLIO_BILLING";
         }
 
         Instant now = Instant.now();
 
-        // 5. Tạo bản ghi tham gia dạng Walk-in
-        ActivityAttendance attendance = ActivityAttendance.builder()
-                .activityId(activityId)
-                .passengerId(passId)
-                .passengerName(passengerName)
-                .cabinNumber(cabinNumber)
-                .rfidTag(request.getRfidTag())
-                .status(ActivityAttendanceStatus.CHECKED_IN)
-                .checkedInAt(now)
-                .checkedInByStaffId(request.getStaffId())
-                .checkInMethod(ActivityCheckInMethod.WALK_IN)
-                .isWalkIn(true)
-                .chargedAmount(chargedAmount)
-                .transactionId(transactionId)
-                .deviceId(request.getDeviceId())
-                .note(request.getNote() != null ? request.getNote() : "Khách vãng lai check-in trực tiếp tại cửa")
-                .active(true)
-                .build();
+        // 5. Cập nhật hoặc tạo mới bản ghi
+        if (attendance == null) {
+            attendance = ActivityAttendance.builder()
+                    .activityId(activityId)
+                    .passengerId(passId)
+                    .passengerName(passengerName)
+                    .cabinNumber(cabinNumber)
+                    .rfidTag(request.getRfidTag() != null ? request.getRfidTag() : passenger.getRfidTag())
+                    .status(ActivityAttendanceStatus.CHECKED_IN)
+                    .checkedInAt(now)
+                    .checkedInByStaffId(request.getStaffId())
+                    .checkInMethod(ActivityCheckInMethod.WALK_IN)
+                    .isWalkIn(true)
+                    .chargedAmount(chargedAmount)
+                    .transactionId(transactionId)
+                    .deviceId(request.getDeviceId())
+                    .note(request.getNote() != null ? request.getNote() : "Khách vãng lai check-in trực tiếp tại cửa")
+                    .active(true)
+                    .build();
+        } else {
+            attendance.setActive(true);
+            attendance.setStatus(ActivityAttendanceStatus.CHECKED_IN);
+            attendance.setCheckedInAt(now);
+            attendance.setCheckedInByStaffId(request.getStaffId());
+            attendance.setCheckInMethod(ActivityCheckInMethod.WALK_IN);
+            attendance.setIsWalkIn(true);
+            attendance.setChargedAmount(chargedAmount);
+            attendance.setTransactionId(transactionId);
+            attendance.setDeviceId(request.getDeviceId());
+            if (request.getNote() != null) {
+                attendance.setNote(request.getNote());
+            }
+        }
 
-        ActivityAttendance saved = attendanceRepository.save(attendance);
+        ActivityAttendance saved;
+        try {
+            saved = attendanceRepository.save(attendance);
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            throw new DuplicateCheckInException("Hành khách " + passengerName + " đang được xử lý đồng thời bởi thiết bị khác");
+        } catch (DataIntegrityViolationException ex) {
+            if (ex.getMessage() != null && ex.getMessage().contains("uk_activity_passenger")) {
+                throw new DuplicateCheckInException("Hành khách " + passengerName + " đã check-in hoạt động này");
+            }
+            throw ex;
+        }
 
         // 6. Ghi log kiểm toán
         checkInLogRepository.save(ActivityCheckInLog.builder()
@@ -309,8 +376,9 @@ public class ActivityAttendanceService {
                 .active(true)
                 .build());
 
-        // 7. Cập nhật sức chứa
-        activity.setCurrentParticipants((int) (currentCheckedIn + 1));
+        // 7. Recompute số lượng người tham gia thực tế từ DB
+        long updatedTotal = attendanceRepository.countByActivityIdAndStatusAndActiveTrue(activityId, ActivityAttendanceStatus.CHECKED_IN);
+        activity.setCurrentParticipants((int) updatedTotal);
         activityRepository.save(activity);
 
         log.info("Walk-in check-in successful: Activity={} Passenger={} Charged={}",
@@ -425,67 +493,16 @@ public class ActivityAttendanceService {
 
         for (OfflineCheckInBatchRequest.OfflineCheckInItem item : request.getCheckIns()) {
             try {
-                Long passId = item.getPassengerId();
-                if (passId == null && item.getRfidTag() != null) {
-                    passId = passengerRepository.findByRfidTagAndActiveTrue(item.getRfidTag())
-                            .map(Passenger::getId)
-                            .orElse(null);
-                }
-
-                if (passId == null) {
-                    failed++;
-                    continue;
-                }
-
-                Passenger passenger = passengerRepository.findById(passId).orElse(null);
-                if (passenger == null) {
-                    failed++;
-                    continue;
-                }
-
-                ActivityAttendance attendance = attendanceRepository.findByActivityIdAndPassengerIdAndActiveTrue(activityId, passId)
-                        .orElseGet(() -> ActivityAttendance.builder()
-                                .activityId(activityId)
-                                .passengerId(passenger.getId())
-                                .passengerName(passenger.getFullName())
-                                .cabinNumber(passenger.getCabinNumber())
-                                .rfidTag(passenger.getRfidTag())
-                                .status(ActivityAttendanceStatus.REGISTERED)
-                                .active(true)
-                                .build());
-
-                if (attendance.getStatus() == ActivityAttendanceStatus.CHECKED_IN) {
+                int result = processSingleOfflineItem(activityId, item);
+                if (result == 1) {
+                    processed++;
+                } else if (result == 2) {
                     duplicate++;
-                    continue;
+                } else {
+                    failed++;
                 }
-
-                Instant scanTime = item.getScannedAt() != null ? item.getScannedAt() : Instant.now();
-                attendance.setStatus(ActivityAttendanceStatus.CHECKED_IN);
-                attendance.setCheckedInAt(scanTime);
-                attendance.setCheckedInByStaffId(item.getStaffId() != null ? item.getStaffId() : "OFFLINE-DEVICE");
-                attendance.setCheckInMethod(item.getMethod() != null ? item.getMethod() : ActivityCheckInMethod.RFID);
-                attendance.setDeviceId(item.getDeviceId());
-                attendance.setNote("Đồng bộ ngoại tuyến từ hàng đợi: " + item.getOfflineQueueId());
-
-                attendanceRepository.save(attendance);
-
-                checkInLogRepository.save(ActivityCheckInLog.builder()
-                        .activityId(activityId)
-                        .passengerId(passId)
-                        .passengerName(passenger.getFullName())
-                        .cabinNumber(passenger.getCabinNumber())
-                        .staffId(item.getStaffId())
-                        .deviceId(item.getDeviceId())
-                        .checkInTime(scanTime)
-                        .method(item.getMethod() != null ? item.getMethod() : ActivityCheckInMethod.RFID)
-                        .status("SUCCESS_OFFLINE_SYNC")
-                        .note("Đồng bộ ngoại tuyến thành công")
-                        .active(true)
-                        .build());
-
-                processed++;
             } catch (Exception ex) {
-                log.error("Lỗi khi xử lý bản ghi offline sync: {}", ex.getMessage());
+                log.error("Lỗi khi xử lý bản ghi offline sync item {}: {}", item.getOfflineQueueId(), ex.getMessage());
                 failed++;
             }
         }
@@ -504,6 +521,101 @@ public class ActivityAttendanceService {
                 .failedCount(failed)
                 .message(String.format("Đồng bộ hoàn tất: %d thành công, %d trùng lặp, %d lỗi", processed, duplicate, failed))
                 .build();
+    }
+
+    /**
+     * Xử lý 1 bản ghi offline check-in trong transaction độc lập (1: thành công, 2: trùng lặp, 0: lỗi)
+     */
+    public int processSingleOfflineItem(Long activityId, OfflineCheckInBatchRequest.OfflineCheckInItem item) {
+        Long passId = item.getPassengerId();
+        ActivityCheckInMethod method = item.getMethod() != null ? item.getMethod() : ActivityCheckInMethod.RFID;
+
+        if (passId == null && item.getQrToken() != null && !item.getQrToken().isBlank()) {
+            try {
+                QrTokenService.QrTokenPayload payload = qrTokenService.verifyAndDecode(item.getQrToken(), activityId);
+                passId = payload.getPassengerId();
+                method = ActivityCheckInMethod.QR_CODE;
+            } catch (Exception e) {
+                log.warn("Offline item QR token invalid: {}", e.getMessage());
+            }
+        }
+
+        if (passId == null && item.getRfidTag() != null && !item.getRfidTag().isBlank()) {
+            passId = passengerRepository.findByRfidTagAndActiveTrue(item.getRfidTag().trim())
+                    .map(Passenger::getId)
+                    .orElse(null);
+            method = ActivityCheckInMethod.RFID;
+        }
+
+        if (passId == null && item.getCabinNumber() != null && !item.getCabinNumber().isBlank()) {
+            List<Passenger> passengers = passengerRepository.findByCabinNumberAndActiveTrue(item.getCabinNumber().trim());
+            if (passengers.size() == 1) {
+                passId = passengers.get(0).getId();
+                method = ActivityCheckInMethod.MANUAL;
+            }
+        }
+
+        if (passId == null) {
+            return 0;
+        }
+
+        Passenger passenger = passengerRepository.findById(passId)
+                .filter(Passenger::getActive)
+                .orElse(null);
+        if (passenger == null) {
+            return 0;
+        }
+
+        ActivityAttendance attendance = attendanceRepository.findByActivityIdAndPassengerId(activityId, passId)
+                .map(existing -> {
+                    if (!Boolean.TRUE.equals(existing.getActive())) {
+                        existing.setActive(true);
+                    }
+                    return existing;
+                })
+                .orElseGet(() -> ActivityAttendance.builder()
+                        .activityId(activityId)
+                        .passengerId(passenger.getId())
+                        .passengerName(passenger.getFullName())
+                        .cabinNumber(passenger.getCabinNumber())
+                        .rfidTag(passenger.getRfidTag())
+                        .status(ActivityAttendanceStatus.REGISTERED)
+                        .active(true)
+                        .build());
+
+        if (attendance.getStatus() == ActivityAttendanceStatus.CHECKED_IN) {
+            return 2;
+        }
+
+        Instant scanTime = item.getScannedAt() != null ? item.getScannedAt() : Instant.now();
+        attendance.setStatus(ActivityAttendanceStatus.CHECKED_IN);
+        attendance.setCheckedInAt(scanTime);
+        attendance.setCheckedInByStaffId(item.getStaffId() != null ? item.getStaffId() : "OFFLINE-DEVICE");
+        attendance.setCheckInMethod(method);
+        attendance.setDeviceId(item.getDeviceId());
+        attendance.setNote("Đồng bộ ngoại tuyến từ hàng đợi: " + item.getOfflineQueueId());
+
+        try {
+            attendanceRepository.save(attendance);
+        } catch (ObjectOptimisticLockingFailureException | DataIntegrityViolationException ex) {
+            return 2;
+        }
+
+        checkInLogRepository.save(ActivityCheckInLog.builder()
+                .activityId(activityId)
+                .passengerId(passId)
+                .passengerName(passenger.getFullName())
+                .cabinNumber(passenger.getCabinNumber())
+                .staffId(item.getStaffId())
+                .deviceId(item.getDeviceId())
+                .checkInTime(scanTime)
+                .method(method)
+                .status("SUCCESS_OFFLINE_SYNC")
+                .note("Đồng bộ ngoại tuyến thành công")
+                .active(true)
+                .build());
+
+        return 1;
     }
 
     private String extractDeckFromLocation(String location) {

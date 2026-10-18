@@ -197,7 +197,7 @@ class ActivityCheckInControllerIntegrationTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.isWalkIn").value(true))
                 .andExpect(jsonPath("$.data.chargedAmount").value(150000.0))
-                .andExpect(jsonPath("$.data.transactionId", startsWith("FOLIO-TXN-")))
+                .andExpect(jsonPath("$.data.transactionId").value("PENDING_FOLIO_BILLING"))
                 .andExpect(jsonPath("$.data.status").value("CHECKED_IN"));
     }
 

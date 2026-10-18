@@ -60,6 +60,9 @@ class ActivityAttendanceServiceUnitTest {
     @Mock
     private ActivityCheckInLogRepository checkInLogRepository;
 
+    @Mock
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
     @Spy
     private QrTokenService qrTokenService = new QrTokenService("TestSecretKeyForActivityAttendanceHMAC1234567890");
 
@@ -178,7 +181,7 @@ class ActivityAttendanceServiceUnitTest {
         void testGenerateQrPassSuccess() {
             when(activityRepository.findById(100L)).thenReturn(Optional.of(sampleActivity));
             when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
-            when(attendanceRepository.findByActivityIdAndPassengerIdAndActiveTrue(100L, 1L))
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L))
                     .thenReturn(Optional.of(sampleAttendance));
 
             ActivityPassResponse pass = attendanceService.generateQrPass(100L, 1L);
@@ -199,7 +202,7 @@ class ActivityAttendanceServiceUnitTest {
 
             when(activityRepository.findById(100L)).thenReturn(Optional.of(sampleActivity));
             when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
-            when(attendanceRepository.findByActivityIdAndPassengerIdAndActiveTrue(100L, 1L))
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L))
                     .thenReturn(Optional.of(sampleAttendance));
             when(attendanceRepository.save(any(ActivityAttendance.class))).thenAnswer(invocation -> invocation.getArgument(0));
             when(attendanceRepository.countByActivityIdAndStatusAndActiveTrue(100L, ActivityAttendanceStatus.CHECKED_IN))
@@ -230,7 +233,7 @@ class ActivityAttendanceServiceUnitTest {
             when(activityRepository.findById(100L)).thenReturn(Optional.of(sampleActivity));
             when(passengerRepository.findByRfidTagAndActiveTrue("RFID-VIP-9941")).thenReturn(Optional.of(samplePassenger));
             when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
-            when(attendanceRepository.findByActivityIdAndPassengerIdAndActiveTrue(100L, 1L))
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L))
                     .thenReturn(Optional.of(sampleAttendance));
             when(attendanceRepository.save(any(ActivityAttendance.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -255,7 +258,7 @@ class ActivityAttendanceServiceUnitTest {
 
             when(activityRepository.findById(100L)).thenReturn(Optional.of(sampleActivity));
             when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
-            when(attendanceRepository.findByActivityIdAndPassengerIdAndActiveTrue(100L, 1L))
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L))
                     .thenReturn(Optional.of(sampleAttendance));
 
             ActivityCheckInRequest request = ActivityCheckInRequest.builder()
@@ -278,11 +281,12 @@ class ActivityAttendanceServiceUnitTest {
         @Test
         @DisplayName("Khách vãng lai check-in thành công, ghi nợ folio và tăng số lượng tham gia")
         void testWalkInSuccessWithBilling() {
-            when(activityRepository.findById(100L)).thenReturn(Optional.of(sampleActivity));
+            when(activityRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(sampleActivity));
             when(attendanceRepository.countByActivityIdAndStatusAndActiveTrue(100L, ActivityAttendanceStatus.CHECKED_IN))
-                    .thenReturn(15L);
+                    .thenReturn(15L)
+                    .thenReturn(16L);
             when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
-            when(attendanceRepository.findByActivityIdAndPassengerIdAndActiveTrue(100L, 1L))
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L))
                     .thenReturn(Optional.empty());
             when(attendanceRepository.save(any(ActivityAttendance.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -297,7 +301,7 @@ class ActivityAttendanceServiceUnitTest {
             assertThat(response).isNotNull();
             assertThat(response.getIsWalkIn()).isTrue();
             assertThat(response.getChargedAmount()).isEqualTo(BigDecimal.valueOf(250000));
-            assertThat(response.getTransactionId()).startsWith("FOLIO-TXN-");
+            assertThat(response.getTransactionId()).isEqualTo("PENDING_FOLIO_BILLING");
             assertThat(response.getStatus()).isEqualTo("CHECKED_IN");
 
             verify(checkInLogRepository, times(1)).save(any(ActivityCheckInLog.class));
@@ -308,7 +312,7 @@ class ActivityAttendanceServiceUnitTest {
         @DisplayName("Từ chối khách vãng lai khi hoạt động đã đạt sức chứa tối đa (Full Capacity)")
         void testWalkInFullCapacityThrowsException() {
             sampleActivity.setMaxCapacity(20);
-            when(activityRepository.findById(100L)).thenReturn(Optional.of(sampleActivity));
+            when(activityRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(sampleActivity));
             when(attendanceRepository.countByActivityIdAndStatusAndActiveTrue(100L, ActivityAttendanceStatus.CHECKED_IN))
                     .thenReturn(20L); // Đã đầy 20/20
 
@@ -379,7 +383,7 @@ class ActivityAttendanceServiceUnitTest {
                     .status(ActivityAttendanceStatus.REGISTERED)
                     .active(true)
                     .build();
-            when(attendanceRepository.findByActivityIdAndPassengerIdAndActiveTrue(100L, 1L))
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L))
                     .thenReturn(Optional.of(att1));
 
             // Bản ghi 2: Đã điểm danh trước đó -> trùng lặp
@@ -393,7 +397,7 @@ class ActivityAttendanceServiceUnitTest {
                     .status(ActivityAttendanceStatus.CHECKED_IN)
                     .active(true)
                     .build();
-            when(attendanceRepository.findByActivityIdAndPassengerIdAndActiveTrue(100L, 2L))
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 2L))
                     .thenReturn(Optional.of(att2));
 
             OfflineCheckInBatchRequest batchRequest = OfflineCheckInBatchRequest.builder()
