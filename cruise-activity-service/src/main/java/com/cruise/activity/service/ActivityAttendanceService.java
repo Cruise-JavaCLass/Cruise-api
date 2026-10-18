@@ -223,6 +223,115 @@ public class ActivityAttendanceService {
                 .build();
     }
 
+    /**
+     * Đăng ký và điểm danh khách vãng lai (Walk-in) tại cửa kèm khóa kiểm soát sức chứa (KAN-320)
+     */
+    @Transactional
+    public WalkInCheckInResponse walkInCheckIn(Long activityId, WalkInCheckInRequest request) {
+        OnboardActivity activity = activityRepository.findById(activityId)
+                .filter(OnboardActivity::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Hoạt động với ID " + activityId + " không tồn tại"));
+
+        // 1. Kiểm tra sức chứa còn lại nguyên tử
+        long currentCheckedIn = attendanceRepository.countByActivityIdAndStatusAndActiveTrue(activityId, ActivityAttendanceStatus.CHECKED_IN);
+        if (activity.getMaxCapacity() != null && currentCheckedIn >= activity.getMaxCapacity()) {
+            throw new BusinessRuleException("Hoạt động đã hết chỗ (Activity is at full capacity)");
+        }
+
+        // 2. Định danh hành khách
+        Passenger passenger = null;
+        if (request.getPassengerId() != null) {
+            passenger = passengerRepository.findById(request.getPassengerId()).orElse(null);
+        }
+        if (passenger == null && request.getRfidTag() != null && !request.getRfidTag().isBlank()) {
+            passenger = passengerRepository.findByRfidTagAndActiveTrue(request.getRfidTag().trim()).orElse(null);
+        }
+        if (passenger == null && request.getCabinNumber() != null && !request.getCabinNumber().isBlank()) {
+            List<Passenger> list = passengerRepository.findByCabinNumberAndActiveTrue(request.getCabinNumber().trim());
+            if (!list.isEmpty()) passenger = list.get(0);
+        }
+
+        String passengerName = passenger != null ? passenger.getFullName() : (request.getFullName() != null ? request.getFullName().trim() : "Khách Vãng Lai");
+        String cabinNumber = passenger != null ? passenger.getCabinNumber() : (request.getCabinNumber() != null ? request.getCabinNumber().trim() : "Chưa xác định");
+        Long passId = passenger != null ? passenger.getId() : System.currentTimeMillis();
+
+        // 3. Kiểm tra xem hành khách này đã check-in chưa
+        if (passenger != null) {
+            ActivityAttendance existing = attendanceRepository.findByActivityIdAndPassengerIdAndActiveTrue(activityId, passenger.getId()).orElse(null);
+            if (existing != null && existing.getStatus() == ActivityAttendanceStatus.CHECKED_IN) {
+                throw new DuplicateCheckInException("Hành khách " + passengerName + " đã check-in hoạt động này trước đó");
+            }
+        }
+
+        // 4. Tính toán ghi nợ tài khoản cabin folio
+        BigDecimal chargedAmount = BigDecimal.ZERO;
+        String transactionId = "INCLUDED";
+        if (activity.getPrice() != null && activity.getPrice().compareTo(BigDecimal.ZERO) > 0 && !Boolean.TRUE.equals(activity.getIsIncluded())) {
+            chargedAmount = activity.getPrice();
+            transactionId = "FOLIO-TXN-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        }
+
+        Instant now = Instant.now();
+
+        // 5. Tạo bản ghi tham gia dạng Walk-in
+        ActivityAttendance attendance = ActivityAttendance.builder()
+                .activityId(activityId)
+                .passengerId(passId)
+                .passengerName(passengerName)
+                .cabinNumber(cabinNumber)
+                .rfidTag(request.getRfidTag())
+                .status(ActivityAttendanceStatus.CHECKED_IN)
+                .checkedInAt(now)
+                .checkedInByStaffId(request.getStaffId())
+                .checkInMethod(ActivityCheckInMethod.WALK_IN)
+                .isWalkIn(true)
+                .chargedAmount(chargedAmount)
+                .transactionId(transactionId)
+                .deviceId(request.getDeviceId())
+                .note(request.getNote() != null ? request.getNote() : "Khách vãng lai check-in trực tiếp tại cửa")
+                .active(true)
+                .build();
+
+        ActivityAttendance saved = attendanceRepository.save(attendance);
+
+        // 6. Ghi log kiểm toán
+        checkInLogRepository.save(ActivityCheckInLog.builder()
+                .activityId(activityId)
+                .passengerId(passId)
+                .passengerName(passengerName)
+                .cabinNumber(cabinNumber)
+                .staffId(request.getStaffId())
+                .deviceId(request.getDeviceId())
+                .checkInTime(now)
+                .method(ActivityCheckInMethod.WALK_IN)
+                .status("SUCCESS")
+                .note("Walk-in check-in thành công. Số tiền: " + chargedAmount)
+                .active(true)
+                .build());
+
+        // 7. Cập nhật sức chứa
+        activity.setCurrentParticipants((int) (currentCheckedIn + 1));
+        activityRepository.save(activity);
+
+        log.info("Walk-in check-in successful: Activity={} Passenger={} Charged={}",
+                activityId, passengerName, chargedAmount);
+
+        return WalkInCheckInResponse.builder()
+                .attendanceId(saved.getId())
+                .activityId(activity.getId())
+                .activityTitle(activity.getTitle())
+                .passengerId(passId)
+                .passengerName(passengerName)
+                .cabinNumber(cabinNumber)
+                .chargedAmount(chargedAmount)
+                .transactionId(transactionId)
+                .status(saved.getStatus().name())
+                .checkInTime(now)
+                .isWalkIn(true)
+                .message("Đăng ký và check-in khách vãng lai thành công")
+                .build();
+    }
+
 
     private String extractDeckFromLocation(String location) {
         if (location == null) return "Deck 5";

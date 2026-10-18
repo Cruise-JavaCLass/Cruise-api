@@ -146,4 +146,17 @@ public class ActivityController {
                 attendanceService.checkIn(id, request));
     }
 
+    /**
+     * Đăng ký và điểm danh khách vãng lai (Walk-in) tại cửa (KAN-320)
+     */
+    @PostMapping("/{id}/check-in/walk-in")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<com.cruise.activity.dto.WalkInCheckInResponse> walkInCheckIn(
+            @PathVariable Long id,
+            @Valid @RequestBody com.cruise.activity.dto.WalkInCheckInRequest request
+    ) {
+        return ApiResponse.ok("Đăng ký và điểm danh khách vãng lai thành công",
+                attendanceService.walkInCheckIn(id, request));
+    }
+
 }
