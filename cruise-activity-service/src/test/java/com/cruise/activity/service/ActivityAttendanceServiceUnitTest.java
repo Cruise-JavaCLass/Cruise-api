@@ -213,6 +213,23 @@ class ActivityAttendanceServiceUnitTest {
         }
 
         @Test
+        @DisplayName("Sinh QR Pass kích hoạt lại bản ghi attendance đang ở trạng thái active=false")
+        void testGenerateQrPassReactivatingInactiveRecord() {
+            sampleAttendance.setActive(false);
+            when(activityRepository.findById(100L)).thenReturn(Optional.of(sampleActivity));
+            when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L))
+                    .thenReturn(Optional.of(sampleAttendance));
+            when(attendanceRepository.save(sampleAttendance)).thenReturn(sampleAttendance);
+
+            ActivityPassResponse pass = attendanceService.generateQrPass(100L, 1L);
+
+            assertThat(pass).isNotNull();
+            assertThat(sampleAttendance.getActive()).isTrue();
+            verify(attendanceRepository, times(1)).save(sampleAttendance);
+        }
+
+        @Test
         @DisplayName("Check-in thành công qua QR Token hợp lệ")
         void testCheckInWithQrTokenSuccess() {
             String token = qrTokenService.generateToken(100L, 1L, "Suite-1402");
@@ -341,6 +358,44 @@ class ActivityAttendanceServiceUnitTest {
                     .isInstanceOf(DuplicateCheckInException.class)
                     .hasMessageContaining("đã được điểm danh trước đó");
         }
+
+        @Test
+        @DisplayName("Check-in ném lại DataIntegrityViolationException không phải uk_activity_passenger")
+        void testCheckInGenericDataIntegrityViolationThrows() {
+            when(activityRepository.findById(100L)).thenReturn(Optional.of(sampleActivity));
+            when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.of(sampleAttendance));
+            when(attendanceRepository.saveAndFlush(any(ActivityAttendance.class)))
+                    .thenThrow(new org.springframework.dao.DataIntegrityViolationException("foreign key violated"));
+
+            ActivityCheckInRequest request = ActivityCheckInRequest.builder()
+                    .passengerId(1L)
+                    .build();
+
+            assertThatThrownBy(() -> attendanceService.checkIn(100L, request))
+                    .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
+                    .hasMessageContaining("foreign key violated");
+        }
+
+        @Test
+        @DisplayName("Check-in kích hoạt lại bản ghi attendance đang ở trạng thái active=false")
+        void testCheckInReusingInactiveRecord() {
+            sampleAttendance.setActive(false);
+            when(activityRepository.findById(100L)).thenReturn(Optional.of(sampleActivity));
+            when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.of(sampleAttendance));
+            when(attendanceRepository.countByActivityIdAndStatusAndActiveTrue(100L, ActivityAttendanceStatus.CHECKED_IN)).thenReturn(1L);
+
+            ActivityCheckInRequest request = ActivityCheckInRequest.builder()
+                    .passengerId(1L)
+                    .build();
+
+            ActivityCheckInResponse response = attendanceService.checkIn(100L, request);
+
+            assertThat(response).isNotNull();
+            assertThat(sampleAttendance.getActive()).isTrue();
+            assertThat(response.getStatus()).isEqualTo("CHECKED_IN");
+        }
     }
 
     @Nested
@@ -448,6 +503,111 @@ class ActivityAttendanceServiceUnitTest {
             assertThatThrownBy(() -> attendanceService.walkInCheckIn(100L, request))
                     .isInstanceOf(DuplicateCheckInException.class)
                     .hasMessageContaining("đã check-in hoạt động này trước đó");
+        }
+
+        @Test
+        @DisplayName("Walk-in với số cabin có 1 hành khách thành công kèm ghi chú")
+        void testWalkInWithSingleCabinPassengerSuccess() {
+            when(activityRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(sampleActivity));
+            when(attendanceRepository.countByActivityIdAndStatusAndActiveTrue(100L, ActivityAttendanceStatus.CHECKED_IN))
+                    .thenReturn(5L)
+                    .thenReturn(6L);
+            when(passengerRepository.findByCabinNumberAndActiveTrue("Suite-1402"))
+                    .thenReturn(List.of(samplePassenger));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.of(sampleAttendance));
+
+            WalkInCheckInRequest request = WalkInCheckInRequest.builder()
+                    .cabinNumber("Suite-1402")
+                    .note("Khách đổi ý tham gia")
+                    .staffId("STAFF-03")
+                    .build();
+
+            WalkInCheckInResponse response = attendanceService.walkInCheckIn(100L, request);
+
+            assertThat(response).isNotNull();
+            assertThat(response.getPassengerId()).isEqualTo(1L);
+            assertThat(response.getStatus()).isEqualTo("CHECKED_IN");
+            assertThat(sampleAttendance.getNote()).isEqualTo("Khách đổi ý tham gia");
+        }
+
+        @Test
+        @DisplayName("Walk-in với số cabin có nhiều hơn 1 hành khách ném BusinessRuleException")
+        void testWalkInWithMultipleCabinPassengersThrows() {
+            when(activityRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(sampleActivity));
+            when(attendanceRepository.countByActivityIdAndStatusAndActiveTrue(100L, ActivityAttendanceStatus.CHECKED_IN))
+                    .thenReturn(5L);
+            Passenger p2 = Passenger.builder().fullName("Hành Khách Cùng Phòng").cabinNumber("Suite-1402").active(true).build();
+            p2.setId(2L);
+            when(passengerRepository.findByCabinNumberAndActiveTrue("Suite-1402"))
+                    .thenReturn(List.of(samplePassenger, p2));
+
+            WalkInCheckInRequest request = WalkInCheckInRequest.builder()
+                    .cabinNumber("Suite-1402")
+                    .build();
+
+            assertThatThrownBy(() -> attendanceService.walkInCheckIn(100L, request))
+                    .isInstanceOf(BusinessRuleException.class)
+                    .hasMessageContaining("có 2 hành khách");
+        }
+
+        @Test
+        @DisplayName("Walk-in ném DuplicateCheckInException khi gặp ObjectOptimisticLockingFailureException")
+        void testWalkInOptimisticLockingThrows() {
+            when(activityRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(sampleActivity));
+            when(attendanceRepository.countByActivityIdAndStatusAndActiveTrue(100L, ActivityAttendanceStatus.CHECKED_IN))
+                    .thenReturn(5L);
+            when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.of(sampleAttendance));
+            when(attendanceRepository.saveAndFlush(any(ActivityAttendance.class)))
+                    .thenThrow(new org.springframework.orm.ObjectOptimisticLockingFailureException(ActivityAttendance.class, 500L));
+
+            WalkInCheckInRequest request = WalkInCheckInRequest.builder()
+                    .passengerId(1L)
+                    .build();
+
+            assertThatThrownBy(() -> attendanceService.walkInCheckIn(100L, request))
+                    .isInstanceOf(DuplicateCheckInException.class)
+                    .hasMessageContaining("đang được xử lý đồng thời bởi thiết bị khác");
+        }
+
+        @Test
+        @DisplayName("Walk-in ném DuplicateCheckInException khi vi phạm ràng buộc uk_activity_passenger")
+        void testWalkInDataIntegrityViolationThrows() {
+            when(activityRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(sampleActivity));
+            when(attendanceRepository.countByActivityIdAndStatusAndActiveTrue(100L, ActivityAttendanceStatus.CHECKED_IN))
+                    .thenReturn(5L);
+            when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.of(sampleAttendance));
+            when(attendanceRepository.saveAndFlush(any(ActivityAttendance.class)))
+                    .thenThrow(new org.springframework.dao.DataIntegrityViolationException("unique constraint uk_activity_passenger"));
+
+            WalkInCheckInRequest request = WalkInCheckInRequest.builder()
+                    .passengerId(1L)
+                    .build();
+
+            assertThatThrownBy(() -> attendanceService.walkInCheckIn(100L, request))
+                    .isInstanceOf(DuplicateCheckInException.class)
+                    .hasMessageContaining("đã check-in hoạt động này");
+        }
+
+        @Test
+        @DisplayName("Walk-in ném lại DataIntegrityViolationException không phải uk_activity_passenger")
+        void testWalkInGenericDataIntegrityViolationThrows() {
+            when(activityRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(sampleActivity));
+            when(attendanceRepository.countByActivityIdAndStatusAndActiveTrue(100L, ActivityAttendanceStatus.CHECKED_IN))
+                    .thenReturn(5L);
+            when(passengerRepository.findById(1L)).thenReturn(Optional.of(samplePassenger));
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 1L)).thenReturn(Optional.of(sampleAttendance));
+            when(attendanceRepository.saveAndFlush(any(ActivityAttendance.class)))
+                    .thenThrow(new org.springframework.dao.DataIntegrityViolationException("other constraint"));
+
+            WalkInCheckInRequest request = WalkInCheckInRequest.builder()
+                    .passengerId(1L)
+                    .build();
+
+            assertThatThrownBy(() -> attendanceService.walkInCheckIn(100L, request))
+                    .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
+                    .hasMessageContaining("other constraint");
         }
     }
 
@@ -605,6 +765,20 @@ class ActivityAttendanceServiceUnitTest {
                 return att;
             }).when(attendanceRepository).saveAndFlush(any(ActivityAttendance.class));
 
+            // Item 8: QR token bị lỗi định dạng -> catch Exception -> passId null -> failed
+            // Item 9: Tái kích hoạt attendance inactive thành active=true
+            Passenger p9 = Passenger.builder().fullName("Khách Tái Kích Hoạt").cabinNumber("F606").active(true).build();
+            p9.setId(9L);
+            when(passengerRepository.findById(9L)).thenReturn(Optional.of(p9));
+            ActivityAttendance att9 = ActivityAttendance.builder()
+                    .activityId(100L)
+                    .passengerId(9L)
+                    .passengerName("Khách Tái Kích Hoạt")
+                    .status(ActivityAttendanceStatus.REGISTERED)
+                    .active(false)
+                    .build();
+            when(attendanceRepository.findByActivityIdAndPassengerId(100L, 9L)).thenReturn(Optional.of(att9));
+
             OfflineCheckInBatchRequest batchRequest = OfflineCheckInBatchRequest.builder()
                     .checkIns(List.of(
                             OfflineCheckInBatchRequest.OfflineCheckInItem.builder().qrToken(qrToken).offlineQueueId("Q1").build(),
@@ -613,16 +787,19 @@ class ActivityAttendanceServiceUnitTest {
                             OfflineCheckInBatchRequest.OfflineCheckInItem.builder().cabinNumber("C303").offlineQueueId("Q4").build(),
                             OfflineCheckInBatchRequest.OfflineCheckInItem.builder().offlineQueueId("Q5").build(),
                             OfflineCheckInBatchRequest.OfflineCheckInItem.builder().passengerId(6L).offlineQueueId("Q6").build(),
-                            OfflineCheckInBatchRequest.OfflineCheckInItem.builder().passengerId(7L).offlineQueueId("Q7").build()
+                            OfflineCheckInBatchRequest.OfflineCheckInItem.builder().passengerId(7L).offlineQueueId("Q7").build(),
+                            OfflineCheckInBatchRequest.OfflineCheckInItem.builder().qrToken("invalid.corrupted.token").offlineQueueId("Q8").build(),
+                            OfflineCheckInBatchRequest.OfflineCheckInItem.builder().passengerId(9L).offlineQueueId("Q9").build()
                     ))
                     .build();
 
             OfflineCheckInBatchResponse result = attendanceService.syncOfflineCheckIns(100L, batchRequest);
 
             assertThat(result).isNotNull();
-            assertThat(result.getProcessedCount()).isEqualTo(3); // Q1, Q2, Q3
+            assertThat(result.getProcessedCount()).isEqualTo(4); // Q1, Q2, Q3, Q9
             assertThat(result.getDuplicateCount()).isEqualTo(1); // Q7 (DataIntegrityViolation)
-            assertThat(result.getFailedCount()).isEqualTo(3);    // Q4, Q5, Q6
+            assertThat(result.getFailedCount()).isEqualTo(4);    // Q4, Q5, Q6, Q8
+            assertThat(att9.getActive()).isTrue();
         }
     }
 }
