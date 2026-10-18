@@ -602,4 +602,71 @@ class ExcursionGroupManagementApiTest {
                     .andExpect(jsonPath("$.success", is(false)));
         }
     }
+
+    // ==========================================
+    // ATTENDANCE & CHECK-IN API TESTS (KAN-226)
+    // ==========================================
+    @Nested
+    @DisplayName("12. Kiểm thử API Điểm danh & Trở về tàu an toàn (KAN-226)")
+    class AttendanceApiTests {
+
+        @Test
+        @DisplayName("POST /api/excursions/{id}/check-in - Điểm danh từng khách thành công")
+        void checkInPassenger_Success() throws Exception {
+            String requestJson = String.format("""
+                    {
+                        "ticketCode": "%s",
+                        "targetStatus": "CHECKED_IN"
+                    }
+                    """, passenger1.getTicketCode());
+
+            mockMvc.perform(post("/api/excursions/{id}/check-in", seededExcursion.getId())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(requestJson))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success", is(true)))
+                    .andExpect(jsonPath("$.data.currentStatus", is("CHECKED_IN")))
+                    .andExpect(jsonPath("$.data.passengerName", is(passenger1.getPassengerName())));
+        }
+
+        @Test
+        @DisplayName("POST /api/excursions/{id}/attendance/bulk - Điểm danh hàng loạt theo đoàn")
+        void bulkCheckIn_Success() throws Exception {
+            String requestJson = String.format("""
+                    {
+                        "groupName": "%s",
+                        "targetStatus": "CHECKED_IN"
+                    }
+                    """, passenger1.getGroupName());
+
+            mockMvc.perform(post("/api/excursions/{id}/attendance/bulk", seededExcursion.getId())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(requestJson))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success", is(true)))
+                    .andExpect(jsonPath("$.data.totalRequested", is(2)))
+                    .andExpect(jsonPath("$.data.totalUpdated", is(1)))
+                    .andExpect(jsonPath("$.data.updatedPassengerIds", contains(passenger1.getId().intValue())))
+                    .andExpect(jsonPath("$.data.targetStatus", is("CHECKED_IN")));
+
+            flushAndClear();
+            ExcursionPassenger updated = passengerRepository.findById(passenger1.getId()).orElseThrow();
+            assertThat(updated.getStatus()).isEqualTo(ExcursionPassengerStatus.CHECKED_IN);
+            assertThat(updated.getCheckedInAt()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("GET /api/excursions/{id}/attendance/summary - Lấy thống kê điểm danh và danh sách thiếu")
+        void getAttendanceSummary_Success() throws Exception {
+            mockMvc.perform(get("/api/excursions/{id}/attendance/summary", seededExcursion.getId()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success", is(true)))
+                    .andExpect(jsonPath("$.data.totalRegistered", is(3)))
+                    .andExpect(jsonPath("$.data.totalCheckedIn", is(1)))
+                    .andExpect(jsonPath("$.data.totalPendingDeparture", is(2)))
+                    .andExpect(jsonPath("$.data.totalMissingReturn", is(1)))
+                    .andExpect(jsonPath("$.data.missingPassengers", hasSize(1)))
+                    .andExpect(jsonPath("$.data.missingPassengers[0].passengerName", is("Lê Tuấn Kiệt")));
+        }
+    }
 }

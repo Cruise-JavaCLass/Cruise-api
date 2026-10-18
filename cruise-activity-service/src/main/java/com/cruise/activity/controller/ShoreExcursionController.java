@@ -295,4 +295,37 @@ public class ShoreExcursionController {
                 .header(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
                 .body(csvData);
     }
+
+    /**
+     * Điểm danh hành khách tour bờ theo vé QR / RFID / ID (KAN-224)
+     */
+    @PostMapping("/{id}/check-in")
+    public ApiResponse<ExcursionCheckInResponse> checkInPassenger(
+            @PathVariable Long id,
+            @Valid @RequestBody ExcursionCheckInRequest request
+    ) {
+        return ApiResponse.ok("Điểm danh hành khách thành công",
+                excursionService.checkInPassenger(id, request));
+    }
+
+    /**
+     * Điểm danh hàng loạt hành khách tour bờ theo ID, xe hoặc đoàn (KAN-316)
+     */
+    @PostMapping("/{id}/attendance/bulk")
+    public ApiResponse<BulkExcursionAttendanceResponse> bulkCheckInPassengers(
+            @PathVariable Long id,
+            @Valid @RequestBody BulkExcursionAttendanceRequest request
+    ) {
+        return ApiResponse.ok("Điểm danh hàng loạt thành công",
+                excursionService.bulkCheckInPassengers(id, request));
+    }
+
+    /**
+     * Thống kê tỷ lệ điểm danh và cảnh báo hành khách chưa về tàu (KAN-317)
+     */
+    @GetMapping("/{id}/attendance/summary")
+    public ApiResponse<ExcursionAttendanceSummaryResponse> getAttendanceSummary(@PathVariable Long id) {
+        return ApiResponse.ok("Lấy thống kê điểm danh tour bờ thành công",
+                excursionService.getAttendanceSummary(id));
+    }
 }

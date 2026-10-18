@@ -1,6 +1,7 @@
 package com.cruise.activity.repository;
 
 import com.cruise.activity.entity.ExcursionPassenger;
+import com.cruise.activity.enums.ExcursionPassengerStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -27,6 +28,14 @@ public interface ExcursionPassengerRepository extends JpaRepository<ExcursionPas
 
     long countByExcursionId(Long excursionId);
 
+    Optional<ExcursionPassenger> findByExcursionIdAndTicketCodeAndActiveTrue(Long excursionId, String ticketCode);
+
+    Optional<ExcursionPassenger> findByExcursionIdAndRfidTagAndActiveTrue(Long excursionId, String rfidTag);
+
+    List<ExcursionPassenger> findByExcursionIdAndBusNumberAndActiveTrue(Long excursionId, String busNumber);
+
+    List<ExcursionPassenger> findByExcursionIdAndStatusAndActiveTrue(Long excursionId, ExcursionPassengerStatus status);
+
     /**
      * Finds active excursion bookings with the given cabin number.
      *
@@ -34,6 +43,8 @@ public interface ExcursionPassengerRepository extends JpaRepository<ExcursionPas
      * @return matching active bookings, or an empty list if none match
      */
     List<ExcursionPassenger> findByCabinNumberAndActiveTrue(String cabinNumber);
+
+    List<ExcursionPassenger> findByExcursionIdAndCabinNumberAndActiveTrue(Long excursionId, String cabinNumber);
 
     /**
      * Finds active excursion bookings by passenger name, ignoring case.

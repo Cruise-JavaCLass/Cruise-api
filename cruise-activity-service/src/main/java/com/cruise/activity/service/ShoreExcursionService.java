@@ -911,4 +911,274 @@ public class ShoreExcursionService {
                 .filter(ShoreExcursion::getActive)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tour bờ với ID: " + id));
     }
+
+    // ==========================================
+    // ATTENDANCE & CHECK-IN (KAN-224)
+    // ==========================================
+
+    @Transactional
+    public ExcursionCheckInResponse checkInPassenger(Long excursionId, ExcursionCheckInRequest request) {
+        findActiveExcursion(excursionId);
+
+        ExcursionPassenger passenger = resolveExcursionPassenger(excursionId, request);
+        ExcursionPassengerStatus prevStatus = passenger.getStatus();
+        ExcursionPassengerStatus targetStatus = request.getTargetStatus();
+
+        validateStatusTransition(prevStatus, targetStatus, passenger.getPassengerName());
+
+        passenger.setStatus(targetStatus);
+        java.time.Instant now = java.time.Instant.now();
+
+        if (targetStatus == ExcursionPassengerStatus.CHECKED_IN && passenger.getCheckedInAt() == null) {
+            passenger.setCheckedInAt(now);
+        } else if (targetStatus == ExcursionPassengerStatus.RETURNED_SAFE) {
+            passenger.setReturnedSafeAt(now);
+        }
+
+        passengerRepository.save(passenger);
+        log.info("Check-in passenger ID={} ('{}') in excursion ID={}: {} -> {}",
+                passenger.getId(), passenger.getPassengerName(), excursionId, prevStatus, targetStatus);
+
+        String message = String.format("Điểm danh thành công hành khách %s sang trạng thái %s",
+                passenger.getPassengerName(), targetStatus);
+
+        return ExcursionCheckInResponse.fromEntity(passenger, prevStatus, message);
+    }
+
+    private ExcursionPassenger resolveExcursionPassenger(Long excursionId, ExcursionCheckInRequest req) {
+        if (req.getExcursionPassengerId() != null) {
+            return passengerRepository.findByIdAndExcursionIdAndActiveTrue(req.getExcursionPassengerId(), excursionId)
+                    .orElseThrow(() -> new ResourceNotFoundException(String.format("Không tìm thấy hành khách ID=%d trong tour bờ ID=%d", req.getExcursionPassengerId(), excursionId)));
+        }
+        if (req.getTicketCode() != null && !req.getTicketCode().trim().isEmpty()) {
+            return passengerRepository.findByExcursionIdAndTicketCodeAndActiveTrue(excursionId, req.getTicketCode().trim())
+                    .orElseThrow(() -> new ResourceNotFoundException(String.format("Vé tour '%s' không tồn tại hoặc không thuộc tour bờ ID=%d", req.getTicketCode().trim(), excursionId)));
+        }
+        if (req.getRfidTag() != null && !req.getRfidTag().trim().isEmpty()) {
+            return passengerRepository.findByExcursionIdAndRfidTagAndActiveTrue(excursionId, req.getRfidTag().trim())
+                    .orElseThrow(() -> new ResourceNotFoundException(String.format("Thẻ RFID '%s' không tìm thấy trong tour bờ ID=%d", req.getRfidTag().trim(), excursionId)));
+        }
+        if (req.getCabinNumber() != null && !req.getCabinNumber().trim().isEmpty()) {
+            List<ExcursionPassenger> passengers = passengerRepository
+                    .findByExcursionIdAndCabinNumberAndActiveTrue(excursionId, req.getCabinNumber().trim());
+            if (passengers.isEmpty()) {
+                throw new ResourceNotFoundException(String.format("Cabin '%s' không có hành khách đăng ký tour bờ ID=%d", req.getCabinNumber().trim(), excursionId));
+            }
+            if (passengers.size() > 1) {
+                throw new BusinessRuleException(String.format(
+                        "Cabin '%s' có %d hành khách cùng tham gia tour bờ ID=%d. Vui lòng quét Mã vé hoặc Thẻ RFID riêng của từng hành khách để điểm danh",
+                        req.getCabinNumber().trim(), passengers.size(), excursionId));
+            }
+            return passengers.get(0);
+        }
+        throw new BusinessRuleException("Vui lòng cung cấp ít nhất một thông tin nhận diện (ID, Mã vé QR, Mã thẻ RFID hoặc Số cabin)");
+    }
+
+    private void validateStatusTransition(ExcursionPassengerStatus from, ExcursionPassengerStatus to, String passengerName) {
+        if (from == to) {
+            throw new BusinessRuleException(String.format("Hành khách %s đã ở trạng thái %s", passengerName, to));
+        }
+        if (from == ExcursionPassengerStatus.RETURNED_SAFE) {
+            throw new BusinessRuleException(String.format("Hành khách %s đã hoàn tất tour và về tàu an toàn", passengerName));
+        }
+
+        // Permitted progression: REGISTERED -> CHECKED_IN -> ON_TOUR -> RETURNED_SAFE
+        boolean isValid = switch (from) {
+            case REGISTERED -> to == ExcursionPassengerStatus.CHECKED_IN;
+            case CHECKED_IN -> to == ExcursionPassengerStatus.ON_TOUR || to == ExcursionPassengerStatus.RETURNED_SAFE;
+            case ON_TOUR -> to == ExcursionPassengerStatus.RETURNED_SAFE;
+            default -> false;
+        };
+
+        if (!isValid) {
+            throw new BusinessRuleException(String.format(
+                    "Không thể chuyển trạng thái của hành khách %s từ %s sang %s. Trình tự hợp lệ: Đăng ký -> Tập trung -> Đang đi tour -> Về tàu an toàn",
+                    passengerName, from, to));
+        }
+    }
+
+    // ==========================================
+    // BULK ATTENDANCE & RETURN-TO-SHIP (KAN-316)
+    // ==========================================
+
+    @Transactional
+    public BulkExcursionAttendanceResponse bulkCheckInPassengers(Long excursionId, BulkExcursionAttendanceRequest request) {
+        findActiveExcursion(excursionId);
+
+        List<ExcursionPassenger> targetList;
+        int requestedCount;
+        if (request.getPassengerIds() != null && !request.getPassengerIds().isEmpty()) {
+            List<Long> requestedIds = request.getPassengerIds().stream().distinct().toList();
+            requestedCount = requestedIds.size();
+            targetList = passengerRepository.findByExcursionIdAndIdInAndActiveTrue(excursionId, requestedIds);
+            if (targetList.size() != requestedCount) {
+                Set<Long> foundIds = targetList.stream().map(ExcursionPassenger::getId).collect(Collectors.toSet());
+                List<Long> missingIds = requestedIds.stream().filter(id -> !foundIds.contains(id)).toList();
+                throw new ResourceNotFoundException(String.format("Không tìm thấy các hành khách có ID: %s trong tour bờ ID=%d", missingIds, excursionId));
+            }
+        } else if (request.getBusNumber() != null && !request.getBusNumber().trim().isEmpty()) {
+            targetList = passengerRepository.findByExcursionIdAndBusNumberAndActiveTrue(excursionId, request.getBusNumber().trim());
+            requestedCount = targetList.size();
+        } else if (request.getGroupName() != null && !request.getGroupName().trim().isEmpty()) {
+            targetList = passengerRepository.findByExcursionIdAndGroupNameAndActiveTrue(excursionId, request.getGroupName().trim());
+            requestedCount = targetList.size();
+        } else {
+            throw new BusinessRuleException("Vui lòng cung cấp danh sách ID hành khách, số xe buýt hoặc tên đoàn để điểm danh hàng loạt");
+        }
+
+        if (targetList.isEmpty()) {
+            throw new BusinessRuleException("Không tìm thấy hành khách nào phù hợp với điều kiện để điểm danh");
+        }
+
+        ExcursionPassengerStatus targetStatus = request.getTargetStatus();
+        java.time.Instant now = java.time.Instant.now();
+        List<Long> updatedIds = new java.util.ArrayList<>();
+        List<Long> skippedIds = new java.util.ArrayList<>();
+
+        for (ExcursionPassenger p : targetList) {
+            if (p.getStatus() == targetStatus || p.getStatus() == ExcursionPassengerStatus.RETURNED_SAFE) {
+                continue; // Skip already completed or already in target status
+            }
+            if (!isValidTransition(p.getStatus(), targetStatus)) {
+                skippedIds.add(p.getId());
+                continue; // Skip ineligible transition and record ID
+            }
+            p.setStatus(targetStatus);
+            if (targetStatus == ExcursionPassengerStatus.CHECKED_IN && p.getCheckedInAt() == null) {
+                p.setCheckedInAt(now);
+            } else if (targetStatus == ExcursionPassengerStatus.RETURNED_SAFE) {
+                p.setReturnedSafeAt(now);
+            }
+            updatedIds.add(p.getId());
+        }
+
+        passengerRepository.saveAll(targetList);
+        log.info("Bulk updated attendance for {}/{} passengers in excursion ID={} to status={} (skipped={})",
+                updatedIds.size(), requestedCount, excursionId, targetStatus, skippedIds.size());
+
+        return BulkExcursionAttendanceResponse.builder()
+                .excursionId(excursionId)
+                .totalRequested(requestedCount)
+                .totalUpdated(updatedIds.size())
+                .targetStatus(targetStatus)
+                .updatedPassengerIds(updatedIds)
+                .skippedPassengerIds(skippedIds)
+                .message(String.format("Cập nhật thành công %d/%d hành khách sang trạng thái %s (bỏ qua %d không hợp lệ)",
+                        updatedIds.size(), requestedCount, targetStatus, skippedIds.size()))
+                .build();
+    }
+
+    private boolean isValidTransition(ExcursionPassengerStatus from, ExcursionPassengerStatus to) {
+        if (from == to || from == ExcursionPassengerStatus.RETURNED_SAFE) {
+            return false;
+        }
+        return switch (from) {
+            case REGISTERED -> to == ExcursionPassengerStatus.CHECKED_IN;
+            case CHECKED_IN -> to == ExcursionPassengerStatus.ON_TOUR || to == ExcursionPassengerStatus.RETURNED_SAFE;
+            case ON_TOUR -> to == ExcursionPassengerStatus.RETURNED_SAFE;
+            default -> false;
+        };
+    }
+
+    // ==========================================
+    // ATTENDANCE SUMMARY & MISSING ALERTS (KAN-317)
+    // ==========================================
+
+    @Transactional(readOnly = true)
+    public ExcursionAttendanceSummaryResponse getAttendanceSummary(Long excursionId) {
+        ShoreExcursion excursion = findActiveExcursion(excursionId);
+        List<ExcursionPassenger> passengers = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
+
+        int totalRegistered = passengers.size();
+        int totalCheckedIn = 0;
+        int totalOnTour = 0;
+        int totalReturnedSafe = 0;
+        List<ExcursionAttendanceSummaryResponse.MissingPassengerItem> missingPassengers = new java.util.ArrayList<>();
+
+        // Grouping by Bus & Group
+        Map<String, List<ExcursionPassenger>> byBus = new java.util.LinkedHashMap<>();
+        Map<String, List<ExcursionPassenger>> byGroup = new java.util.LinkedHashMap<>();
+
+        for (ExcursionPassenger p : passengers) {
+            String bus = (p.getBusNumber() != null && !p.getBusNumber().isBlank()) ? p.getBusNumber() : "Chưa phân xe";
+            String group = (p.getGroupName() != null && !p.getGroupName().isBlank()) ? p.getGroupName() : "Chưa xếp nhóm";
+
+            byBus.computeIfAbsent(bus, k -> new java.util.ArrayList<>()).add(p);
+            byGroup.computeIfAbsent(group, k -> new java.util.ArrayList<>()).add(p);
+
+            if (p.getStatus() == ExcursionPassengerStatus.CHECKED_IN) {
+                totalCheckedIn++;
+            } else if (p.getStatus() == ExcursionPassengerStatus.ON_TOUR) {
+                totalOnTour++;
+            } else if (p.getStatus() == ExcursionPassengerStatus.RETURNED_SAFE) {
+                totalReturnedSafe++;
+            }
+
+            // A passenger is considered missing only if they departed (CHECKED_IN or ON_TOUR) and have not returned safely
+            if (p.getStatus() == ExcursionPassengerStatus.CHECKED_IN || p.getStatus() == ExcursionPassengerStatus.ON_TOUR) {
+                missingPassengers.add(ExcursionAttendanceSummaryResponse.MissingPassengerItem.builder()
+                        .excursionPassengerId(p.getId())
+                        .passengerId(p.getPassengerId())
+                        .passengerName(p.getPassengerName())
+                        .cabinNumber(p.getCabinNumber())
+                        .ticketCode(p.getTicketCode())
+                        .rfidTag(p.getRfidTag())
+                        .busNumber(p.getBusNumber())
+                        .groupName(p.getGroupName())
+                        .emergencyPhone(p.getEmergencyPhone())
+                        .currentStatus(p.getStatus())
+                        .build());
+            }
+        }
+
+        int totalPendingDeparture = totalRegistered - (totalCheckedIn + totalOnTour + totalReturnedSafe);
+        int totalMissingReturn = totalCheckedIn + totalOnTour;
+
+        List<ExcursionAttendanceSummaryResponse.BusAttendanceStat> busStats = byBus.entrySet().stream()
+                .map(e -> {
+                    int bTotal = e.getValue().size();
+                    int bChecked = (int) e.getValue().stream().filter(p -> p.getStatus() == ExcursionPassengerStatus.CHECKED_IN || p.getStatus() == ExcursionPassengerStatus.ON_TOUR || p.getStatus() == ExcursionPassengerStatus.RETURNED_SAFE).count();
+                    int bSafe = (int) e.getValue().stream().filter(p -> p.getStatus() == ExcursionPassengerStatus.RETURNED_SAFE).count();
+                    int bMissing = (int) e.getValue().stream().filter(p -> p.getStatus() == ExcursionPassengerStatus.CHECKED_IN || p.getStatus() == ExcursionPassengerStatus.ON_TOUR).count();
+                    return ExcursionAttendanceSummaryResponse.BusAttendanceStat.builder()
+                            .busNumber(e.getKey())
+                            .total(bTotal)
+                            .checkedIn(bChecked)
+                            .returnedSafe(bSafe)
+                            .missing(bMissing)
+                            .build();
+                })
+                .toList();
+
+        List<ExcursionAttendanceSummaryResponse.GroupAttendanceStat> groupStats = byGroup.entrySet().stream()
+                .map(e -> {
+                    int gTotal = e.getValue().size();
+                    int gChecked = (int) e.getValue().stream().filter(p -> p.getStatus() == ExcursionPassengerStatus.CHECKED_IN || p.getStatus() == ExcursionPassengerStatus.ON_TOUR || p.getStatus() == ExcursionPassengerStatus.RETURNED_SAFE).count();
+                    int gSafe = (int) e.getValue().stream().filter(p -> p.getStatus() == ExcursionPassengerStatus.RETURNED_SAFE).count();
+                    int gMissing = (int) e.getValue().stream().filter(p -> p.getStatus() == ExcursionPassengerStatus.CHECKED_IN || p.getStatus() == ExcursionPassengerStatus.ON_TOUR).count();
+                    return ExcursionAttendanceSummaryResponse.GroupAttendanceStat.builder()
+                            .groupName(e.getKey())
+                            .total(gTotal)
+                            .checkedIn(gChecked)
+                            .returnedSafe(gSafe)
+                            .missing(gMissing)
+                            .build();
+                })
+                .toList();
+
+        return ExcursionAttendanceSummaryResponse.builder()
+                .excursionId(excursionId)
+                .excursionTitle(excursion.getTitle())
+                .returnToShipTime(excursion.getReturnToShipTime() != null ? excursion.getReturnToShipTime().toString() : null)
+                .totalRegistered(totalRegistered)
+                .totalCheckedIn(totalCheckedIn)
+                .totalOnTour(totalOnTour)
+                .totalReturnedSafe(totalReturnedSafe)
+                .totalPendingDeparture(Math.max(0, totalPendingDeparture))
+                .totalMissingReturn(Math.max(0, totalMissingReturn))
+                .busStats(busStats)
+                .groupStats(groupStats)
+                .missingPassengers(missingPassengers)
+                .build();
+    }
 }
