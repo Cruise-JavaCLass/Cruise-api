@@ -27,6 +27,10 @@ public interface ActivityRegistrationRepository extends JpaRepository<ActivityRe
 
     List<ActivityRegistration> findByPassengerIdAndActiveTrueOrderByRegisteredAtDesc(Long passengerId);
 
+    List<ActivityRegistration> findByPassengerIdInAndActiveTrue(List<Long> passengerIds);
+
+    List<ActivityRegistration> findByCabinNumberAndActiveTrue(String cabinNumber);
+
     long countByActivityIdAndStatusAndActiveTrue(Long activityId, RegistrationStatus status);
 
     @Query("SELECT r FROM ActivityRegistration r WHERE r.activityId = :activityId AND r.active = true " +

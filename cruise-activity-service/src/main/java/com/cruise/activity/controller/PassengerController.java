@@ -13,16 +13,22 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import com.cruise.activity.dto.PersonalScheduleResponse;
+import com.cruise.activity.dto.ScheduleConflictDto;
+import com.cruise.activity.service.PassengerScheduleService;
+
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/activities/passengers")
+@RequestMapping({"/api/activities/passengers", "/api/passengers"})
 public class PassengerController {
 
     private final PassengerService passengerService;
+    private final PassengerScheduleService passengerScheduleService;
 
-    public PassengerController(PassengerService passengerService) {
+    public PassengerController(PassengerService passengerService, PassengerScheduleService passengerScheduleService) {
         this.passengerService = passengerService;
+        this.passengerScheduleService = passengerScheduleService;
     }
 
     @PostMapping("/register")
@@ -124,5 +130,30 @@ public class PassengerController {
     ) {
         return ApiResponse.ok("Cập nhật trạng thái đăng ký thành công",
                 passengerService.updateRegistrationStatus(id, status));
+    }
+
+    /**
+     * Lấy dòng thời gian lịch trình cá nhân / cabin theo ngày của hành khách (KAN-349 / KAN-350)
+     */
+    @GetMapping("/{id}/personal-schedule")
+    public ApiResponse<PersonalScheduleResponse> getPersonalSchedule(
+            @PathVariable Long id,
+            @RequestParam(required = false) Integer day,
+            @RequestParam(defaultValue = "my") String scope
+    ) {
+        return ApiResponse.ok("Lấy lịch trình cá nhân của hành khách thành công",
+                passengerScheduleService.getPersonalSchedule(id, day, scope));
+    }
+
+    /**
+     * Lấy danh sách cảnh báo xung đột lịch trình cá nhân (KAN-350)
+     */
+    @GetMapping("/{id}/personal-schedule/conflicts")
+    public ApiResponse<List<ScheduleConflictDto>> getScheduleConflicts(
+            @PathVariable Long id,
+            @RequestParam(required = false) Integer day
+    ) {
+        return ApiResponse.ok("Lấy danh sách xung đột lịch trình thành công",
+                passengerScheduleService.getScheduleConflicts(id, day));
     }
 }
