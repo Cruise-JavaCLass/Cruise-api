@@ -47,6 +47,9 @@ class ActivityControllerTest {
     @MockitoBean
     private com.cruise.activity.service.ActivityAttendanceService attendanceService;
 
+    @MockitoBean
+    private com.cruise.activity.service.ActivityRegistrationService registrationService;
+
     private OnboardActivityResponse sampleResponse;
 
     @BeforeEach
