@@ -4,6 +4,9 @@ import com.cruise.common.dto.ApiResponse;
 import com.cruise.pos.dto.*;
 import com.cruise.pos.enums.ProductStatus;
 import com.cruise.pos.service.PosCatalogService;
+import com.cruise.pos.service.BarcodeLookupService;
+import com.cruise.pos.service.DynamicPricingEngine;
+import com.cruise.pos.service.MaritimeTaxEngine;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -22,6 +25,9 @@ import java.util.List;
 public class PosCatalogController {
 
     private final PosCatalogService catalogService;
+    private final BarcodeLookupService barcodeLookupService;
+    private final DynamicPricingEngine dynamicPricingEngine;
+    private final MaritimeTaxEngine maritimeTaxEngine;
 
     @GetMapping("/outlets")
     public ApiResponse<List<OutletDto>> getOutlets() {
@@ -81,5 +87,48 @@ public class PosCatalogController {
     ) {
         ProductDetailDto updated = catalogService.updateProductStatus(id, req);
         return ApiResponse.ok("Cập nhật trạng thái sản phẩm thành công", updated);
+    }
+
+    @GetMapping("/products/lookup")
+    public ApiResponse<ProductDetailDto> lookupProduct(
+            @RequestParam String code,
+            @RequestParam(required = false) Long outletId
+    ) {
+        ProductDetailDto product = barcodeLookupService.lookupProductByBarcodeOrSku(code, outletId);
+        return ApiResponse.ok(product);
+    }
+
+    @PostMapping("/pricing/calculate")
+    public ApiResponse<CartPriceCalculationResponse> calculatePricing(
+            @Valid @RequestBody CartPriceCalculationRequest req
+    ) {
+        CartPriceCalculationResponse response = maritimeTaxEngine.calculateCartPricing(req);
+        return ApiResponse.ok(response);
+    }
+
+    @GetMapping("/pricing/happy-hour-rules")
+    public ApiResponse<List<HappyHourRuleDto>> getHappyHourRules(@RequestParam(required = false) Long outletId) {
+        return ApiResponse.ok(dynamicPricingEngine.getRulesByOutlet(outletId));
+    }
+
+    @PostMapping("/pricing/happy-hour-rules")
+    public ResponseEntity<ApiResponse<HappyHourRuleDto>> createHappyHourRule(@Valid @RequestBody HappyHourRuleDto req) {
+        HappyHourRuleDto created = dynamicPricingEngine.createRule(req);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok("Tạo quy tắc Happy Hour thành công", created));
+    }
+
+    @PutMapping("/pricing/happy-hour-rules/{id}")
+    public ApiResponse<HappyHourRuleDto> updateHappyHourRule(
+            @PathVariable Long id,
+            @Valid @RequestBody HappyHourRuleDto req
+    ) {
+        HappyHourRuleDto updated = dynamicPricingEngine.updateRule(id, req);
+        return ApiResponse.ok("Cập nhật quy tắc Happy Hour thành công", updated);
+    }
+
+    @DeleteMapping("/pricing/happy-hour-rules/{id}")
+    public ApiResponse<Void> deleteHappyHourRule(@PathVariable Long id) {
+        dynamicPricingEngine.deleteRule(id);
+        return ApiResponse.ok("Xóa quy tắc Happy Hour thành công", null);
     }
 }

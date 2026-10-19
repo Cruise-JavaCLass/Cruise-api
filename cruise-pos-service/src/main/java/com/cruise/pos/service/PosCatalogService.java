@@ -34,6 +34,7 @@ public class PosCatalogService {
     private final PosCategoryRepository categoryRepository;
     private final PosProductRepository productRepository;
     private final PosProductModifierRepository modifierRepository;
+    private final com.cruise.pos.repository.PosHappyHourRuleRepository happyHourRuleRepository;
 
     @Transactional(readOnly = true)
     public List<OutletDto> getOutlets() {
@@ -649,6 +650,17 @@ public class PosCatalogService {
                 .displayOrder(1)
                 .happyHourEligible(false)
                 .happyHourDiscountPercent(BigDecimal.ZERO)
+                .build());
+
+        happyHourRuleRepository.save(com.cruise.pos.entity.PosHappyHourRule.builder()
+                .outletId(skyBar.getId())
+                .name("Sunset Cocktails Happy Hour")
+                .startTime("17:00")
+                .endTime("19:00")
+                .discountPercent(new BigDecimal("20.00"))
+                .daysOfWeek("ALL")
+                .isActive(true)
+                .description("20% off all craft cocktails and beers during golden hour")
                 .build());
 
         log.info("Default POS catalog successfully seeded with 4 outlets, 6 categories, and 7 products.");
