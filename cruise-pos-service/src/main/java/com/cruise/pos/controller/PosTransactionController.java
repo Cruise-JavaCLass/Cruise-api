@@ -71,7 +71,10 @@ public class PosTransactionController {
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "20") int size
     ) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        if (page < 0 || size < 1) {
+            throw new com.cruise.pos.exception.BusinessRuleException("page phải >= 0 và size phải >= 1");
+        }
+        Pageable pageable = PageRequest.of(page, Math.min(size, 100), Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<TransactionResponse> response = transactionService.getTransactionsWithFilters(
                 stationId, cashierId, status, paymentMethod, cabinNumber, startDate, endDate, pageable
         );

@@ -49,6 +49,12 @@ class PosTransactionServiceTest {
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
 
+    @Spy
+    private PosManagerAuthService managerAuthService = new PosManagerAuthService();
+
+    @Mock
+    private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
+
     @InjectMocks
     private PosTransactionService transactionService;
 
@@ -57,6 +63,12 @@ class PosTransactionServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(transactionTemplate.execute(any())).thenAnswer(i -> {
+            org.springframework.transaction.support.TransactionCallback<?> callback = i.getArgument(0);
+            return callback.doInTransaction(null);
+        });
+        lenient().when(idempotencyRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        lenient().when(idempotencyRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
         mockShift = PosShift.builder()
                 .stationId("BAR-DECK-9")
                 .cashierId("CASHIER-01")
@@ -161,7 +173,7 @@ class PosTransactionServiceTest {
                 .build();
         tx.setId(10L);
 
-        when(transactionRepository.findById(10L)).thenReturn(Optional.of(tx));
+        when(transactionRepository.findByIdWithLock(10L)).thenReturn(Optional.of(tx));
         when(transactionRepository.save(any(PosTransaction.class))).thenAnswer(i -> i.getArgument(0));
 
         VoidTransactionRequest voidReq = VoidTransactionRequest.builder()
@@ -187,7 +199,7 @@ class PosTransactionServiceTest {
                 .build();
         tx.setId(10L);
 
-        when(transactionRepository.findById(10L)).thenReturn(Optional.of(tx));
+        when(transactionRepository.findByIdWithLock(10L)).thenReturn(Optional.of(tx));
 
         VoidTransactionRequest voidReq = VoidTransactionRequest.builder()
                 .performedBy("CASHIER-01")
@@ -213,7 +225,7 @@ class PosTransactionServiceTest {
                 .build();
         tx.setId(20L);
 
-        when(transactionRepository.findById(20L)).thenReturn(Optional.of(tx));
+        when(transactionRepository.findByIdWithLock(20L)).thenReturn(Optional.of(tx));
         when(transactionRepository.save(any(PosTransaction.class))).thenAnswer(i -> i.getArgument(0));
 
         RefundTransactionRequest refundReq = RefundTransactionRequest.builder()
@@ -244,7 +256,7 @@ class PosTransactionServiceTest {
                 .build();
         tx.setId(20L);
 
-        when(transactionRepository.findById(20L)).thenReturn(Optional.of(tx));
+        when(transactionRepository.findByIdWithLock(20L)).thenReturn(Optional.of(tx));
 
         RefundTransactionRequest refundReq = RefundTransactionRequest.builder()
                 .refundAmount(BigDecimal.valueOf(40.00))
@@ -268,12 +280,13 @@ class PosTransactionServiceTest {
                 .build();
         tx.setId(20L);
 
-        when(transactionRepository.findById(20L)).thenReturn(Optional.of(tx));
+        when(transactionRepository.findByIdWithLock(20L)).thenReturn(Optional.of(tx));
 
         RefundTransactionRequest refundReq = RefundTransactionRequest.builder()
                 .refundAmount(BigDecimal.valueOf(25.00))
                 .refundReason("Hoàn tiền")
                 .performedBy("CASHIER-01")
+                .managerId("MGR-01")
                 .managerPin("8888")
                 .build();
 
@@ -319,5 +332,77 @@ class PosTransactionServiceTest {
         assertThat(res.getTotalReceived()).isEqualTo(1);
         assertThat(res.getSuccessfullyProcessed()).isEqualTo(1);
         assertThat(res.getDuplicateCount()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("processBatchSync counts missing or blank UUID as failure")
+    void testProcessBatchSyncMissingUuid() {
+        BatchSyncRequest batch = BatchSyncRequest.builder()
+                .deviceId("POS-HANDHELD-01")
+                .transactions(List.of(
+                        CreateTransactionRequest.builder()
+                                .transactionUuid("") // blank UUID
+                                .stationId("BAR-DECK-9")
+                                .cashierId("CASHIER-01")
+                                .build()
+                ))
+                .build();
+
+        BatchSyncResponse res = transactionService.processBatchSync(batch);
+
+        assertThat(res.getTotalReceived()).isEqualTo(1);
+        assertThat(res.getSuccessfullyProcessed()).isEqualTo(0);
+        assertThat(res.getFailedCount()).isEqualTo(1);
+        assertThat(res.getFailedReasons().get(0)).contains("UUID null");
+    }
+
+    @Test
+    @DisplayName("processChargeTransaction rejects missing supplied shift ID")
+    void testChargeWithSuppliedShiftIdMissing() {
+        chargeRequest.setShiftId(999L);
+        when(shiftRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> transactionService.processChargeTransaction("IDEM-MISSING", chargeRequest))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Không tìm thấy ca làm việc ID: 999");
+    }
+
+    @Test
+    @DisplayName("processChargeTransaction rejects supplied shift ID when shift is CLOSED")
+    void testChargeWithSuppliedShiftIdClosed() {
+        chargeRequest.setShiftId(1L);
+        mockShift.setStatus(ShiftStatus.CLOSED);
+        when(shiftRepository.findById(1L)).thenReturn(Optional.of(mockShift));
+
+        assertThatThrownBy(() -> transactionService.processChargeTransaction("IDEM-CLOSED", chargeRequest))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Ca làm việc không còn mở");
+    }
+
+    @Test
+    @DisplayName("processChargeTransaction rejects supplied shift ID belonging to different station")
+    void testChargeWithSuppliedShiftIdDifferentStation() {
+        chargeRequest.setShiftId(1L);
+        mockShift.setStatus(ShiftStatus.OPEN);
+        mockShift.setStationId("RESTAURANT-DECK-5");
+        when(shiftRepository.findById(1L)).thenReturn(Optional.of(mockShift));
+
+        assertThatThrownBy(() -> transactionService.processChargeTransaction("IDEM-DIFF", chargeRequest))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("không thuộc trạm này");
+    }
+
+    @Test
+    @DisplayName("processChargeTransaction throws IdempotencyConflictException when request is in progress")
+    void testChargeIdempotencyInProgress() {
+        PosIdempotencyRecord inProgressRecord = PosIdempotencyRecord.builder()
+                .idempotencyKey("IDEM-PROGRESS")
+                .status(IdempotencyStatus.IN_PROGRESS)
+                .build();
+        when(idempotencyRepository.findByIdempotencyKey("IDEM-PROGRESS")).thenReturn(Optional.of(inProgressRecord));
+
+        assertThatThrownBy(() -> transactionService.processChargeTransaction("IDEM-PROGRESS", chargeRequest))
+                .isInstanceOf(IdempotencyConflictException.class)
+                .hasMessageContaining("Giao dịch đang được xử lý song song");
     }
 }

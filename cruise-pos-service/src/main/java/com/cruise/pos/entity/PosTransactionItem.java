@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ToString(exclude = "transaction")
 public class PosTransactionItem extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)

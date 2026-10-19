@@ -159,6 +159,7 @@ class PosTransactionControllerTest {
                 .refundReason("Khách hoàn lại món")
                 .performedBy("CASHIER-01")
                 .managerPin("8888")
+                .managerId("MGR-01")
                 .build();
 
         TransactionResponse response = TransactionResponse.builder()
@@ -176,6 +177,16 @@ class PosTransactionControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.status").value("PARTIALLY_REFUNDED"));
+    }
+
+    @Test
+    @DisplayName("GET /api/pos/transactions returns 400 when page < 0 or size < 1")
+    void testGetTransactionsInvalidPagination() throws Exception {
+        mockMvc.perform(get("/api/pos/transactions")
+                        .param("page", "-1")
+                        .param("size", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
     }
 
     @Test

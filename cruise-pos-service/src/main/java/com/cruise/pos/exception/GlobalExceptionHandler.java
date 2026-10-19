@@ -1,13 +1,17 @@
 package com.cruise.pos.exception;
 
 import com.cruise.common.dto.ApiResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
@@ -50,9 +54,17 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(msg);
     }
 
+    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> handleBadRequest(Exception ex) {
+        log.warn("Invalid client request format: {}", ex.getMessage());
+        return ApiResponse.error("Dữ liệu đầu vào không hợp lệ");
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiResponse<Void> handleGeneral(Exception ex) {
-        return ApiResponse.error("Đã xảy ra lỗi máy chủ nội bộ: " + ex.getMessage());
+        log.error("Unhandled server exception: ", ex);
+        return ApiResponse.error("Đã xảy ra lỗi máy chủ nội bộ");
     }
 }

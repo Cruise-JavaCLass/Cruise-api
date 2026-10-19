@@ -12,7 +12,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -30,6 +32,9 @@ public class PosTransactionService {
     private final PosFolioService folioService;
     private final PosShiftService shiftService;
     private final ObjectMapper objectMapper;
+    private final PosManagerAuthService managerAuthService;
+    @org.springframework.lang.Nullable
+    private final TransactionTemplate transactionTemplate;
 
     @Transactional
     public TransactionResponse processChargeTransaction(String idempotencyKey, CreateTransactionRequest request) {
@@ -39,32 +44,45 @@ public class PosTransactionService {
             Optional<PosIdempotencyRecord> existingRecord = idempotencyRepository.findByIdempotencyKey(idempotencyKey);
             if (existingRecord.isPresent()) {
                 PosIdempotencyRecord record = existingRecord.get();
-                if (record.getStatus() == IdempotencyStatus.COMPLETED && record.getResponseBody() != null) {
-                    try {
-                        log.info("Idempotent request detected for key {}. Returning cached response.", idempotencyKey);
-                        return objectMapper.readValue(record.getResponseBody(), TransactionResponse.class);
-                    } catch (JsonProcessingException e) {
-                        log.error("Failed to deserialize cached idempotency response: {}", e.getMessage());
+                if (record.getStatus() == IdempotencyStatus.COMPLETED) {
+                    if (record.getResponseBody() != null) {
+                        try {
+                            log.info("Idempotent request detected for key {}. Returning cached response.", idempotencyKey);
+                            return objectMapper.readValue(record.getResponseBody(), TransactionResponse.class);
+                        } catch (JsonProcessingException e) {
+                            log.error("Failed to deserialize cached idempotency response: {}", e.getMessage());
+                        }
                     }
-                } else if (record.getStatus() == IdempotencyStatus.IN_PROGRESS) {
-                    throw new IdempotencyConflictException("Giao dịch đang được xử lý song song với Idempotency Key: " + idempotencyKey);
+                    return transactionRepository.findByIdempotencyKey(idempotencyKey)
+                            .map(this::toResponse)
+                            .orElseThrow(() -> new IdempotencyConflictException("Idempotency Key đã được sử dụng: " + idempotencyKey));
                 }
+                throw new IdempotencyConflictException("Giao dịch đang được xử lý song song với Idempotency Key: " + idempotencyKey);
             } else {
                 idempotencyRecord = PosIdempotencyRecord.builder()
                         .idempotencyKey(idempotencyKey)
                         .requestPath("/api/pos/transactions")
                         .status(IdempotencyStatus.IN_PROGRESS)
                         .build();
-                idempotencyRecord = idempotencyRepository.save(idempotencyRecord);
+                try {
+                    idempotencyRecord = idempotencyRepository.saveAndFlush(idempotencyRecord);
+                } catch (DataIntegrityViolationException ex) {
+                    return transactionRepository.findByIdempotencyKey(idempotencyKey)
+                            .map(this::toResponse)
+                            .orElseThrow(() -> new IdempotencyConflictException("Giao dịch đang được xử lý song song với Idempotency Key: " + idempotencyKey));
+                }
             }
         }
 
         // 2. Resolve Active Shift
-        PosShift shift = null;
+        PosShift shift;
         if (request.getShiftId() != null) {
-            shift = shiftRepository.findById(request.getShiftId()).orElse(null);
-        }
-        if (shift == null) {
+            shift = shiftRepository.findById(request.getShiftId())
+                    .orElseThrow(() -> new BusinessRuleException("Không tìm thấy ca làm việc ID: " + request.getShiftId()));
+            if (shift.getStatus() != ShiftStatus.OPEN || !shift.getStationId().equals(request.getStationId())) {
+                throw new BusinessRuleException("Ca làm việc không còn mở hoặc không thuộc trạm này!");
+            }
+        } else {
             shift = shiftService.openShift(request.getStationId(), request.getCashierId(), BigDecimal.ZERO);
         }
 
@@ -156,10 +174,11 @@ public class PosTransactionService {
         // 8. Update Idempotency Record
         if (idempotencyRecord != null) {
             try {
-                idempotencyRecord.setStatus(IdempotencyStatus.COMPLETED);
+                String body = objectMapper.writeValueAsString(response);
+                idempotencyRecord.setResponseBody(body);
                 idempotencyRecord.setStatusCode(201);
                 idempotencyRecord.setTransactionId(savedTx.getId());
-                idempotencyRecord.setResponseBody(objectMapper.writeValueAsString(response));
+                idempotencyRecord.setStatus(IdempotencyStatus.COMPLETED);
                 idempotencyRepository.save(idempotencyRecord);
             } catch (JsonProcessingException e) {
                 log.error("Failed to serialize idempotency response: {}", e.getMessage());
@@ -171,7 +190,7 @@ public class PosTransactionService {
 
     @Transactional
     public TransactionResponse voidTransaction(Long transactionId, VoidTransactionRequest request) {
-        PosTransaction tx = transactionRepository.findById(transactionId)
+        PosTransaction tx = transactionRepository.findByIdWithLock(transactionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giao dịch ID: " + transactionId));
 
         if (tx.getStatus() != TransactionStatus.COMPLETED) {
@@ -214,7 +233,7 @@ public class PosTransactionService {
 
     @Transactional
     public TransactionResponse refundTransaction(Long transactionId, RefundTransactionRequest request) {
-        PosTransaction tx = transactionRepository.findById(transactionId)
+        PosTransaction tx = transactionRepository.findByIdWithLock(transactionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giao dịch ID: " + transactionId));
 
         if (tx.getStatus() == TransactionStatus.VOIDED) {
@@ -222,7 +241,8 @@ public class PosTransactionService {
         }
 
         // Manager PIN Verification
-        if (request.getManagerPin() == null || request.getManagerPin().isBlank() || request.getManagerPin().length() < 4) {
+        if (request.getManagerId() == null || request.getManagerId().isBlank()
+                || !managerAuthService.verifyRefundApproval(request.getManagerId(), request.getManagerPin())) {
             throw new UnauthorizedManagerOverrideException("Mã PIN Quản lý không hợp lệ hoặc không có quyền phê duyệt Hoàn tiền!");
         }
 
@@ -263,7 +283,7 @@ public class PosTransactionService {
                 .transactionId(tx.getId())
                 .action("REFUND")
                 .performedBy(request.getPerformedBy())
-                .managerId(request.getManagerId() != null ? request.getManagerId() : "MANAGER-AUTH")
+                .managerId(request.getManagerId())
                 .reason(request.getRefundReason())
                 .details(String.format("Refunded $%.2f. New status: %s", refundAmt, tx.getStatus()))
                 .build();
@@ -298,38 +318,54 @@ public class PosTransactionService {
             Pageable pageable
     ) {
         return transactionRepository.findWithFilters(
-                stationId, cashierId, status, paymentMethod, cabinNumber, startDate, endDate, pageable
+            stationId, cashierId, status, paymentMethod, cabinNumber, startDate, endDate, pageable
         ).map(this::toResponse);
     }
 
-    @Transactional
     public BatchSyncResponse processBatchSync(BatchSyncRequest batch) {
-        int received = batch.getTransactions().size();
+        int received = (batch != null && batch.getTransactions() != null) ? batch.getTransactions().size() : 0;
         int processed = 0;
         int duplicates = 0;
         int failed = 0;
         List<String> processedUuids = new ArrayList<>();
         List<String> failedReasons = new ArrayList<>();
 
-        for (CreateTransactionRequest txReq : batch.getTransactions()) {
-            try {
-                if (txReq.getTransactionUuid() != null &&
-                        transactionRepository.findByTransactionUuid(txReq.getTransactionUuid()).isPresent()) {
-                    duplicates++;
+        if (batch != null && batch.getTransactions() != null) {
+            for (CreateTransactionRequest txReq : batch.getTransactions()) {
+                if (txReq.getTransactionUuid() == null || txReq.getTransactionUuid().isBlank()) {
+                    failed++;
+                    failedReasons.add("UUID null: transactionUuid bắt buộc khi đồng bộ ngoại tuyến");
                     continue;
                 }
 
-                TransactionResponse res = processChargeTransaction(txReq.getTransactionUuid(), txReq);
-                processedUuids.add(res.getTransactionUuid());
-                processed++;
-            } catch (Exception ex) {
-                failed++;
-                failedReasons.add(String.format("UUID %s: %s", txReq.getTransactionUuid(), ex.getMessage()));
+                try {
+                    if (transactionRepository.findByTransactionUuid(txReq.getTransactionUuid()).isPresent()) {
+                        duplicates++;
+                        continue;
+                    }
+
+                    TransactionResponse res;
+                    if (transactionTemplate != null) {
+                        res = transactionTemplate.execute(status ->
+                                processChargeTransaction(txReq.getTransactionUuid(), txReq)
+                        );
+                    } else {
+                        res = processChargeTransaction(txReq.getTransactionUuid(), txReq);
+                    }
+
+                    if (res != null) {
+                        processedUuids.add(res.getTransactionUuid());
+                        processed++;
+                    }
+                } catch (Exception ex) {
+                    failed++;
+                    failedReasons.add(String.format("UUID %s: %s", txReq.getTransactionUuid(), ex.getMessage()));
+                }
             }
         }
 
         return BatchSyncResponse.builder()
-                .deviceId(batch.getDeviceId())
+                .deviceId(batch != null ? batch.getDeviceId() : null)
                 .totalReceived(received)
                 .successfullyProcessed(processed)
                 .duplicateCount(duplicates)

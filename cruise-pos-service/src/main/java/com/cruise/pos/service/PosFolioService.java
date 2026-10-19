@@ -6,7 +6,6 @@ import com.cruise.pos.enums.FolioStatus;
 import com.cruise.pos.exception.InsufficientFolioBalanceException;
 import com.cruise.pos.exception.ResourceNotFoundException;
 import com.cruise.pos.repository.CabinFolioAccountRepository;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,7 +21,6 @@ public class PosFolioService {
 
     private final CabinFolioAccountRepository folioRepository;
 
-    @PostConstruct
     public void seedDefaultFolios() {
         seedFolioIfAbsent("CABIN-7012", "Nguyễn Văn An", 101L, BigDecimal.valueOf(2000.00));
         seedFolioIfAbsent("CABIN-8015", "Trần Thị Mai", 102L, BigDecimal.valueOf(1500.00));

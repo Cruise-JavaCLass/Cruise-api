@@ -22,6 +22,10 @@ public interface PosTransactionRepository extends JpaRepository<PosTransaction, 
 
     Optional<PosTransaction> findByIdempotencyKey(String idempotencyKey);
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM PosTransaction t WHERE t.id = :id")
+    Optional<PosTransaction> findByIdWithLock(@Param("id") Long id);
+
     Page<PosTransaction> findByShiftId(Long shiftId, Pageable pageable);
 
     List<PosTransaction> findByShiftId(Long shiftId);

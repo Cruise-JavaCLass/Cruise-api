@@ -6,10 +6,12 @@ import com.cruise.pos.entity.CabinFolioAccount;
 import com.cruise.pos.enums.PaymentMethod;
 import com.cruise.pos.repository.CabinFolioAccountRepository;
 import com.cruise.pos.repository.PosTransactionRepository;
+import com.cruise.pos.exception.InsufficientFolioBalanceException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -20,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
+@ActiveProfiles("test")
 @DisplayName("POS Concurrency & Credit Limit Enforcement Integration Tests")
 class PosConcurrencyIntegrationTest {
 
@@ -53,6 +56,7 @@ class PosConcurrencyIntegrationTest {
         CountDownLatch latch = new CountDownLatch(1);
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger failureCount = new AtomicInteger(0);
+        List<Throwable> unexpectedExceptions = new CopyOnWriteArrayList<>();
 
         for (int i = 0; i < numberOfThreads; i++) {
             executor.submit(() -> {
@@ -79,8 +83,10 @@ class PosConcurrencyIntegrationTest {
 
                     transactionService.processChargeTransaction(UUID.randomUUID().toString(), req);
                     successCount.incrementAndGet();
-                } catch (Exception e) {
+                } catch (InsufficientFolioBalanceException e) {
                     failureCount.incrementAndGet();
+                } catch (Throwable t) {
+                    unexpectedExceptions.add(t);
                 }
             });
         }
@@ -90,6 +96,7 @@ class PosConcurrencyIntegrationTest {
         boolean completed = executor.awaitTermination(10, TimeUnit.SECONDS);
 
         assertThat(completed).isTrue();
+        assertThat(unexpectedExceptions).isEmpty();
         assertThat(successCount.get()).isEqualTo(4);
         assertThat(failureCount.get()).isEqualTo(6);
 

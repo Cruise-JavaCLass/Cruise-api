@@ -6,6 +6,7 @@ import com.cruise.pos.entity.PosTransaction;
 import com.cruise.pos.enums.PaymentMethod;
 import com.cruise.pos.enums.ShiftStatus;
 import com.cruise.pos.enums.TransactionStatus;
+import com.cruise.pos.enums.TransactionType;
 import com.cruise.pos.exception.BusinessRuleException;
 import com.cruise.pos.exception.ResourceNotFoundException;
 import com.cruise.pos.repository.PosShiftRepository;
@@ -32,24 +33,31 @@ public class PosShiftService {
 
     @Transactional
     public PosShift openShift(String stationId, String cashierId, BigDecimal startingCash) {
-        Optional<PosShift> existing = shiftRepository.findByStationIdAndStatus(stationId, ShiftStatus.OPEN);
+        Optional<PosShift> existing = shiftRepository.findByStationIdAndStatusWithLock(stationId, ShiftStatus.OPEN);
         if (existing.isPresent()) {
             return existing.get();
         }
 
-        PosShift shift = PosShift.builder()
-                .stationId(stationId)
-                .cashierId(cashierId)
-                .startingCash(startingCash != null ? startingCash : BigDecimal.ZERO)
-                .status(ShiftStatus.OPEN)
-                .openedAt(Instant.now())
-                .totalSales(BigDecimal.ZERO)
-                .totalRefunds(BigDecimal.ZERO)
-                .netRevenue(BigDecimal.ZERO)
-                .transactionCount(0)
-                .build();
+        synchronized (stationId.intern()) {
+            existing = shiftRepository.findByStationIdAndStatus(stationId, ShiftStatus.OPEN);
+            if (existing.isPresent()) {
+                return existing.get();
+            }
 
-        return shiftRepository.save(shift);
+            PosShift shift = PosShift.builder()
+                    .stationId(stationId)
+                    .cashierId(cashierId)
+                    .startingCash(startingCash != null ? startingCash : BigDecimal.ZERO)
+                    .status(ShiftStatus.OPEN)
+                    .openedAt(Instant.now())
+                    .totalSales(BigDecimal.ZERO)
+                    .totalRefunds(BigDecimal.ZERO)
+                    .netRevenue(BigDecimal.ZERO)
+                    .transactionCount(0)
+                    .build();
+
+            return shiftRepository.save(shift);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -97,14 +105,20 @@ public class PosShiftService {
         Map<String, BigDecimal> byCategory = new HashMap<>();
 
         for (PosTransaction tx : transactions) {
-            if (tx.getStatus() == TransactionStatus.COMPLETED) {
+            boolean isNonVoidedCharge = (tx.getType() == null || tx.getType() == TransactionType.CHARGE)
+                    && tx.getStatus() != TransactionStatus.VOIDED
+                    && tx.getStatus() != TransactionStatus.FAILED
+                    && tx.getStatus() != TransactionStatus.PENDING;
+            if (isNonVoidedCharge) {
                 String pm = tx.getPaymentMethod().name();
                 byPaymentMethod.put(pm, byPaymentMethod.getOrDefault(pm, BigDecimal.ZERO).add(tx.getTotalAmount()));
 
-                tx.getItems().forEach(item -> {
-                    String cat = item.getCategory();
-                    byCategory.put(cat, byCategory.getOrDefault(cat, BigDecimal.ZERO).add(item.getTotalPrice()));
-                });
+                if (tx.getItems() != null) {
+                    tx.getItems().forEach(item -> {
+                        String cat = item.getCategory();
+                        byCategory.put(cat, byCategory.getOrDefault(cat, BigDecimal.ZERO).add(item.getTotalPrice()));
+                    });
+                }
             }
         }
 

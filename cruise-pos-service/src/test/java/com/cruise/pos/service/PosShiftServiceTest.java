@@ -61,6 +61,7 @@ class PosShiftServiceTest {
     @Test
     @DisplayName("openShift creates new shift if no active shift exists")
     void testOpenShiftNew() {
+        when(shiftRepository.findByStationIdAndStatusWithLock("BAR-DECK-9", ShiftStatus.OPEN)).thenReturn(Optional.empty());
         when(shiftRepository.findByStationIdAndStatus("BAR-DECK-9", ShiftStatus.OPEN)).thenReturn(Optional.empty());
         when(shiftRepository.save(any(PosShift.class))).thenAnswer(i -> i.getArgument(0));
 
@@ -124,5 +125,49 @@ class PosShiftServiceTest {
         assertThat(summary.getReportType()).isEqualTo("Z_REPORT");
         assertThat(summary.getRevenueByPaymentMethod().get("CABIN_FOLIO")).isEqualByComparingTo(BigDecimal.valueOf(100.00));
         assertThat(summary.getRevenueByCategory().get("BEVERAGE")).isEqualByComparingTo(BigDecimal.valueOf(100.00));
+    }
+
+    @Test
+    @DisplayName("generateShiftSummary includes partially and fully refunded transactions but excludes voided")
+    void testGenerateShiftSummaryWithRefunds() {
+        when(shiftRepository.findById(1L)).thenReturn(Optional.of(shift));
+
+        PosTransaction completedTx = PosTransaction.builder()
+                .status(TransactionStatus.COMPLETED)
+                .paymentMethod(PaymentMethod.CASH)
+                .totalAmount(BigDecimal.valueOf(50.00))
+                .items(List.of(
+                        PosTransactionItem.builder().category("FOOD").totalPrice(BigDecimal.valueOf(50.00)).build()
+                ))
+                .build();
+
+        PosTransaction refundedTx = PosTransaction.builder()
+                .status(TransactionStatus.PARTIALLY_REFUNDED)
+                .paymentMethod(PaymentMethod.CABIN_FOLIO)
+                .totalAmount(BigDecimal.valueOf(60.00))
+                .items(List.of(
+                        PosTransactionItem.builder().category("RETAIL").totalPrice(BigDecimal.valueOf(60.00)).build()
+                ))
+                .build();
+
+        PosTransaction voidedTx = PosTransaction.builder()
+                .status(TransactionStatus.VOIDED)
+                .paymentMethod(PaymentMethod.CREDIT_CARD)
+                .totalAmount(BigDecimal.valueOf(100.00))
+                .items(List.of(
+                        PosTransactionItem.builder().category("BEVERAGE").totalPrice(BigDecimal.valueOf(100.00)).build()
+                ))
+                .build();
+
+        when(transactionRepository.findByShiftId(1L)).thenReturn(List.of(completedTx, refundedTx, voidedTx));
+
+        ShiftSummaryResponse summary = shiftService.generateShiftSummary(1L, "X_REPORT");
+
+        assertThat(summary.getRevenueByPaymentMethod().get("CASH")).isEqualByComparingTo(BigDecimal.valueOf(50.00));
+        assertThat(summary.getRevenueByPaymentMethod().get("CABIN_FOLIO")).isEqualByComparingTo(BigDecimal.valueOf(60.00));
+        assertThat(summary.getRevenueByPaymentMethod().get("CREDIT_CARD")).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(summary.getRevenueByCategory().get("FOOD")).isEqualByComparingTo(BigDecimal.valueOf(50.00));
+        assertThat(summary.getRevenueByCategory().get("RETAIL")).isEqualByComparingTo(BigDecimal.valueOf(60.00));
+        assertThat(summary.getRevenueByCategory().get("BEVERAGE")).isNull();
     }
 }
