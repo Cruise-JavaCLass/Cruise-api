@@ -30,14 +30,6 @@ public class PosManagerAuthService {
             );
         }
 
-        // Allow configured cruise manager IDs starting with MGR- or MANAGER in test/dev
-        if (normalizedId.startsWith("MGR-") || normalizedId.startsWith("MANAGER")) {
-            return MessageDigest.isEqual(
-                    "8888".getBytes(StandardCharsets.UTF_8),
-                    managerPin.trim().getBytes(StandardCharsets.UTF_8)
-            );
-        }
-
         return false;
     }
 }

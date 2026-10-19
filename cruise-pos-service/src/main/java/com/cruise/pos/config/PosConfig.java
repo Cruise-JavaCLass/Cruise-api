@@ -15,10 +15,12 @@ public class PosConfig {
     }
 
     @Bean
-    @org.springframework.boot.autoconfigure.condition.ConditionalOnBean(org.springframework.transaction.PlatformTransactionManager.class)
     public org.springframework.transaction.support.TransactionTemplate transactionTemplate(
-            org.springframework.transaction.PlatformTransactionManager transactionManager
+            @org.springframework.lang.Nullable org.springframework.transaction.PlatformTransactionManager transactionManager
     ) {
+        if (transactionManager == null) {
+            return null;
+        }
         org.springframework.transaction.support.TransactionTemplate template =
                 new org.springframework.transaction.support.TransactionTemplate(transactionManager);
         template.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);

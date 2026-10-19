@@ -22,6 +22,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import org.springframework.dao.DataIntegrityViolationException;
 
 @Service
 @RequiredArgsConstructor
@@ -30,33 +33,44 @@ public class PosShiftService {
 
     private final PosShiftRepository shiftRepository;
     private final PosTransactionRepository transactionRepository;
+    private final ConcurrentMap<String, Object> stationLocks = new ConcurrentHashMap<>();
 
     @Transactional
     public PosShift openShift(String stationId, String cashierId, BigDecimal startingCash) {
+        if (stationId == null || stationId.isBlank()) {
+            throw new BusinessRuleException("stationId không được để trống khi mở ca làm việc");
+        }
+
         Optional<PosShift> existing = shiftRepository.findByStationIdAndStatusWithLock(stationId, ShiftStatus.OPEN);
         if (existing.isPresent()) {
             return existing.get();
         }
 
-        synchronized (stationId.intern()) {
+        Object lock = stationLocks.computeIfAbsent(stationId, k -> new Object());
+        synchronized (lock) {
             existing = shiftRepository.findByStationIdAndStatus(stationId, ShiftStatus.OPEN);
             if (existing.isPresent()) {
                 return existing.get();
             }
 
-            PosShift shift = PosShift.builder()
-                    .stationId(stationId)
-                    .cashierId(cashierId)
-                    .startingCash(startingCash != null ? startingCash : BigDecimal.ZERO)
-                    .status(ShiftStatus.OPEN)
-                    .openedAt(Instant.now())
-                    .totalSales(BigDecimal.ZERO)
-                    .totalRefunds(BigDecimal.ZERO)
-                    .netRevenue(BigDecimal.ZERO)
-                    .transactionCount(0)
-                    .build();
+            try {
+                PosShift shift = PosShift.builder()
+                        .stationId(stationId)
+                        .cashierId(cashierId)
+                        .startingCash(startingCash != null ? startingCash : BigDecimal.ZERO)
+                        .status(ShiftStatus.OPEN)
+                        .openedAt(Instant.now())
+                        .totalSales(BigDecimal.ZERO)
+                        .totalRefunds(BigDecimal.ZERO)
+                        .netRevenue(BigDecimal.ZERO)
+                        .transactionCount(0)
+                        .build();
 
-            return shiftRepository.save(shift);
+                return shiftRepository.save(shift);
+            } catch (DataIntegrityViolationException ex) {
+                return shiftRepository.findByStationIdAndStatus(stationId, ShiftStatus.OPEN)
+                        .orElseThrow(() -> new BusinessRuleException("Xung đột khi mở ca làm việc tại trạm: " + stationId));
+            }
         }
     }
 

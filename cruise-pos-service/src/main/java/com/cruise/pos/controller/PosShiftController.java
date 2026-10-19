@@ -1,6 +1,7 @@
 package com.cruise.pos.controller;
 
 import com.cruise.common.dto.ApiResponse;
+import com.cruise.pos.exception.BusinessRuleException;
 import com.cruise.pos.dto.ShiftSummaryResponse;
 import com.cruise.pos.entity.PosShift;
 import com.cruise.pos.service.PosShiftService;
@@ -21,8 +22,12 @@ public class PosShiftController {
     @PostMapping("/shifts/open")
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<PosShift> openShift(@RequestBody Map<String, Object> payload) {
-        String stationId = (String) payload.getOrDefault("stationId", "DEFAULT-STATION");
-        String cashierId = (String) payload.getOrDefault("cashierId", "DEFAULT-CASHIER");
+        Object stationObj = payload != null ? payload.get("stationId") : null;
+        if (stationObj == null || stationObj.toString().isBlank()) {
+            throw new BusinessRuleException("stationId không được để trống khi mở ca làm việc");
+        }
+        String stationId = stationObj.toString().trim();
+        String cashierId = payload.get("cashierId") != null ? payload.get("cashierId").toString().trim() : "DEFAULT-CASHIER";
         BigDecimal startingCash = payload.get("startingCash") != null
                 ? new BigDecimal(payload.get("startingCash").toString())
                 : BigDecimal.ZERO;

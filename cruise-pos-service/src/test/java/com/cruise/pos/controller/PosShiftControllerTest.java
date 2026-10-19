@@ -64,6 +64,19 @@ class PosShiftControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/pos/shifts/open rejects missing stationId")
+    void testOpenShiftMissingStationId() throws Exception {
+        mockMvc.perform(post("/api/pos/shifts/open")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "cashierId", "CASHIER-01"
+                        ))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("stationId không được để trống khi mở ca làm việc"));
+    }
+
+    @Test
     @DisplayName("POST /api/pos/shifts/{id}/close closes a shift")
     void testCloseShift() throws Exception {
         PosShift shift = PosShift.builder()

@@ -38,6 +38,10 @@ public class PosTransactionService {
 
     @Transactional
     public TransactionResponse processChargeTransaction(String idempotencyKey, CreateTransactionRequest request) {
+        return doProcessChargeTransaction(idempotencyKey, request);
+    }
+
+    private TransactionResponse doProcessChargeTransaction(String idempotencyKey, CreateTransactionRequest request) {
         // 1. Idempotency Check
         PosIdempotencyRecord idempotencyRecord = null;
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
@@ -67,9 +71,7 @@ public class PosTransactionService {
                 try {
                     idempotencyRecord = idempotencyRepository.saveAndFlush(idempotencyRecord);
                 } catch (DataIntegrityViolationException ex) {
-                    return transactionRepository.findByIdempotencyKey(idempotencyKey)
-                            .map(this::toResponse)
-                            .orElseThrow(() -> new IdempotencyConflictException("Giao dịch đang được xử lý song song với Idempotency Key: " + idempotencyKey));
+                    throw new IdempotencyConflictException("Giao dịch đang được xử lý song song với Idempotency Key: " + idempotencyKey);
                 }
             }
         }
@@ -347,10 +349,10 @@ public class PosTransactionService {
                     TransactionResponse res;
                     if (transactionTemplate != null) {
                         res = transactionTemplate.execute(status ->
-                                processChargeTransaction(txReq.getTransactionUuid(), txReq)
+                                doProcessChargeTransaction(txReq.getTransactionUuid(), txReq)
                         );
                     } else {
-                        res = processChargeTransaction(txReq.getTransactionUuid(), txReq);
+                        res = doProcessChargeTransaction(txReq.getTransactionUuid(), txReq);
                     }
 
                     if (res != null) {
