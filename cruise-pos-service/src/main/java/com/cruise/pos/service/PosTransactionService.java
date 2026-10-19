@@ -79,7 +79,7 @@ public class PosTransactionService {
         // 2. Resolve Active Shift
         PosShift shift;
         if (request.getShiftId() != null) {
-            shift = shiftRepository.findById(request.getShiftId())
+            shift = shiftRepository.findByIdWithLock(request.getShiftId())
                     .orElseThrow(() -> new BusinessRuleException("Không tìm thấy ca làm việc ID: " + request.getShiftId()));
             if (shift.getStatus() != ShiftStatus.OPEN || !shift.getStationId().equals(request.getStationId())) {
                 throw new BusinessRuleException("Ca làm việc không còn mở hoặc không thuộc trạm này!");

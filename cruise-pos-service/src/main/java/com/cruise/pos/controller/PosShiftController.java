@@ -32,7 +32,7 @@ public class PosShiftController {
                 ? new BigDecimal(payload.get("startingCash").toString())
                 : BigDecimal.ZERO;
 
-        PosShift shift = shiftService.openShift(stationId, cashierId, startingCash);
+        PosShift shift = shiftService.openShift(stationId.trim(), cashierId, startingCash);
         return ApiResponse.ok("Mở ca làm việc thành công", shift);
     }
 

@@ -360,7 +360,7 @@ class PosTransactionServiceTest {
     @DisplayName("processChargeTransaction rejects missing supplied shift ID")
     void testChargeWithSuppliedShiftIdMissing() {
         chargeRequest.setShiftId(999L);
-        when(shiftRepository.findById(999L)).thenReturn(Optional.empty());
+        when(shiftRepository.findByIdWithLock(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> transactionService.processChargeTransaction("IDEM-MISSING", chargeRequest))
                 .isInstanceOf(BusinessRuleException.class)
@@ -372,7 +372,7 @@ class PosTransactionServiceTest {
     void testChargeWithSuppliedShiftIdClosed() {
         chargeRequest.setShiftId(1L);
         mockShift.setStatus(ShiftStatus.CLOSED);
-        when(shiftRepository.findById(1L)).thenReturn(Optional.of(mockShift));
+        when(shiftRepository.findByIdWithLock(1L)).thenReturn(Optional.of(mockShift));
 
         assertThatThrownBy(() -> transactionService.processChargeTransaction("IDEM-CLOSED", chargeRequest))
                 .isInstanceOf(BusinessRuleException.class)
@@ -385,7 +385,7 @@ class PosTransactionServiceTest {
         chargeRequest.setShiftId(1L);
         mockShift.setStatus(ShiftStatus.OPEN);
         mockShift.setStationId("RESTAURANT-DECK-5");
-        when(shiftRepository.findById(1L)).thenReturn(Optional.of(mockShift));
+        when(shiftRepository.findByIdWithLock(1L)).thenReturn(Optional.of(mockShift));
 
         assertThatThrownBy(() -> transactionService.processChargeTransaction("IDEM-DIFF", chargeRequest))
                 .isInstanceOf(BusinessRuleException.class)

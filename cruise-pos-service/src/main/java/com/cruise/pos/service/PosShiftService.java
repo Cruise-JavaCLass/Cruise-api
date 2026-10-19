@@ -67,9 +67,10 @@ public class PosShiftService {
                         .build();
 
                 return shiftRepository.save(shift);
-            } catch (DataIntegrityViolationException ex) {
+            } catch (DataIntegrityViolationException dive) {
+                log.warn("Concurrent shift creation detected for station {}: {}", stationId, dive.getMessage());
                 return shiftRepository.findByStationIdAndStatus(stationId, ShiftStatus.OPEN)
-                        .orElseThrow(() -> new BusinessRuleException("Xung đột khi mở ca làm việc tại trạm: " + stationId));
+                        .orElseThrow(() -> new BusinessRuleException("Không thể tạo ca làm việc do xung đột trạm POS: " + stationId));
             }
         }
     }
@@ -81,7 +82,7 @@ public class PosShiftService {
 
     @Transactional
     public PosShift closeShift(Long shiftId, String managerId, BigDecimal endingCash) {
-        PosShift shift = shiftRepository.findById(shiftId)
+        PosShift shift = shiftRepository.findByIdWithLock(shiftId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ca làm việc ID: " + shiftId));
 
         if (shift.getStatus() == ShiftStatus.CLOSED) {

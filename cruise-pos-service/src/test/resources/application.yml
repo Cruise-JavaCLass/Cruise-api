@@ -16,3 +16,10 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: false
+
+pos:
+  managers:
+    MGR-01: "2926a2731f4b312c08982cacf8061eb14bf65c1a87cc5d70e864e079c6220731"
+    MGR-LE: "2926a2731f4b312c08982cacf8061eb14bf65c1a87cc5d70e864e079c6220731"
+    MANAGER-DEFAULT: "2926a2731f4b312c08982cacf8061eb14bf65c1a87cc5d70e864e079c6220731"
+    MGR-ADMIN: "888df25ae35772424a560c7152a1de794440e0ea5cfee62828333a456a506e05"

@@ -22,6 +22,12 @@ public interface PosShiftRepository extends JpaRepository<PosShift, Long> {
             @org.springframework.data.repository.query.Param("status") ShiftStatus status
     );
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT s FROM PosShift s WHERE s.id = :shiftId")
+    Optional<PosShift> findByIdWithLock(
+            @org.springframework.data.repository.query.Param("shiftId") Long shiftId
+    );
+
     List<PosShift> findByStatus(ShiftStatus status);
 
     List<PosShift> findByCashierIdOrderByOpenedAtDesc(String cashierId);

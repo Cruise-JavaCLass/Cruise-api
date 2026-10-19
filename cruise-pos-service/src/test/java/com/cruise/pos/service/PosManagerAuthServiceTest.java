@@ -27,5 +27,22 @@ class PosManagerAuthServiceTest {
         assertThat(authService.verifyRefundApproval("", "8888")).isFalse();
         assertThat(authService.verifyRefundApproval("MGR-01", "wrong")).isFalse();
         assertThat(authService.verifyRefundApproval("UNKNOWN-USER", "8888")).isFalse();
+        // Wildcard prefix should now be rejected
+        assertThat(authService.verifyRefundApproval("MGR-HACKER", "8888")).isFalse();
+        assertThat(authService.verifyRefundApproval("MANAGERFOO", "8888")).isFalse();
+    }
+
+    @Test
+    @DisplayName("verifyRefundApproval blocks repeated brute-force attempts")
+    void testBruteForceLockout() {
+        String testManager = "MGR-BRUTE";
+        authService.setManagers(java.util.Map.of(testManager, "2926a2731f4b312c08982cacf8061eb14bf65c1a87cc5d70e864e079c6220731"));
+
+        for (int i = 0; i < 5; i++) {
+            assertThat(authService.verifyRefundApproval(testManager, "wrong-pin-" + i)).isFalse();
+        }
+
+        // Even with the right pin, the 6th attempt is locked out
+        assertThat(authService.verifyRefundApproval(testManager, "8888")).isFalse();
     }
 }

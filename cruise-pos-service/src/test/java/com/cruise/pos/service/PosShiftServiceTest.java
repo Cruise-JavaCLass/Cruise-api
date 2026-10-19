@@ -75,7 +75,7 @@ class PosShiftServiceTest {
     @Test
     @DisplayName("closeShift settles transactions and closes shift")
     void testCloseShiftSuccess() {
-        when(shiftRepository.findById(1L)).thenReturn(Optional.of(shift));
+        when(shiftRepository.findByIdWithLock(1L)).thenReturn(Optional.of(shift));
         when(shiftRepository.save(any(PosShift.class))).thenAnswer(i -> i.getArgument(0));
 
         PosTransaction tx = PosTransaction.builder()
@@ -95,7 +95,7 @@ class PosShiftServiceTest {
     @DisplayName("closeShift throws exception if already closed")
     void testCloseShiftAlreadyClosed() {
         shift.setStatus(ShiftStatus.CLOSED);
-        when(shiftRepository.findById(1L)).thenReturn(Optional.of(shift));
+        when(shiftRepository.findByIdWithLock(1L)).thenReturn(Optional.of(shift));
 
         assertThatThrownBy(() -> shiftService.closeShift(1L, "MGR-01", BigDecimal.valueOf(700.00)))
                 .isInstanceOf(BusinessRuleException.class)
