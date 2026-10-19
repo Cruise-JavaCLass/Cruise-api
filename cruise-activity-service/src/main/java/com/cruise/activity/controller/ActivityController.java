@@ -214,4 +214,30 @@ public class ActivityController {
         return ApiResponse.ok("Đăng ký hoạt động thành công",
                 registrationService.registerActivity(id, request));
     }
+
+    /**
+     * Hủy đăng ký hoạt động với chính sách hoàn tiền Folio và tự động đôn Waitlist (KAN-369)
+     */
+    @DeleteMapping("/{id}/registrations/{registrationId}")
+    public ApiResponse<com.cruise.activity.dto.ActivityCancellationResponse> cancelRegistration(
+            @PathVariable Long id,
+            @PathVariable Long registrationId,
+            @RequestParam(required = false) Long passengerId,
+            @RequestParam(required = false) String reason
+    ) {
+        return ApiResponse.ok("Hủy đăng ký hoạt động thành công",
+                registrationService.cancelRegistration(id, registrationId, passengerId, reason));
+    }
+
+    /**
+     * Đôn suất thủ công từ Waitlist lên Confirmed (KAN-369)
+     */
+    @PostMapping("/{id}/waitlist/{waitlistId}/promote")
+    public ApiResponse<com.cruise.activity.dto.ActivityRegistrationResponse> promoteWaitlist(
+            @PathVariable Long id,
+            @PathVariable Long waitlistId
+    ) {
+        return ApiResponse.ok("Đôn suất danh sách chờ thành công",
+                registrationService.promoteWaitlist(id, waitlistId));
+    }
 }
