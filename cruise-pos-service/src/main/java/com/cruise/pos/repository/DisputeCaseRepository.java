@@ -15,6 +15,7 @@ public interface DisputeCaseRepository extends JpaRepository<DisputeCase, Long> 
     Optional<DisputeCase> findByDisputeNumber(String disputeNumber);
     Page<DisputeCase> findByStatus(DisputeStatus status, Pageable pageable);
     Page<DisputeCase> findByCabinNumber(String cabinNumber, Pageable pageable);
+    Page<DisputeCase> findByStatusAndCabinNumber(DisputeStatus status, String cabinNumber, Pageable pageable);
     List<DisputeCase> findByTransactionId(String transactionId);
     boolean existsByTransactionIdAndStatusIn(String transactionId, List<DisputeStatus> statuses);
     long countByStatus(DisputeStatus status);

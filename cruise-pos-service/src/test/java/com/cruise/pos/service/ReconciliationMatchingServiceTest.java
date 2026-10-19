@@ -64,6 +64,7 @@ class ReconciliationMatchingServiceTest {
 
         PosJournalEntry journal = PosJournalEntry.builder()
                 .posTransactionId("TX-1001")
+                .terminalId("TERM-01")
                 .cabinNumber("CABIN-101")
                 .amount(new BigDecimal("45.00"))
                 .serviceArea("SKY_BAR")

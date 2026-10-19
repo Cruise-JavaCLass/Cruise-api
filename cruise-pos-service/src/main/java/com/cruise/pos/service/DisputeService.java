@@ -50,15 +50,16 @@ public class DisputeService {
             throw new BusinessRuleException("Giao dịch " + request.getTransactionId() + " đang có khiếu nại đang xử lý hoặc đã được chấp thuận trước đó");
         }
 
-        // Validate dispute amount against original transaction if exists
-        folioRepository.findByTransactionId(request.getTransactionId()).ifPresent(folio -> {
-            if (request.getDisputeAmount().compareTo(folio.getAmount()) > 0) {
-                throw new BusinessRuleException("Số tiền khiếu nại (" + request.getDisputeAmount() +
-                        ") không được vượt quá số tiền giao dịch gốc (" + folio.getAmount() + ")");
-            }
-        });
+        // Require the transaction to exist in GuestFolioLedger
+        GuestFolioLedger originalFolio = folioRepository.findByTransactionId(request.getTransactionId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giao dịch gốc " + request.getTransactionId() + " trong sao kê phòng"));
 
-        String disputeNumber = "DISP-" + System.currentTimeMillis();
+        if (request.getDisputeAmount().compareTo(originalFolio.getAmount()) > 0) {
+            throw new BusinessRuleException("Số tiền khiếu nại (" + request.getDisputeAmount() +
+                    ") không được vượt quá số tiền giao dịch gốc (" + originalFolio.getAmount() + ")");
+        }
+
+        String disputeNumber = "DISP-" + java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         DisputeCase dispute = DisputeCase.builder()
                 .disputeNumber(disputeNumber)
                 .transactionId(request.getTransactionId())
@@ -102,8 +103,13 @@ public class DisputeService {
             throw new BusinessRuleException("Không thể thay đổi trạng thái của hồ sơ khiếu nại đã đóng (" + oldStatus + ")");
         }
 
-        if (oldStatus == DisputeStatus.SUBMITTED && newStatus != DisputeStatus.UNDER_INVESTIGATION && newStatus != DisputeStatus.REJECTED) {
-            throw new BusinessRuleException("Hồ sơ mới tạo chỉ có thể chuyển sang Đang điều tra (UNDER_INVESTIGATION) hoặc Từ chối (REJECTED)");
+        // Resolving to APPROVED_ADJUSTED or REJECTED must go through resolveDispute
+        if (newStatus == DisputeStatus.APPROVED_ADJUSTED || newStatus == DisputeStatus.REJECTED) {
+            throw new BusinessRuleException("Quyết định phê duyệt hoặc từ chối khiếu nại bắt buộc phải thực hiện qua chức năng Thẩm định / Giải quyết khiếu nại (resolveDispute)");
+        }
+
+        if (newStatus != DisputeStatus.UNDER_INVESTIGATION) {
+            throw new BusinessRuleException("Trạng thái trung gian hợp lệ duy nhất là Đang điều tra (UNDER_INVESTIGATION)");
         }
 
         dispute.setStatus(newStatus);
@@ -154,7 +160,7 @@ public class DisputeService {
                 throw new BusinessRuleException("Khiếu nại này đã phát sinh bút toán hoàn tiền trước đó: " + dispute.getAdjustmentTransactionId());
             }
 
-            String adjTxId = "ADJ-" + System.currentTimeMillis();
+            String adjTxId = "ADJ-" + java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase();
             GuestFolioLedger adjustment = GuestFolioLedger.builder()
                     .folioId(dispute.getFolioId())
                     .cabinNumber(dispute.getCabinNumber())
@@ -204,6 +210,9 @@ public class DisputeService {
 
     @Transactional(readOnly = true)
     public Page<DisputeCaseDto> getDisputes(DisputeStatus status, String cabinNumber, Pageable pageable) {
+        if (status != null && cabinNumber != null && !cabinNumber.isBlank()) {
+            return disputeRepository.findByStatusAndCabinNumber(status, cabinNumber, pageable).map(d -> toDto(d, false));
+        }
         if (status != null) {
             return disputeRepository.findByStatus(status, pageable).map(d -> toDto(d, false));
         }

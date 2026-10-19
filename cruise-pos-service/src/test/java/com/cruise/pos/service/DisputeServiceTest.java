@@ -20,6 +20,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+
 import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.Optional;
@@ -215,5 +219,33 @@ class DisputeServiceTest {
         assertThatThrownBy(() -> disputeService.resolveDispute(4L, req))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("đã phát sinh bút toán hoàn tiền trước đó");
+    }
+
+    @Test
+    @DisplayName("Ngăn chặn bypass: Không được chuyển trực tiếp sang APPROVED_ADJUSTED qua updateStatus")
+    void testUpdateStatus_DisallowDirectResolution() {
+        DisputeCase dispute = DisputeCase.builder()
+                .status(DisputeStatus.SUBMITTED)
+                .disputeNumber("DISP-123")
+                .build();
+        dispute.setId(5L);
+
+        when(disputeRepository.findById(5L)).thenReturn(Optional.of(dispute));
+
+        assertThatThrownBy(() -> disputeService.updateStatus(5L, DisputeStatus.APPROVED_ADJUSTED, "STAFF", "Bypass test"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("bắt buộc phải thực hiện qua chức năng Thẩm định / Giải quyết khiếu nại");
+    }
+
+    @Test
+    @DisplayName("Tìm kiếm khiếu nại kết hợp cả status và cabinNumber")
+    void testGetDisputes_ByStatusAndCabinNumber() {
+        when(disputeRepository.findByStatusAndCabinNumber(eq(DisputeStatus.SUBMITTED), eq("CABIN-101"), any()))
+                .thenReturn(new PageImpl<>(Collections.emptyList()));
+
+        Page<DisputeCaseDto> result = disputeService.getDisputes(DisputeStatus.SUBMITTED, "CABIN-101", PageRequest.of(0, 10));
+
+        assertThat(result).isNotNull();
+        verify(disputeRepository, times(1)).findByStatusAndCabinNumber(eq(DisputeStatus.SUBMITTED), eq("CABIN-101"), any());
     }
 }

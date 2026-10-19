@@ -51,11 +51,10 @@ public class DisputeController {
     @PatchMapping("/{id}/status")
     public ResponseEntity<ApiResponse<DisputeCaseDto>> updateStatus(
             @PathVariable Long id,
-            @RequestBody Map<String, String> body) {
-        DisputeStatus newStatus = DisputeStatus.valueOf(body.get("status"));
-        String actorId = body.getOrDefault("actorId", "STAFF");
-        String note = body.getOrDefault("note", "Cập nhật tiến độ điều tra");
-        DisputeCaseDto updated = disputeService.updateStatus(id, newStatus, actorId, note);
+            @Valid @RequestBody com.cruise.pos.dto.UpdateDisputeStatusRequest request) {
+        String actorId = request.getActorId() != null && !request.getActorId().isBlank() ? request.getActorId() : "STAFF";
+        String note = request.getNote() != null && !request.getNote().isBlank() ? request.getNote() : "Cập nhật tiến độ điều tra";
+        DisputeCaseDto updated = disputeService.updateStatus(id, request.getStatus(), actorId, note);
         return ResponseEntity.ok(ApiResponse.ok("Cập nhật trạng thái khiếu nại thành công", updated));
     }
 

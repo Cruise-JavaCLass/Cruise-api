@@ -38,9 +38,20 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(msg);
     }
 
+    @ExceptionHandler({
+            org.springframework.http.converter.HttpMessageNotReadableException.class,
+            IllegalArgumentException.class
+    })
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> handleBadRequest(Exception ex) {
+        return ApiResponse.error("Dữ liệu yêu cầu không hợp lệ hoặc sai định dạng");
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiResponse<Void> handleGeneral(Exception ex) {
-        return ApiResponse.error("Đã xảy ra lỗi máy chủ nội bộ: " + ex.getMessage());
+        org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class)
+                .error("Unhandled internal server error: ", ex);
+        return ApiResponse.error("Đã xảy ra lỗi máy chủ nội bộ. Vui lòng liên hệ quản trị viên.");
     }
 }

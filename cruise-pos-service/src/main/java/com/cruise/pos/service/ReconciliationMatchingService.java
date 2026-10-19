@@ -62,6 +62,20 @@ public class ReconciliationMatchingService {
             List<PosJournalEntry> journals = journalRepository.findByTransactionTimeBetween(start, end);
             List<GuestFolioLedger> folios = folioRepository.findByPostedAtBetween(start, end);
 
+            if (request.getTerminalId() != null && !request.getTerminalId().isBlank()) {
+                journals = journals.stream()
+                        .filter(j -> request.getTerminalId().equalsIgnoreCase(j.getTerminalId()))
+                        .toList();
+            }
+            if (request.getServiceArea() != null && !request.getServiceArea().isBlank()) {
+                journals = journals.stream()
+                        .filter(j -> request.getServiceArea().equalsIgnoreCase(j.getServiceArea()))
+                        .toList();
+                folios = folios.stream()
+                        .filter(f -> request.getServiceArea().equalsIgnoreCase(f.getServiceArea()))
+                        .toList();
+            }
+
             Map<String, GuestFolioLedger> folioMap = new HashMap<>();
             for (GuestFolioLedger folio : folios) {
                 folioMap.put(folio.getTransactionId(), folio);
@@ -119,7 +133,8 @@ public class ReconciliationMatchingService {
                 }
             }
 
-            // Check DUPLICATE_SUSPECT in POS entries
+            // Check DUPLICATE_SUSPECT in POS entries (prevent duplicate alerts for same transaction)
+            Set<String> flaggedDuplicates = new HashSet<>();
             for (Map.Entry<String, List<PosJournalEntry>> entry : potentialDuplicates.entrySet()) {
                 List<PosJournalEntry> list = entry.getValue();
                 if (list.size() > 1) {
@@ -127,11 +142,14 @@ public class ReconciliationMatchingService {
                         for (int j = i + 1; j < list.size(); j++) {
                             long seconds = Math.abs(ChronoUnit.SECONDS.between(list.get(i).getTransactionTime(), list.get(j).getTransactionTime()));
                             if (seconds <= 60) {
-                                discrepancies++;
-                                createDiscrepancy(batch.getId(), list.get(j).getPosTransactionId(), null,
-                                        list.get(j).getCabinNumber(), list.get(j).getPassengerName(), list.get(j).getServiceArea(),
-                                        DiscrepancyType.DUPLICATE_SUSPECT, list.get(j).getAmount(), BigDecimal.ZERO,
-                                        list.get(j).getAmount(), list.get(j).getTransactionTime());
+                                String dupTxId = list.get(j).getPosTransactionId();
+                                if (flaggedDuplicates.add(dupTxId)) {
+                                    discrepancies++;
+                                    createDiscrepancy(batch.getId(), dupTxId, null,
+                                            list.get(j).getCabinNumber(), list.get(j).getPassengerName(), list.get(j).getServiceArea(),
+                                            DiscrepancyType.DUPLICATE_SUSPECT, list.get(j).getAmount(), BigDecimal.ZERO,
+                                            list.get(j).getAmount(), list.get(j).getTransactionTime());
+                                }
                             }
                         }
                     }

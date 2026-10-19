@@ -186,4 +186,118 @@ class ReconciliationApiIntegrationTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.totalTransactionsCount").value(150));
     }
+
+    @Test
+    @DisplayName("API: Cập nhật trạng thái khiếu nại qua DTO")
+    void testUpdateStatusEndpoint() throws Exception {
+        DisputeCaseDto response = DisputeCaseDto.builder()
+                .id(1L)
+                .disputeNumber("DISP-123")
+                .status(DisputeStatus.UNDER_INVESTIGATION)
+                .reviewerId("STAFF_01")
+                .build();
+
+        when(disputeService.updateStatus(eq(1L), eq(DisputeStatus.UNDER_INVESTIGATION), any(), any()))
+                .thenReturn(response);
+
+        String jsonPayload = """
+                {
+                    "status": "UNDER_INVESTIGATION",
+                    "actorId": "STAFF_01",
+                    "note": "Bắt đầu điều tra"
+                }
+                """;
+
+        mockMvc.perform(patch("/api/pos/disputes/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("UNDER_INVESTIGATION"));
+    }
+
+    @Test
+    @DisplayName("API: Lấy danh sách khiếu nại có lọc status và cabin")
+    void testGetDisputesEndpoint() throws Exception {
+        when(disputeService.getDisputes(any(), any(), any()))
+                .thenReturn(new PageImpl<>(Collections.emptyList()));
+
+        mockMvc.perform(get("/api/pos/disputes")
+                        .param("status", "SUBMITTED")
+                        .param("cabinNumber", "CABIN-101"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    @DisplayName("API: Lấy chi tiết khiếu nại theo ID")
+    void testGetDisputeByIdEndpoint() throws Exception {
+        DisputeCaseDto response = DisputeCaseDto.builder()
+                .id(1L)
+                .disputeNumber("DISP-123")
+                .status(DisputeStatus.SUBMITTED)
+                .build();
+
+        when(disputeService.getDisputeById(1L)).thenReturn(response);
+
+        mockMvc.perform(get("/api/pos/disputes/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.disputeNumber").value("DISP-123"));
+    }
+
+    @Test
+    @DisplayName("API: Lấy danh sách các mẻ đối soát")
+    void testGetBatchesEndpoint() throws Exception {
+        when(matchingService.getBatches(any()))
+                .thenReturn(new PageImpl<>(Collections.emptyList()));
+
+        mockMvc.perform(get("/api/pos/reconciliation/batches"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    @DisplayName("API: Lấy chi tiết mẻ đối soát theo ID")
+    void testGetBatchByIdEndpoint() throws Exception {
+        ReconciliationBatchDto batch = ReconciliationBatchDto.builder()
+                .id(1L)
+                .batchNumber("RECON-001")
+                .status(com.cruise.pos.enums.BatchStatus.COMPLETED)
+                .build();
+
+        when(matchingService.getBatchById(1L)).thenReturn(batch);
+
+        mockMvc.perform(get("/api/pos/reconciliation/batches/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.batchNumber").value("RECON-001"));
+    }
+
+    @Test
+    @DisplayName("API: Xử lý giải trình sai lệch đối soát")
+    void testResolveDiscrepancyEndpoint() throws Exception {
+        DiscrepancyRecordDto record = DiscrepancyRecordDto.builder()
+                .id(10L)
+                .status(DiscrepancyStatus.RESOLVED)
+                .resolutionNotes("Đã xác nhận với lễ tân")
+                .build();
+
+        when(matchingService.resolveDiscrepancy(eq(10L), any())).thenReturn(record);
+
+        String jsonPayload = """
+                {
+                    "status": "RESOLVED",
+                    "resolutionNotes": "Đã xác nhận với lễ tân",
+                    "resolvedBy": "OFFICER_01"
+                }
+                """;
+
+        mockMvc.perform(patch("/api/pos/reconciliation/discrepancies/10/resolve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("RESOLVED"));
+    }
 }
