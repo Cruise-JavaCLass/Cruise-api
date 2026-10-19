@@ -346,6 +346,148 @@ public class ActivityRegistrationService {
                 .build();
     }
 
+    /**
+     * Lấy danh sách đăng ký phân trang theo hoạt động (Roster) có bộ lọc tìm kiếm (KAN-370)
+     */
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<com.cruise.activity.dto.ActivityRosterDto> getRosterPaged(
+            Long activityId, String keyword, RegistrationStatus status, org.springframework.data.domain.Pageable pageable) {
+        return registrationRepository.findRosterPaged(activityId, keyword, status, pageable)
+                .map(reg -> {
+                    String tourPackage = passengerRepository.findById(reg.getPassengerId())
+                            .map(Passenger::getTourPackage)
+                            .orElse("Tiêu Chuẩn");
+
+                    return com.cruise.activity.dto.ActivityRosterDto.builder()
+                            .registrationId(reg.getId())
+                            .activityId(reg.getActivityId())
+                            .passengerId(reg.getPassengerId())
+                            .passengerName(reg.getPassengerName())
+                            .cabinNumber(reg.getCabinNumber())
+                            .tourPackage(tourPackage)
+                            .status(reg.getStatus().name())
+                            .chargedAmount(reg.getChargedAmount())
+                            .transactionId(reg.getTransactionId())
+                            .registeredAt(reg.getRegisteredAt())
+                            .build();
+                });
+    }
+
+    /**
+     * Lấy danh sách hàng đợi Waitlist theo thứ tự ưu tiên (KAN-370)
+     */
+    @Transactional(readOnly = true)
+    public List<com.cruise.activity.dto.WaitlistQueueItemDto> getWaitlistQueue(Long activityId) {
+        List<ActivityRegistration> waitlist = registrationRepository
+                .findByActivityIdAndStatusAndActiveTrueOrderByRegisteredAtAscIdAsc(activityId, RegistrationStatus.WAITLISTED);
+        if (waitlist.isEmpty()) {
+            waitlist = registrationRepository
+                    .findByActivityIdAndStatusAndActiveTrueOrderByRegisteredAtAscIdAsc(activityId, RegistrationStatus.WAITLIST);
+        }
+
+        List<com.cruise.activity.dto.WaitlistQueueItemDto> result = new java.util.ArrayList<>();
+        for (int i = 0; i < waitlist.size(); i++) {
+            ActivityRegistration reg = waitlist.get(i);
+            result.add(com.cruise.activity.dto.WaitlistQueueItemDto.builder()
+                    .position(i + 1)
+                    .registrationId(reg.getId())
+                    .passengerId(reg.getPassengerId())
+                    .passengerName(reg.getPassengerName())
+                    .cabinNumber(reg.getCabinNumber())
+                    .registeredAt(reg.getRegisteredAt())
+                    .status(reg.getStatus().name())
+                    .build());
+        }
+        return result;
+    }
+
+    /**
+     * Lấy danh sách các hoạt động đã đăng ký của một hành khách (KAN-370)
+     */
+    @Transactional(readOnly = true)
+    public List<com.cruise.activity.dto.PassengerRegistrationDto> getMyRegistrations(Long passengerId) {
+        List<ActivityRegistration> registrations = registrationRepository
+                .findByPassengerIdAndActiveTrueOrderByRegisteredAtDesc(passengerId);
+
+        return registrations.stream().map(reg -> {
+            OnboardActivity activity = activityRepository.findById(reg.getActivityId()).orElse(null);
+            Integer waitlistPos = null;
+            if (reg.getStatus() == RegistrationStatus.WAITLISTED || reg.getStatus() == RegistrationStatus.WAITLIST) {
+                List<com.cruise.activity.dto.WaitlistQueueItemDto> queue = getWaitlistQueue(reg.getActivityId());
+                for (com.cruise.activity.dto.WaitlistQueueItemDto item : queue) {
+                    if (item.getRegistrationId().equals(reg.getId())) {
+                        waitlistPos = item.getPosition();
+                        break;
+                    }
+                }
+            }
+
+            return com.cruise.activity.dto.PassengerRegistrationDto.builder()
+                    .registrationId(reg.getId())
+                    .activityId(reg.getActivityId())
+                    .activityTitle(activity != null ? activity.getTitle() : "Hoạt động")
+                    .category(activity != null ? activity.getCategory() : "Giải Trí")
+                    .location(activity != null ? activity.getLocation() : "Khu vực chung")
+                    .activityDate(activity != null ? activity.getActivityDate() : null)
+                    .startTime(activity != null ? activity.getStartTime() : null)
+                    .endTime(activity != null ? activity.getEndTime() : null)
+                    .status(reg.getStatus().name())
+                    .chargedAmount(reg.getChargedAmount())
+                    .refundAmount(reg.getRefundAmount())
+                    .transactionId(reg.getTransactionId())
+                    .registeredAt(reg.getRegisteredAt())
+                    .waitlistPosition(waitlistPos)
+                    .cancellationCutOffMinutes(activity != null ? activity.getCancellationCutOffMinutes() : 120)
+                    .build();
+        }).toList();
+    }
+
+    /**
+     * Xuất danh sách đăng ký dạng CSV tương thích UTF-8 BOM cho Excel (KAN-370)
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportRosterCsv(Long activityId) {
+        OnboardActivity activity = activityRepository.findById(activityId)
+                .orElseThrow(() -> new ResourceNotFoundException("Hoạt động với ID " + activityId + " không tồn tại"));
+
+        List<ActivityRegistration> list = registrationRepository.findByActivityIdAndStatusAndActiveTrueOrderByRegisteredAtAscIdAsc(
+                activityId, RegistrationStatus.CONFIRMED);
+        List<ActivityRegistration> waitlist = registrationRepository.findByActivityIdAndStatusAndActiveTrueOrderByRegisteredAtAscIdAsc(
+                activityId, RegistrationStatus.WAITLISTED);
+
+        StringBuilder sb = new StringBuilder();
+        // UTF-8 BOM
+        sb.append('\uFEFF');
+        sb.append("BẢNG KÊ ĐĂNG KÝ HOẠT ĐỘNG: ").append(activity.getTitle()).append("\n");
+        sb.append("Ngày diễn ra: ").append(activity.getActivityDate()).append(" | Giờ: ").append(activity.getStartTime()).append("\n\n");
+        sb.append("STT,Mã Đăng Ký,Tên Hành Khách,Số Cabin,Trạng Thái,Số Tiền,Mã Giao Dịch Folio,Thời Gian Đăng Ký\n");
+
+        int index = 1;
+        for (ActivityRegistration r : list) {
+            sb.append(index++).append(",")
+                    .append(r.getId()).append(",")
+                    .append("\"").append(r.getPassengerName() != null ? r.getPassengerName().replace("\"", "\"\"") : "").append("\",")
+                    .append(r.getCabinNumber()).append(",")
+                    .append(r.getStatus().name()).append(",")
+                    .append(r.getChargedAmount() != null ? r.getChargedAmount() : 0).append(",")
+                    .append(r.getTransactionId() != null ? r.getTransactionId() : "N/A").append(",")
+                    .append(r.getRegisteredAt()).append("\n");
+        }
+
+        for (ActivityRegistration r : waitlist) {
+            sb.append(index++).append(",")
+                    .append(r.getId()).append(",")
+                    .append("\"").append(r.getPassengerName() != null ? r.getPassengerName().replace("\"", "\"\"") : "").append("\",")
+                    .append(r.getCabinNumber()).append(",")
+                    .append(r.getStatus().name()).append(",")
+                    .append(0).append(",")
+                    .append("WAITLIST").append(",")
+                    .append(r.getRegisteredAt()).append("\n");
+        }
+
+        return sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+
     private boolean isFolioLocked(Passenger passenger) {
         if (passenger.getEmail() != null && (passenger.getEmail().toLowerCase().contains("locked") || passenger.getEmail().toLowerCase().contains("blocked"))) {
             return true;

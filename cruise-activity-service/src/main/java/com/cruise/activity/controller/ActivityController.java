@@ -240,4 +240,55 @@ public class ActivityController {
         return ApiResponse.ok("Đôn suất danh sách chờ thành công",
                 registrationService.promoteWaitlist(id, waitlistId));
     }
+
+    /**
+     * Lấy danh sách đăng ký phân trang (Roster) có bộ lọc tìm kiếm (KAN-370)
+     */
+    @GetMapping("/{id}/registrations/roster")
+    public ApiResponse<Page<com.cruise.activity.dto.ActivityRosterDto>> getRosterPaged(
+            @PathVariable Long id,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) com.cruise.activity.enums.RegistrationStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "15") int size,
+            @RequestParam(defaultValue = "registeredAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir
+    ) {
+        Sort sort = sortDir.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
+        Pageable pageable = PageRequest.of(page, size, sort);
+        return ApiResponse.ok("Lấy danh sách đăng ký hoạt động thành công",
+                registrationService.getRosterPaged(id, keyword, status, pageable));
+    }
+
+    /**
+     * Lấy danh sách hàng đợi Waitlist theo thứ tự ưu tiên (KAN-370)
+     */
+    @GetMapping("/{id}/waitlist")
+    public ApiResponse<List<com.cruise.activity.dto.WaitlistQueueItemDto>> getWaitlistQueue(@PathVariable Long id) {
+        return ApiResponse.ok("Lấy danh sách hàng đợi thành công",
+                registrationService.getWaitlistQueue(id));
+    }
+
+    /**
+     * Lấy danh sách các hoạt động đã đăng ký của hành khách (KAN-370)
+     */
+    @GetMapping("/{id}/registrations/my")
+    public ApiResponse<List<com.cruise.activity.dto.PassengerRegistrationDto>> getMyRegistrations(
+            @PathVariable Long id,
+            @RequestParam Long passengerId
+    ) {
+        return ApiResponse.ok("Lấy danh sách hoạt động đã đăng ký thành công",
+                registrationService.getMyRegistrations(passengerId));
+    }
+
+    /**
+     * Xuất danh sách đăng ký hoạt động dạng CSV chuẩn UTF-8 BOM (KAN-370)
+     */
+    @GetMapping(value = "/{id}/registrations/export/csv", produces = "text/csv; charset=UTF-8")
+    public org.springframework.http.ResponseEntity<byte[]> exportRosterCsv(@PathVariable Long id) {
+        byte[] csv = registrationService.exportRosterCsv(id);
+        return org.springframework.http.ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"activity-" + id + "-roster.csv\"")
+                .body(csv);
+    }
 }
