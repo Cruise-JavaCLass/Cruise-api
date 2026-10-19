@@ -41,6 +41,19 @@ public class DisputeService {
     public DisputeCaseDto createDispute(CreateDisputeRequest request) {
         log.info("Creating dispute case for transaction: {}", request.getTransactionId());
 
+        // Require the transaction to exist in GuestFolioLedger and acquire pessimistic lock to prevent race conditions
+        GuestFolioLedger originalFolio = folioRepository.findByTransactionIdForUpdate(request.getTransactionId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giao dịch gốc " + request.getTransactionId() + " trong sao kê phòng"));
+
+        if (Boolean.TRUE.equals(originalFolio.getIsReversal())) {
+            throw new BusinessRuleException("Không thể khiếu nại bút toán hoàn tiền");
+        }
+
+        if (!java.util.Objects.equals(originalFolio.getFolioId(), request.getFolioId())
+                || !java.util.Objects.equals(originalFolio.getCabinNumber(), request.getCabinNumber())) {
+            throw new BusinessRuleException("Mã Folio hoặc số cabin không khớp với giao dịch gốc");
+        }
+
         // Check if an active dispute already exists for this transaction
         boolean activeDisputeExists = disputeRepository.existsByTransactionIdAndStatusIn(
                 request.getTransactionId(),
@@ -49,10 +62,6 @@ public class DisputeService {
         if (activeDisputeExists) {
             throw new BusinessRuleException("Giao dịch " + request.getTransactionId() + " đang có khiếu nại đang xử lý hoặc đã được chấp thuận trước đó");
         }
-
-        // Require the transaction to exist in GuestFolioLedger
-        GuestFolioLedger originalFolio = folioRepository.findByTransactionId(request.getTransactionId())
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giao dịch gốc " + request.getTransactionId() + " trong sao kê phòng"));
 
         if (request.getDisputeAmount().compareTo(originalFolio.getAmount()) > 0) {
             throw new BusinessRuleException("Số tiền khiếu nại (" + request.getDisputeAmount() +
@@ -93,7 +102,7 @@ public class DisputeService {
 
     @Transactional
     public DisputeCaseDto updateStatus(Long id, DisputeStatus newStatus, String actorId, String note) {
-        DisputeCase dispute = disputeRepository.findById(id)
+        DisputeCase dispute = disputeRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy khiếu nại với ID: " + id));
 
         DisputeStatus oldStatus = dispute.getStatus();
@@ -132,7 +141,7 @@ public class DisputeService {
 
     @Transactional
     public DisputeCaseDto resolveDispute(Long id, ResolveDisputeRequest request) {
-        DisputeCase dispute = disputeRepository.findById(id)
+        DisputeCase dispute = disputeRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy khiếu nại với ID: " + id));
 
         DisputeStatus oldStatus = dispute.getStatus();

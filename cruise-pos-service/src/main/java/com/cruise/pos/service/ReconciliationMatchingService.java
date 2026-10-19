@@ -98,22 +98,24 @@ public class ReconciliationMatchingService {
                 GuestFolioLedger matchedFolio = folioMap.get(journal.getPosTransactionId());
                 if (matchedFolio == null) {
                     // UNMATCHED_POS
-                    discrepancies++;
-                    totalVariance = totalVariance.add(journal.getAmount());
-                    createDiscrepancy(batch.getId(), journal.getPosTransactionId(), null,
+                    if (createDiscrepancyIfAbsent(batch.getId(), journal.getPosTransactionId(), null,
                             journal.getCabinNumber(), journal.getPassengerName(), journal.getServiceArea(),
                             DiscrepancyType.UNMATCHED_POS, journal.getAmount(), BigDecimal.ZERO,
-                            journal.getAmount(), journal.getTransactionTime());
+                            journal.getAmount(), journal.getTransactionTime())) {
+                        discrepancies++;
+                        totalVariance = totalVariance.add(journal.getAmount());
+                    }
                 } else {
                     // Check Amount Mismatch
                     BigDecimal diff = journal.getAmount().subtract(matchedFolio.getAmount()).abs();
                     if (diff.compareTo(new BigDecimal("0.001")) > 0) {
-                        discrepancies++;
-                        totalVariance = totalVariance.add(diff);
-                        createDiscrepancy(batch.getId(), journal.getPosTransactionId(), matchedFolio.getFolioId(),
+                        if (createDiscrepancyIfAbsent(batch.getId(), journal.getPosTransactionId(), matchedFolio.getFolioId(),
                                 journal.getCabinNumber(), journal.getPassengerName(), journal.getServiceArea(),
                                 DiscrepancyType.AMOUNT_MISMATCH, journal.getAmount(), matchedFolio.getAmount(),
-                                diff, journal.getTransactionTime());
+                                diff, journal.getTransactionTime())) {
+                            discrepancies++;
+                            totalVariance = totalVariance.add(diff);
+                        }
                     } else {
                         matched++;
                         totalReconciled = totalReconciled.add(journal.getAmount());
@@ -124,12 +126,13 @@ public class ReconciliationMatchingService {
             // Check UNMATCHED_FOLIO
             for (GuestFolioLedger folio : folios) {
                 if (!processedTransactions.contains(folio.getTransactionId()) && !Boolean.TRUE.equals(folio.getIsReversal())) {
-                    discrepancies++;
-                    totalVariance = totalVariance.add(folio.getAmount());
-                    createDiscrepancy(batch.getId(), folio.getTransactionId(), folio.getFolioId(),
+                    if (createDiscrepancyIfAbsent(batch.getId(), folio.getTransactionId(), folio.getFolioId(),
                             folio.getCabinNumber(), folio.getPassengerName(), folio.getServiceArea(),
                             DiscrepancyType.UNMATCHED_FOLIO, BigDecimal.ZERO, folio.getAmount(),
-                            folio.getAmount(), folio.getPostedAt());
+                            folio.getAmount(), folio.getPostedAt())) {
+                        discrepancies++;
+                        totalVariance = totalVariance.add(folio.getAmount());
+                    }
                 }
             }
 
@@ -144,11 +147,12 @@ public class ReconciliationMatchingService {
                             if (seconds <= 60) {
                                 String dupTxId = list.get(j).getPosTransactionId();
                                 if (flaggedDuplicates.add(dupTxId)) {
-                                    discrepancies++;
-                                    createDiscrepancy(batch.getId(), dupTxId, null,
+                                    if (createDiscrepancyIfAbsent(batch.getId(), dupTxId, null,
                                             list.get(j).getCabinNumber(), list.get(j).getPassengerName(), list.get(j).getServiceArea(),
                                             DiscrepancyType.DUPLICATE_SUSPECT, list.get(j).getAmount(), BigDecimal.ZERO,
-                                            list.get(j).getAmount(), list.get(j).getTransactionTime());
+                                            list.get(j).getAmount(), list.get(j).getTransactionTime())) {
+                                        discrepancies++;
+                                    }
                                 }
                             }
                         }
@@ -178,10 +182,14 @@ public class ReconciliationMatchingService {
         }
     }
 
-    private void createDiscrepancy(Long batchId, String txId, String folioId, String cabin,
-                                   String guest, String area, DiscrepancyType type,
-                                   BigDecimal posAmount, BigDecimal folioAmount,
-                                   BigDecimal variance, Instant txTime) {
+    private boolean createDiscrepancyIfAbsent(Long batchId, String txId, String folioId, String cabin,
+                                              String guest, String area, DiscrepancyType type,
+                                              BigDecimal posAmount, BigDecimal folioAmount,
+                                              BigDecimal variance, Instant txTime) {
+        if (txId != null && discrepancyRepository.existsByTransactionId(txId)) {
+            log.info("Discrepancy record already exists for transaction {}, skipping duplicate record creation", txId);
+            return false;
+        }
         DiscrepancyRecord record = DiscrepancyRecord.builder()
                 .batchId(batchId)
                 .transactionId(txId)
@@ -197,6 +205,7 @@ public class ReconciliationMatchingService {
                 .transactionTimestamp(txTime)
                 .build();
         discrepancyRepository.save(record);
+        return true;
     }
 
     @Transactional(readOnly = true)

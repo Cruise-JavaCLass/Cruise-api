@@ -252,4 +252,36 @@ class ReconciliationMatchingServiceTest {
         assertThatThrownBy(() -> matchingService.resolveDiscrepancy(999L, req))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
+
+    @Test
+    @DisplayName("Không tạo trùng bản ghi sai lệch nếu giao dịch đã có sai lệch từ mẻ đối soát trước")
+    void testRunReconciliation_SkipExistingDiscrepancyInOverlappingWindow() {
+        RunReconciliationRequest req = RunReconciliationRequest.builder().build();
+
+        PosJournalEntry journal = PosJournalEntry.builder()
+                .posTransactionId("TX-ALREADY-FLAGGED")
+                .cabinNumber("CABIN-101")
+                .amount(new BigDecimal("50.00"))
+                .serviceArea("BAR")
+                .transactionTime(now.minus(10, ChronoUnit.MINUTES))
+                .build();
+
+        when(batchRepository.save(any(ReconciliationBatch.class))).thenAnswer(inv -> {
+            ReconciliationBatch b = inv.getArgument(0);
+            b.setId(3L);
+            return b;
+        });
+
+        when(journalRepository.findByTransactionTimeBetween(any(), any()))
+                .thenReturn(List.of(journal));
+        when(folioRepository.findByPostedAtBetween(any(), any()))
+                .thenReturn(Collections.emptyList());
+        when(discrepancyRepository.existsByTransactionId("TX-ALREADY-FLAGGED")).thenReturn(true);
+
+        ReconciliationBatchDto result = matchingService.runReconciliation(req);
+
+        // Discrepancy is skipped because it was already flagged in a previous batch
+        assertThat(result.getDiscrepancyCount()).isZero();
+        verify(discrepancyRepository, never()).save(any());
+    }
 }

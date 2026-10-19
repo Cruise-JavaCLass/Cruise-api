@@ -31,6 +31,7 @@ public class ReconciliationSyncService {
     private final DiscrepancyRecordRepository discrepancyRepository;
     private final DisputeCaseRepository disputeRepository;
     private final ReconciliationAuditLogRepository auditLogRepository;
+    private final PosJournalItemWriter itemWriter;
 
     @Transactional
     public BatchSyncJournalResponse syncBatch(BatchSyncJournalRequest request) {
@@ -74,26 +75,25 @@ public class ReconciliationSyncService {
                     .syncedAt(Instant.now())
                     .build();
 
+            GuestFolioLedger ledger = null;
+            if (!folioRepository.existsByTransactionId(item.getPosTransactionId())) {
+                ledger = GuestFolioLedger.builder()
+                        .folioId("FOLIO-" + item.getCabinNumber())
+                        .cabinNumber(item.getCabinNumber())
+                        .passengerName(item.getPassengerName())
+                        .transactionId(item.getPosTransactionId())
+                        .description("Chi tiêu POS: " + item.getServiceArea())
+                        .serviceArea(item.getServiceArea())
+                        .amount(item.getAmount())
+                        .isReversal(false)
+                        .postedAt(item.getTransactionTime())
+                        .build();
+            }
+
             try {
-                journalRepository.save(entry);
+                itemWriter.writeItem(entry, ledger);
                 inserted++;
                 totalAmount = totalAmount.add(item.getAmount());
-
-                // Check if Guest Folio ledger also exists, if not, auto-post to GuestFolioLedger
-                if (!folioRepository.existsByTransactionId(item.getPosTransactionId())) {
-                    GuestFolioLedger ledger = GuestFolioLedger.builder()
-                            .folioId("FOLIO-" + item.getCabinNumber())
-                            .cabinNumber(item.getCabinNumber())
-                            .passengerName(item.getPassengerName())
-                            .transactionId(item.getPosTransactionId())
-                            .description("Chi tiêu POS: " + item.getServiceArea())
-                            .serviceArea(item.getServiceArea())
-                            .amount(item.getAmount())
-                            .isReversal(false)
-                            .postedAt(item.getTransactionTime())
-                            .build();
-                    folioRepository.save(ledger);
-                }
             } catch (org.springframework.dao.DataIntegrityViolationException dive) {
                 log.warn("Duplicate constraint encountered for tx {}: {}", item.getPosTransactionId(), dive.getMessage());
                 duplicates++;

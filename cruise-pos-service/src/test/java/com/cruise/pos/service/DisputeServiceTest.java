@@ -63,11 +63,14 @@ class DisputeServiceTest {
 
         GuestFolioLedger originalLedger = GuestFolioLedger.builder()
                 .transactionId("TX-2001")
+                .folioId("FOLIO-202")
+                .cabinNumber("CABIN-202")
                 .amount(new BigDecimal("50.00"))
+                .isReversal(false)
                 .build();
 
+        when(folioRepository.findByTransactionIdForUpdate("TX-2001")).thenReturn(Optional.of(originalLedger));
         when(disputeRepository.existsByTransactionIdAndStatusIn(anyString(), anyList())).thenReturn(false);
-        when(folioRepository.findByTransactionId("TX-2001")).thenReturn(Optional.of(originalLedger));
         when(disputeRepository.save(any(DisputeCase.class))).thenAnswer(inv -> {
             DisputeCase d = inv.getArgument(0);
             d.setId(100L);
@@ -88,9 +91,20 @@ class DisputeServiceTest {
     void testCreateDispute_DuplicateActiveDispute() {
         CreateDisputeRequest req = CreateDisputeRequest.builder()
                 .transactionId("TX-EXISTING")
+                .folioId("FOLIO-01")
+                .cabinNumber("CABIN-01")
                 .disputeAmount(new BigDecimal("30.00"))
                 .build();
 
+        GuestFolioLedger ledger = GuestFolioLedger.builder()
+                .transactionId("TX-EXISTING")
+                .folioId("FOLIO-01")
+                .cabinNumber("CABIN-01")
+                .amount(new BigDecimal("100.00"))
+                .isReversal(false)
+                .build();
+
+        when(folioRepository.findByTransactionIdForUpdate("TX-EXISTING")).thenReturn(Optional.of(ledger));
         when(disputeRepository.existsByTransactionIdAndStatusIn(eq("TX-EXISTING"), anyList())).thenReturn(true);
 
         assertThatThrownBy(() -> disputeService.createDispute(req))
@@ -99,20 +113,75 @@ class DisputeServiceTest {
     }
 
     @Test
+    @DisplayName("Từ chối tạo khiếu nại cho bút toán hoàn tiền (Reversal)")
+    void testCreateDispute_RejectReversalTransaction() {
+        CreateDisputeRequest req = CreateDisputeRequest.builder()
+                .transactionId("TX-REV-01")
+                .folioId("FOLIO-01")
+                .cabinNumber("CABIN-01")
+                .disputeAmount(new BigDecimal("50.00"))
+                .build();
+
+        GuestFolioLedger reversalLedger = GuestFolioLedger.builder()
+                .transactionId("TX-REV-01")
+                .folioId("FOLIO-01")
+                .cabinNumber("CABIN-01")
+                .amount(new BigDecimal("-50.00"))
+                .isReversal(true)
+                .build();
+
+        when(folioRepository.findByTransactionIdForUpdate("TX-REV-01")).thenReturn(Optional.of(reversalLedger));
+
+        assertThatThrownBy(() -> disputeService.createDispute(req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Không thể khiếu nại bút toán hoàn tiền");
+    }
+
+    @Test
+    @DisplayName("Từ chối tạo khiếu nại nếu folioId hoặc cabinNumber không khớp với giao dịch gốc")
+    void testCreateDispute_MismatchedCabinOrFolio() {
+        CreateDisputeRequest req = CreateDisputeRequest.builder()
+                .transactionId("TX-2001")
+                .folioId("FOLIO-ATTACKER")
+                .cabinNumber("CABIN-999")
+                .disputeAmount(new BigDecimal("50.00"))
+                .build();
+
+        GuestFolioLedger originalLedger = GuestFolioLedger.builder()
+                .transactionId("TX-2001")
+                .folioId("FOLIO-VICTIM")
+                .cabinNumber("CABIN-101")
+                .amount(new BigDecimal("50.00"))
+                .isReversal(false)
+                .build();
+
+        when(folioRepository.findByTransactionIdForUpdate("TX-2001")).thenReturn(Optional.of(originalLedger));
+
+        assertThatThrownBy(() -> disputeService.createDispute(req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("không khớp với giao dịch gốc");
+    }
+
+    @Test
     @DisplayName("Từ chối tạo khiếu nại nếu số tiền khiếu nại vượt quá số tiền giao dịch gốc")
     void testCreateDispute_AmountExceedsOriginal() {
         CreateDisputeRequest req = CreateDisputeRequest.builder()
                 .transactionId("TX-ORIGINAL")
+                .folioId("FOLIO-01")
+                .cabinNumber("CABIN-01")
                 .disputeAmount(new BigDecimal("150.00"))
                 .build();
 
         GuestFolioLedger ledger = GuestFolioLedger.builder()
                 .transactionId("TX-ORIGINAL")
+                .folioId("FOLIO-01")
+                .cabinNumber("CABIN-01")
                 .amount(new BigDecimal("100.00"))
+                .isReversal(false)
                 .build();
 
+        when(folioRepository.findByTransactionIdForUpdate("TX-ORIGINAL")).thenReturn(Optional.of(ledger));
         when(disputeRepository.existsByTransactionIdAndStatusIn(anyString(), anyList())).thenReturn(false);
-        when(folioRepository.findByTransactionId("TX-ORIGINAL")).thenReturn(Optional.of(ledger));
 
         assertThatThrownBy(() -> disputeService.createDispute(req))
                 .isInstanceOf(BusinessRuleException.class)
@@ -128,7 +197,7 @@ class DisputeServiceTest {
                 .build();
         dispute.setId(1L);
 
-        when(disputeRepository.findById(1L)).thenReturn(Optional.of(dispute));
+        when(disputeRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(dispute));
         when(disputeRepository.save(any(DisputeCase.class))).thenAnswer(inv -> inv.getArgument(0));
 
         DisputeCaseDto result = disputeService.updateStatus(1L, DisputeStatus.UNDER_INVESTIGATION, "INVESTIGATOR_01", "Bắt đầu kiểm tra dữ liệu");
@@ -151,7 +220,7 @@ class DisputeServiceTest {
                 .build();
         dispute.setId(2L);
 
-        when(disputeRepository.findById(2L)).thenReturn(Optional.of(dispute));
+        when(disputeRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(dispute));
         when(disputeRepository.save(any(DisputeCase.class))).thenAnswer(inv -> inv.getArgument(0));
 
         ResolveDisputeRequest req = ResolveDisputeRequest.builder()
@@ -183,7 +252,7 @@ class DisputeServiceTest {
                 .build();
         dispute.setId(3L);
 
-        when(disputeRepository.findById(3L)).thenReturn(Optional.of(dispute));
+        when(disputeRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(dispute));
         when(disputeRepository.save(any(DisputeCase.class))).thenAnswer(inv -> inv.getArgument(0));
 
         ResolveDisputeRequest req = ResolveDisputeRequest.builder()
@@ -209,7 +278,7 @@ class DisputeServiceTest {
                 .build();
         dispute.setId(4L);
 
-        when(disputeRepository.findById(4L)).thenReturn(Optional.of(dispute));
+        when(disputeRepository.findByIdForUpdate(4L)).thenReturn(Optional.of(dispute));
 
         ResolveDisputeRequest req = ResolveDisputeRequest.builder()
                 .decisionStatus(DisputeStatus.APPROVED_ADJUSTED)
@@ -230,7 +299,7 @@ class DisputeServiceTest {
                 .build();
         dispute.setId(5L);
 
-        when(disputeRepository.findById(5L)).thenReturn(Optional.of(dispute));
+        when(disputeRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(dispute));
 
         assertThatThrownBy(() -> disputeService.updateStatus(5L, DisputeStatus.APPROVED_ADJUSTED, "STAFF", "Bypass test"))
                 .isInstanceOf(BusinessRuleException.class)

@@ -1,12 +1,14 @@
 package com.cruise.pos.exception;
 
 import com.cruise.common.dto.ApiResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -44,14 +46,14 @@ public class GlobalExceptionHandler {
     })
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleBadRequest(Exception ex) {
+        log.warn("Bad request encountered: {}", ex.getMessage());
         return ApiResponse.error("Dữ liệu yêu cầu không hợp lệ hoặc sai định dạng");
     }
 
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiResponse<Void> handleGeneral(Exception ex) {
-        org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class)
-                .error("Unhandled internal server error: ", ex);
+        log.error("Unhandled internal server error: ", ex);
         return ApiResponse.error("Đã xảy ra lỗi máy chủ nội bộ. Vui lòng liên hệ quản trị viên.");
     }
 }

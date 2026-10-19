@@ -39,6 +39,8 @@ class ReconciliationSyncServiceTest {
     private DisputeCaseRepository disputeRepository;
     @Mock
     private ReconciliationAuditLogRepository auditLogRepository;
+    @Mock
+    private PosJournalItemWriter itemWriter;
 
     @InjectMocks
     private ReconciliationSyncService syncService;
@@ -86,8 +88,37 @@ class ReconciliationSyncServiceTest {
         assertThat(response.getSkippedTransactionIds()).contains("TX-SYNC-2");
         assertThat(response.getTotalAmountSynced()).isEqualByComparingTo("25.00");
 
-        verify(journalRepository, times(1)).save(any(PosJournalEntry.class));
-        verify(folioRepository, times(1)).save(any(GuestFolioLedger.class));
+        verify(itemWriter, times(1)).writeItem(any(PosJournalEntry.class), any());
+    }
+
+    @Test
+    @DisplayName("Xử lý race-condition: DataIntegrityViolationException được bắt an toàn mà không làm fail cả mẻ")
+    void testSyncBatch_ConcurrentDuplicateHandledGracefully() {
+        BatchSyncTransactionItem item = BatchSyncTransactionItem.builder()
+                .posTransactionId("TX-RACE-1")
+                .terminalId("TERM-A")
+                .serviceArea("SPA")
+                .cabinNumber("CABIN-202")
+                .amount(new BigDecimal("60.00"))
+                .transactionTime(Instant.now())
+                .build();
+
+        BatchSyncJournalRequest request = BatchSyncJournalRequest.builder()
+                .terminalId("TERM-A")
+                .transactions(List.of(item))
+                .build();
+
+        when(journalRepository.existsByPosTransactionId("TX-RACE-1")).thenReturn(false);
+        doThrow(new org.springframework.dao.DataIntegrityViolationException("Unique constraint violation"))
+                .when(itemWriter).writeItem(any(), any());
+
+        BatchSyncJournalResponse response = syncService.syncBatch(request);
+
+        assertThat(response.getTotalReceived()).isEqualTo(1);
+        assertThat(response.getInsertedCount()).isEqualTo(0);
+        assertThat(response.getDuplicateSkippedCount()).isEqualTo(1);
+        assertThat(response.getSkippedTransactionIds()).contains("TX-RACE-1");
+        assertThat(response.getTotalAmountSynced()).isEqualByComparingTo("0.00");
     }
 
     @Test

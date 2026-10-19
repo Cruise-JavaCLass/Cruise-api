@@ -50,7 +50,7 @@ public class PosJournalEntry extends BaseEntity {
     @Column(name = "synced_at")
     private Instant syncedAt;
 
-    @Column(name = "idempotency_key", length = 64)
+    @Column(name = "idempotency_key", length = 64, unique = true)
     private String idempotencyKey;
 
     @Column(name = "items_summary", length = 512)

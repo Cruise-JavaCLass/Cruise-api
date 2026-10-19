@@ -19,4 +19,8 @@ public interface DisputeCaseRepository extends JpaRepository<DisputeCase, Long> 
     List<DisputeCase> findByTransactionId(String transactionId);
     boolean existsByTransactionIdAndStatusIn(String transactionId, List<DisputeStatus> statuses);
     long countByStatus(DisputeStatus status);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT d FROM DisputeCase d WHERE d.id = :id")
+    Optional<DisputeCase> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Long id);
 }
