@@ -182,11 +182,19 @@ public class ActivityRegistrationService {
             throw new BusinessRuleException("Đăng ký này đã bị hủy trước đó");
         }
 
+        if (activity.getStatus() == ActivityStatus.COMPLETED || activity.getStatus() == ActivityStatus.CANCELLED) {
+            throw new BusinessRuleException("Không thể hủy đăng ký khi hoạt động đã kết thúc hoặc đã bị hủy");
+        }
+
+        java.time.LocalDateTime startDateTime = java.time.LocalDateTime.of(
+                activity.getActivityDate(), activity.getStartTime());
+        if (!startDateTime.isAfter(java.time.LocalDateTime.now())) {
+            throw new BusinessRuleException("Không thể hủy đăng ký khi hoạt động đã bắt đầu hoặc đã diễn ra");
+        }
+
         RegistrationStatus previousStatus = registration.getStatus();
 
         // Kiểm tra thời hạn hủy Cut-off policy (AC4)
-        java.time.LocalDateTime startDateTime = java.time.LocalDateTime.of(
-                activity.getActivityDate(), activity.getStartTime());
         int cutOffMinutes = activity.getCancellationCutOffMinutes() != null
                 ? activity.getCancellationCutOffMinutes()
                 : 120;
