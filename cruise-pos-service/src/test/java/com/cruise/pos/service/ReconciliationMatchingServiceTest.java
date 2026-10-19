@@ -276,7 +276,7 @@ class ReconciliationMatchingServiceTest {
                 .thenReturn(List.of(journal));
         when(folioRepository.findByPostedAtBetween(any(), any()))
                 .thenReturn(Collections.emptyList());
-        when(discrepancyRepository.existsByTransactionId("TX-ALREADY-FLAGGED")).thenReturn(true);
+        when(discrepancyRepository.existsByTransactionIdAndDiscrepancyType("TX-ALREADY-FLAGGED", DiscrepancyType.UNMATCHED_POS)).thenReturn(true);
 
         ReconciliationBatchDto result = matchingService.runReconciliation(req);
 

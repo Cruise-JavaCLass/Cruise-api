@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -109,7 +110,7 @@ class ReconciliationSyncServiceTest {
                 .build();
 
         when(journalRepository.existsByPosTransactionId("TX-RACE-1")).thenReturn(false);
-        doThrow(new org.springframework.dao.DataIntegrityViolationException("Unique constraint violation"))
+        doThrow(new org.springframework.dao.DataIntegrityViolationException("Unique constraint violation: pos_transaction_id"))
                 .when(itemWriter).writeItem(any(), any());
 
         BatchSyncJournalResponse response = syncService.syncBatch(request);
@@ -153,5 +154,25 @@ class ReconciliationSyncServiceTest {
         assertThat(metrics.getTotalDisputedAmount()).isEqualByComparingTo("150.00");
         assertThat(metrics.getDiscrepancyRatePercent()).isEqualTo(2.0);
         assertThat(metrics.isCriticalAlertActive()).isTrue();
+    }
+    @Test
+    @DisplayName("Ngoại lệ vi phạm ràng buộc không phải trùng lặp (pos_transaction_id, idempotency_key) sẽ bị ném ra ngoài")
+    void testSyncBatch_NonDuplicateDataIntegrityViolationRethrown() {
+        BatchSyncTransactionItem item = BatchSyncTransactionItem.builder()
+                .posTransactionId("TX-ERR-1")
+                .terminalId("TERM-A")
+                .amount(new BigDecimal("10.00"))
+                .build();
+
+        BatchSyncJournalRequest request = BatchSyncJournalRequest.builder()
+                .transactions(List.of(item))
+                .build();
+
+        when(journalRepository.existsByPosTransactionId("TX-ERR-1")).thenReturn(false);
+        doThrow(new org.springframework.dao.DataIntegrityViolationException("null value in column amount violates not-null constraint"))
+                .when(itemWriter).writeItem(any(), any());
+
+        assertThatThrownBy(() -> syncService.syncBatch(request))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 }

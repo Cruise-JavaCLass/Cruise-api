@@ -13,7 +13,9 @@ import com.cruise.pos.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.Locale;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -33,7 +35,6 @@ public class ReconciliationSyncService {
     private final ReconciliationAuditLogRepository auditLogRepository;
     private final PosJournalItemWriter itemWriter;
 
-    @Transactional
     public BatchSyncJournalResponse syncBatch(BatchSyncJournalRequest request) {
         log.info("Receiving batch POS journal sync from terminal: {}, items count: {}",
                 request.getTerminalId(), request.getTransactions().size());
@@ -94,10 +95,15 @@ public class ReconciliationSyncService {
                 itemWriter.writeItem(entry, ledger);
                 inserted++;
                 totalAmount = totalAmount.add(item.getAmount());
-            } catch (org.springframework.dao.DataIntegrityViolationException dive) {
-                log.warn("Duplicate constraint encountered for tx {}: {}", item.getPosTransactionId(), dive.getMessage());
-                duplicates++;
-                skippedIds.add(item.getPosTransactionId());
+            } catch (DataIntegrityViolationException dive) {
+                if (isDuplicateConstraintViolation(dive)) {
+                    log.warn("Duplicate constraint encountered for tx {}: {}", item.getPosTransactionId(), dive.getMessage());
+                    duplicates++;
+                    skippedIds.add(item.getPosTransactionId());
+                } else {
+                    log.error("Non-duplicate data integrity violation for tx {}: {}", item.getPosTransactionId(), dive.getMessage(), dive);
+                    throw dive;
+                }
             }
         }
 
@@ -170,5 +176,33 @@ public class ReconciliationSyncService {
                 .alertMessage(alertMsg)
                 .generatedAt(Instant.now())
                 .build();
+    }
+
+    private boolean isDuplicateConstraintViolation(DataIntegrityViolationException dive) {
+        Throwable current = dive;
+        while (current != null) {
+            if (current instanceof org.hibernate.exception.ConstraintViolationException cve) {
+                String constraintName = cve.getConstraintName();
+                if (constraintName != null) {
+                    String lower = constraintName.toLowerCase(Locale.ROOT);
+                    if (lower.contains("pos_transaction_id") || lower.contains("idempotency_key")) {
+                        return true;
+                    }
+                }
+            }
+            current = current.getCause();
+        }
+
+        Throwable rootCause = dive.getMostSpecificCause();
+        String message = rootCause != null && rootCause.getMessage() != null
+                ? rootCause.getMessage().toLowerCase(Locale.ROOT)
+                : "";
+        String diveMessage = dive.getMessage() != null ? dive.getMessage().toLowerCase(Locale.ROOT) : "";
+        String combined = message + " " + diveMessage;
+
+        boolean mentionsKey = combined.contains("pos_transaction_id") || combined.contains("idempotency_key");
+        boolean mentionsDuplicate = combined.contains("unique") || combined.contains("duplicate");
+
+        return mentionsKey && mentionsDuplicate;
     }
 }

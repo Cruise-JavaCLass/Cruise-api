@@ -18,4 +18,5 @@ public interface DiscrepancyRecordRepository extends JpaRepository<DiscrepancyRe
     long countByStatus(DiscrepancyStatus status);
     List<DiscrepancyRecord> findByTransactionId(String transactionId);
     boolean existsByTransactionId(String transactionId);
+    boolean existsByTransactionIdAndDiscrepancyType(String transactionId, DiscrepancyType discrepancyType);
 }

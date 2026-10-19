@@ -186,8 +186,8 @@ public class ReconciliationMatchingService {
                                               String guest, String area, DiscrepancyType type,
                                               BigDecimal posAmount, BigDecimal folioAmount,
                                               BigDecimal variance, Instant txTime) {
-        if (txId != null && discrepancyRepository.existsByTransactionId(txId)) {
-            log.info("Discrepancy record already exists for transaction {}, skipping duplicate record creation", txId);
+        if (txId != null && discrepancyRepository.existsByTransactionIdAndDiscrepancyType(txId, type)) {
+            log.info("Discrepancy record already exists for transaction {} and type {}, skipping duplicate record creation", txId, type);
             return false;
         }
         DiscrepancyRecord record = DiscrepancyRecord.builder()
