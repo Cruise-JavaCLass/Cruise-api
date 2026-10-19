@@ -32,6 +32,12 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(ex.getMessage());
     }
 
+    @ExceptionHandler(DuplicateResourceException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResponse<Void> handleDuplicateResource(DuplicateResourceException ex) {
+        return ApiResponse.error(ex.getMessage());
+    }
+
     @ExceptionHandler(InsufficientFolioBalanceException.class)
     @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
     public ApiResponse<Void> handleInsufficientBalance(InsufficientFolioBalanceException ex) {
