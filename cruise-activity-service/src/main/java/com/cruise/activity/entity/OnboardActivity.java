@@ -76,6 +76,14 @@ public class OnboardActivity extends BaseEntity {
     @Column(name = "cancellation_reason", length = 500)
     private String cancellationReason;
 
+    @Column(name = "cancellation_cut_off_minutes")
+    @Builder.Default
+    private Integer cancellationCutOffMinutes = 120;
+
+    @Column(name = "refund_percentage")
+    @Builder.Default
+    private Integer refundPercentage = 100;
+
     @Column(name = "active", nullable = false)
     @Builder.Default
     private Boolean active = true;
