@@ -7,6 +7,7 @@ import com.cruise.pos.service.PosCatalogService;
 import com.cruise.pos.service.BarcodeLookupService;
 import com.cruise.pos.service.DynamicPricingEngine;
 import com.cruise.pos.service.MaritimeTaxEngine;
+import com.cruise.pos.service.PosOfflineSyncService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -28,6 +29,7 @@ public class PosCatalogController {
     private final BarcodeLookupService barcodeLookupService;
     private final DynamicPricingEngine dynamicPricingEngine;
     private final MaritimeTaxEngine maritimeTaxEngine;
+    private final PosOfflineSyncService offlineSyncService;
 
     @GetMapping("/outlets")
     public ApiResponse<List<OutletDto>> getOutlets() {
@@ -130,5 +132,41 @@ public class PosCatalogController {
     public ApiResponse<Void> deleteHappyHourRule(@PathVariable Long id) {
         dynamicPricingEngine.deleteRule(id);
         return ApiResponse.ok("Xóa quy tắc Happy Hour thành công", null);
+    }
+
+    @GetMapping("/catalog/offline-package")
+    public ResponseEntity<ApiResponse<PosOfflineCatalogPackageDto>> getOfflinePackage(
+            @RequestParam(required = false) Long outletId,
+            @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch
+    ) {
+        PosOfflineCatalogPackageDto pkg = offlineSyncService.exportOfflinePackage(outletId);
+        String etag = pkg.getEtag();
+
+        if (ifNoneMatch != null && ifNoneMatch.trim().equals(etag)) {
+            return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
+                    .eTag(etag)
+                    .build();
+        }
+
+        return ResponseEntity.ok()
+                .eTag(etag)
+                .body(ApiResponse.ok("Xuất gói catalog offline thành công", pkg));
+    }
+
+    @PostMapping("/catalog/bulk-import")
+    public ApiResponse<BulkImportResponse> bulkImportProducts(
+            @Valid @RequestBody BulkCatalogImportRequest req
+    ) {
+        BulkImportResponse response = offlineSyncService.bulkImportProducts(req);
+        return ApiResponse.ok("Nhập dữ liệu danh mục thành công", response);
+    }
+
+    @GetMapping("/catalog/audit-logs")
+    public ApiResponse<Page<com.cruise.pos.entity.PosCatalogAuditLog>> getCatalogAuditLogs(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size
+    ) {
+        Pageable pageable = PageRequest.of(page, size);
+        return ApiResponse.ok(offlineSyncService.getAuditLogs(pageable));
     }
 }

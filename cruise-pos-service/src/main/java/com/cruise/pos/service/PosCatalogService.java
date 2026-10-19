@@ -35,6 +35,7 @@ public class PosCatalogService {
     private final PosProductRepository productRepository;
     private final PosProductModifierRepository modifierRepository;
     private final com.cruise.pos.repository.PosHappyHourRuleRepository happyHourRuleRepository;
+    private final com.cruise.pos.repository.PosCatalogAuditLogRepository auditLogRepository;
 
     @Transactional(readOnly = true)
     public List<OutletDto> getOutlets() {
@@ -182,7 +183,7 @@ public class PosCatalogService {
         if (req.getHappyHourEligible() != null) product.setHappyHourEligible(req.getHappyHourEligible());
         if (req.getHappyHourDiscountPercent() != null) product.setHappyHourDiscountPercent(req.getHappyHourDiscountPercent());
 
-        productRepository.save(product);
+        PosProduct updated = productRepository.save(product);
 
         if (req.getModifiers() != null) {
             modifierRepository.deleteByProductId(product.getId());
@@ -201,6 +202,15 @@ public class PosCatalogService {
             }
         }
 
+        auditLogRepository.save(com.cruise.pos.entity.PosCatalogAuditLog.builder()
+                .productId(updated.getId())
+                .sku(updated.getSku())
+                .action("PRICE_UPDATE")
+                .newValue("Base price: " + updated.getBasePrice())
+                .performedBy("SUPERVISOR")
+                .reason("Product information and price update")
+                .build());
+
         log.info("Updated POS product: ID={}, Name={}", product.getId(), product.getName());
         return getProductById(product.getId());
     }
@@ -210,15 +220,22 @@ public class PosCatalogService {
         PosProduct product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sản phẩm với ID: " + id));
 
+        String action = "STATUS_UPDATE";
+        String details = "Status changed to " + req.getStatus();
+
         if (req.getIs86ed() != null) {
             product.setIs86ed(req.getIs86ed());
             if (Boolean.TRUE.equals(req.getIs86ed())) {
                 product.setStatus(ProductStatus.EIGHTY_SIXED);
                 product.setIsAvailable(false);
+                action = "EIGHTY_SIXED";
+                details = "Marked 86'd (out-of-stock): " + req.getReason();
                 log.warn("Product 86'd: ID={}, Name={}, Reason={}", product.getId(), product.getName(), req.getReason());
             } else {
                 product.setStatus(ProductStatus.ACTIVE);
                 product.setIsAvailable(true);
+                action = "RESTORE_86ED";
+                details = "Restored from 86'd back to active";
                 log.info("Product restored from 86'd: ID={}, Name={}", product.getId(), product.getName());
             }
         }
@@ -228,6 +245,7 @@ public class PosCatalogService {
             if (req.getStatus() == ProductStatus.EIGHTY_SIXED) {
                 product.setIs86ed(true);
                 product.setIsAvailable(false);
+                action = "EIGHTY_SIXED";
             } else if (req.getStatus() == ProductStatus.ACTIVE) {
                 product.setIs86ed(false);
                 product.setIsAvailable(true);
@@ -238,7 +256,18 @@ public class PosCatalogService {
             product.setIsAvailable(req.getIsAvailable());
         }
 
-        productRepository.save(product);
+        PosProduct saved = productRepository.save(product);
+
+        auditLogRepository.save(com.cruise.pos.entity.PosCatalogAuditLog.builder()
+                .productId(saved.getId())
+                .sku(saved.getSku())
+                .action(action)
+                .newValue(saved.getStatus().name())
+                .performedBy(req.getStaffId() != null ? req.getStaffId() : "BAR_STAFF")
+                .reason(req.getReason())
+                .details(details)
+                .build());
+
         return getProductById(product.getId());
     }
 

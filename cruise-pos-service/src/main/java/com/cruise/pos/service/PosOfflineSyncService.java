@@ -1,0 +1,238 @@
+package com.cruise.pos.service;
+
+import com.cruise.pos.dto.*;
+import com.cruise.pos.entity.*;
+import com.cruise.pos.enums.OutletType;
+import com.cruise.pos.enums.ProductStatus;
+import com.cruise.pos.enums.TaxCategory;
+import com.cruise.pos.repository.*;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Instant;
+import java.util.*;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class PosOfflineSyncService {
+
+    private final PosCatalogService catalogService;
+    private final DynamicPricingEngine pricingEngine;
+    private final PosOutletRepository outletRepository;
+    private final PosCategoryRepository categoryRepository;
+    private final PosProductRepository productRepository;
+    private final PosProductModifierRepository modifierRepository;
+    private final PosCatalogAuditLogRepository auditLogRepository;
+
+    @Transactional(readOnly = true)
+    public PosOfflineCatalogPackageDto exportOfflinePackage(Long outletId) {
+        List<OutletDto> outlets = catalogService.getOutlets();
+        List<CategoryDto> categories = catalogService.getCategories(outletId);
+        List<HappyHourRuleDto> happyHourRules = pricingEngine.getRulesByOutlet(outletId);
+
+        List<PosProduct> activeProducts = productRepository.findActiveCatalogByOutlet(outletId);
+        List<ProductDetailDto> productDtos = new ArrayList<>();
+
+        for (PosProduct p : activeProducts) {
+            productDtos.add(catalogService.getProductById(p.getId()));
+        }
+
+        String etag = generateEtag(outletId, activeProducts.size());
+
+        return PosOfflineCatalogPackageDto.builder()
+                .version("1.0.0")
+                .etag(etag)
+                .exportedAt(Instant.now())
+                .outletId(outletId)
+                .outlets(outlets)
+                .categories(categories)
+                .products(productDtos)
+                .happyHourRules(happyHourRules)
+                .defaultServiceChargeRate(new BigDecimal("18.00"))
+                .standardPortVatRate(new BigDecimal("10.00"))
+                .build();
+    }
+
+    public String generateEtag(Long outletId, int productCount) {
+        try {
+            long outletKey = outletId != null ? outletId : 0L;
+            long latestProductUpdate = productRepository.findAll().stream()
+                    .map(PosProduct::getUpdatedAt)
+                    .filter(Objects::nonNull)
+                    .mapToLong(Instant::toEpochMilli)
+                    .max()
+                    .orElse(0L);
+
+            String raw = "OUTLET-" + outletKey + ":COUNT-" + productCount + ":TS-" + latestProductUpdate;
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(raw.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder("\"");
+            for (int i = 0; i < 8; i++) {
+                sb.append(String.format("%02x", hash[i]));
+            }
+            sb.append("\"");
+            return sb.toString();
+        } catch (Exception e) {
+            return "\"" + System.currentTimeMillis() + "\"";
+        }
+    }
+
+    @Transactional
+    public BulkImportResponse bulkImportProducts(BulkCatalogImportRequest request) {
+        int total = request.getProducts().size();
+        int successCount = 0;
+        int failedCount = 0;
+        List<String> errors = new ArrayList<>();
+
+        Map<String, PosOutlet> outletCache = new HashMap<>();
+        outletRepository.findAll().forEach(o -> outletCache.put(o.getCode().toUpperCase(), o));
+
+        Map<String, PosCategory> categoryCache = new HashMap<>();
+        categoryRepository.findAll().forEach(c -> categoryCache.put(c.getCode().toUpperCase(), c));
+
+        for (BulkProductImportItem item : request.getProducts()) {
+            try {
+                if (item.getSku() == null || item.getSku().isBlank()) {
+                    throw new IllegalArgumentException("SKU is mandatory");
+                }
+                if (item.getName() == null || item.getName().isBlank()) {
+                    throw new IllegalArgumentException("Product name is mandatory for SKU: " + item.getSku());
+                }
+                if (item.getBasePrice() == null || item.getBasePrice().compareTo(BigDecimal.ZERO) < 0) {
+                    throw new IllegalArgumentException("Invalid price for SKU: " + item.getSku());
+                }
+
+                Long outletId = null;
+                if (item.getOutletCode() != null && !item.getOutletCode().isBlank()) {
+                    PosOutlet outlet = outletCache.get(item.getOutletCode().toUpperCase());
+                    if (outlet == null) {
+                        outlet = outletRepository.save(PosOutlet.builder()
+                                .code(item.getOutletCode().toUpperCase())
+                                .name(item.getOutletCode())
+                                .outletType(OutletType.BAR)
+                                .isActive(true)
+                                .build());
+                        outletCache.put(outlet.getCode().toUpperCase(), outlet);
+                    }
+                    outletId = outlet.getId();
+                }
+
+                Long categoryId = 1L;
+                if (item.getCategoryCode() != null && !item.getCategoryCode().isBlank()) {
+                    PosCategory category = categoryCache.get(item.getCategoryCode().toUpperCase());
+                    if (category == null) {
+                        category = categoryRepository.save(PosCategory.builder()
+                                .outletId(outletId)
+                                .code(item.getCategoryCode().toUpperCase())
+                                .name(item.getCategoryCode())
+                                .isActive(true)
+                                .build());
+                        categoryCache.put(category.getCode().toUpperCase(), category);
+                    }
+                    categoryId = category.getId();
+                } else if (!categoryCache.isEmpty()) {
+                    categoryId = categoryCache.values().iterator().next().getId();
+                }
+
+                TaxCategory tax = TaxCategory.STANDARD_VAT;
+                if (item.getTaxCategory() != null) {
+                    try {
+                        tax = TaxCategory.valueOf(item.getTaxCategory().toUpperCase());
+                    } catch (Exception ignored) {
+                        // fallback to standard
+                    }
+                }
+
+                Optional<PosProduct> existingOpt = productRepository.findBySku(item.getSku());
+                PosProduct product;
+                if (existingOpt.isPresent()) {
+                    product = existingOpt.get();
+                    product.setName(item.getName());
+                    product.setBasePrice(item.getBasePrice());
+                    if (item.getCostPrice() != null) product.setCostPrice(item.getCostPrice());
+                    if (item.getBarcode() != null) product.setBarcode(item.getBarcode());
+                    if (item.getDescription() != null) product.setDescription(item.getDescription());
+                    product.setTaxCategory(tax);
+                    if (item.getStockQuantity() != null) product.setStockQuantity(item.getStockQuantity());
+                    if (item.getImageUrl() != null) product.setImageUrl(item.getImageUrl());
+                } else {
+                    product = PosProduct.builder()
+                            .sku(item.getSku())
+                            .name(item.getName())
+                            .barcode(item.getBarcode())
+                            .description(item.getDescription())
+                            .basePrice(item.getBasePrice())
+                            .costPrice(item.getCostPrice())
+                            .outletId(outletId)
+                            .categoryId(categoryId)
+                            .taxCategory(tax)
+                            .status(ProductStatus.ACTIVE)
+                            .isAvailable(true)
+                            .is86ed(false)
+                            .stockQuantity(item.getStockQuantity() != null ? item.getStockQuantity() : 100)
+                            .imageUrl(item.getImageUrl())
+                            .happyHourEligible(item.getHappyHourEligible() != null ? item.getHappyHourEligible() : false)
+                            .happyHourDiscountPercent(item.getHappyHourDiscountPercent() != null ? item.getHappyHourDiscountPercent() : BigDecimal.ZERO)
+                            .build();
+                }
+
+                PosProduct savedProduct = productRepository.save(product);
+
+                if (item.getModifiers() != null && !item.getModifiers().isEmpty()) {
+                    modifierRepository.deleteByProductId(savedProduct.getId());
+                    for (ProductModifierDto mDto : item.getModifiers()) {
+                        PosProductModifier mod = PosProductModifier.builder()
+                                .productId(savedProduct.getId())
+                                .name(mDto.getName())
+                                .priceDelta(mDto.getPriceDelta() != null ? mDto.getPriceDelta() : BigDecimal.ZERO)
+                                .isRequired(Boolean.TRUE.equals(mDto.getIsRequired()))
+                                .minSelection(mDto.getMinSelection() != null ? mDto.getMinSelection() : 0)
+                                .maxSelection(mDto.getMaxSelection() != null ? mDto.getMaxSelection() : 1)
+                                .displayOrder(mDto.getDisplayOrder() != null ? mDto.getDisplayOrder() : 0)
+                                .status("ACTIVE")
+                                .build();
+                        modifierRepository.save(mod);
+                    }
+                }
+
+                auditLogRepository.save(PosCatalogAuditLog.builder()
+                        .productId(savedProduct.getId())
+                        .sku(savedProduct.getSku())
+                        .action("BULK_IMPORT")
+                        .newValue("Imported price: " + savedProduct.getBasePrice())
+                        .performedBy(request.getPerformedBy() != null ? request.getPerformedBy() : "MANIFEST_SYNC")
+                        .reason("Supplier manifest sync #" + request.getSupplierManifestNumber())
+                        .build());
+
+                successCount++;
+            } catch (Exception e) {
+                failedCount++;
+                errors.add("SKU " + item.getSku() + ": " + e.getMessage());
+                log.warn("Bulk import failed for SKU {}: {}", item.getSku(), e.getMessage());
+            }
+        }
+
+        log.info("Bulk catalog import finished: Total={}, Success={}, Failed={}", total, successCount, failedCount);
+
+        return BulkImportResponse.builder()
+                .totalItems(total)
+                .successCount(successCount)
+                .failedCount(failedCount)
+                .errors(errors)
+                .importedAt(Instant.now())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PosCatalogAuditLog> getAuditLogs(Pageable pageable) {
+        return auditLogRepository.findAllByOrderByCreatedAtDesc(pageable);
+    }
+}
