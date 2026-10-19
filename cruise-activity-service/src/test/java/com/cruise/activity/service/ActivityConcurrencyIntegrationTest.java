@@ -96,7 +96,7 @@ class ActivityConcurrencyIntegrationTest {
 
     @Test
     @DisplayName("20 luồng đồng thời tranh chấp 3 suất: Đảm bảo đúng 3 CONFIRMED và 17 WAITLISTED (Zero-Overbooking)")
-    void testConcurrentRegistrations_ZeroOverbooking() throws InterruptedException, ExecutionException {
+    void testConcurrentRegistrations_ZeroOverbooking() throws InterruptedException, ExecutionException, TimeoutException {
         int threadCount = 20;
         ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
         CountDownLatch readyLatch = new CountDownLatch(threadCount);
@@ -123,7 +123,8 @@ class ActivityConcurrencyIntegrationTest {
         }
 
         // Chờ toàn bộ 20 luồng sẵn sàng
-        readyLatch.await(5, TimeUnit.SECONDS);
+        boolean ready = readyLatch.await(5, TimeUnit.SECONDS);
+        assertThat(ready).isTrue();
         // Kích hoạt tất cả 20 luồng cùng lúc
         startLatch.countDown();
 
@@ -131,7 +132,7 @@ class ActivityConcurrencyIntegrationTest {
         int waitlistedCount = 0;
 
         for (Future<ActivityRegistrationResponse> future : futures) {
-            ActivityRegistrationResponse response = future.get();
+            ActivityRegistrationResponse response = future.get(30, TimeUnit.SECONDS);
             if ("CONFIRMED".equals(response.getStatus())) {
                 confirmedCount++;
             } else if ("WAITLISTED".equals(response.getStatus())) {

@@ -310,6 +310,11 @@ public class ActivityRegistrationService {
             throw new BusinessRuleException("Chỉ có thể đôn suất cho hành khách ở trạng thái WAITLIST/WAITLISTED");
         }
 
+        long confirmedCount = registrationRepository.countByActivityIdAndStatusAndActiveTrue(activityId, RegistrationStatus.CONFIRMED);
+        if (activity.getMaxCapacity() != null && confirmedCount >= activity.getMaxCapacity()) {
+            throw new BusinessRuleException("Hoạt động đã đạt sức chứa tối đa (" + activity.getMaxCapacity() + " người)");
+        }
+
         registration.setStatus(RegistrationStatus.CONFIRMED);
         if (activity.getPrice() != null && activity.getPrice().compareTo(BigDecimal.ZERO) > 0) {
             registration.setChargedAmount(activity.getPrice());
@@ -317,7 +322,7 @@ public class ActivityRegistrationService {
         }
 
         ActivityRegistration saved = registrationRepository.save(registration);
-        activity.setCurrentParticipants(activity.getCurrentParticipants() + 1);
+        activity.setCurrentParticipants((int) (confirmedCount + 1));
         activityRepository.save(activity);
 
         auditLogRepository.save(ActivityRegistrationAuditLog.builder()
