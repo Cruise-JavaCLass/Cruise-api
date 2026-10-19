@@ -28,6 +28,18 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(ex.getMessage());
     }
 
+    @ExceptionHandler(DuplicateRegistrationException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResponse<Void> handleDuplicateRegistration(DuplicateRegistrationException ex) {
+        return ApiResponse.error(ex.getMessage());
+    }
+
+    @ExceptionHandler(PaymentRequiredException.class)
+    @ResponseStatus(HttpStatus.PAYMENT_REQUIRED)
+    public ApiResponse<Void> handlePaymentRequired(PaymentRequiredException ex) {
+        return ApiResponse.error(ex.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleValidation(MethodArgumentNotValidException ex) {

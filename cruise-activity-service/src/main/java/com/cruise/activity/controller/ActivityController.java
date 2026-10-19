@@ -24,6 +24,7 @@ public class ActivityController {
 
     private final OnboardActivityService activityService;
     private final com.cruise.activity.service.ActivityAttendanceService attendanceService;
+    private final com.cruise.activity.service.ActivityRegistrationService registrationService;
 
     @GetMapping("/health")
     public ApiResponse<Map<String, Object>> health() {
@@ -199,5 +200,18 @@ public class ActivityController {
     ) {
         return ApiResponse.ok("Đồng bộ điểm danh ngoại tuyến thành công",
                 attendanceService.syncOfflineCheckIns(id, request));
+    }
+
+    /**
+     * Đăng ký tham gia hoạt động giải trí (KAN-216)
+     */
+    @PostMapping("/{id}/registrations")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<com.cruise.activity.dto.ActivityRegistrationResponse> registerActivity(
+            @PathVariable Long id,
+            @Valid @RequestBody com.cruise.activity.dto.ActivityRegistrationRequest request
+    ) {
+        return ApiResponse.ok("Đăng ký hoạt động thành công",
+                registrationService.registerActivity(id, request));
     }
 }
