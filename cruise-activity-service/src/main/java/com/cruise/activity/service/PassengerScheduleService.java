@@ -216,15 +216,7 @@ public class PassengerScheduleService {
             String status = resolveExcursionStatus(ep);
 
             // Tính toán chênh lệch giờ tập trung (assembly time vs departure time) cho excursion (KAN-350)
-            String assemblyWarning = null;
-            if (exc.getGatheringTime() != null && exc.getDepartureTime() != null) {
-                long diffMinutes = Duration.between(exc.getGatheringTime(), exc.getDepartureTime()).toMinutes();
-                if (diffMinutes > 0) {
-                    assemblyWarning = String.format("Tập trung trước giờ khởi hành %d phút tại %s",
-                            diffMinutes,
-                            exc.getMeetingPoint() != null ? exc.getMeetingPoint() : "Điểm hẹn");
-                }
-            }
+            String assemblyWarning = computeAssemblyWarning(exc);
 
             LocalTime effectiveStartTime = exc.getGatheringTime() != null ? exc.getGatheringTime() : exc.getDepartureTime();
             LocalTime effectiveEndTime = exc.getReturnToShipTime() != null ? exc.getReturnToShipTime() : exc.getDepartureTime();
@@ -302,9 +294,26 @@ public class PassengerScheduleService {
     }
 
     /**
+     * Tính toán cảnh báo giờ tập trung so với giờ xuất phát (KAN-350)
+     */
+    public String computeAssemblyWarning(ShoreExcursion exc) {
+        if (exc == null || exc.getGatheringTime() == null || exc.getDepartureTime() == null) {
+            return null;
+        }
+        long diffMinutes = Duration.between(exc.getGatheringTime(), exc.getDepartureTime()).toMinutes();
+        if (diffMinutes > 0) {
+            String location = (exc.getMeetingPoint() != null && !exc.getMeetingPoint().isBlank())
+                    ? exc.getMeetingPoint()
+                    : "Điểm hẹn tập trung";
+            return String.format("Tập trung trước giờ khởi hành %d phút tại %s", diffMinutes, location);
+        }
+        return null;
+    }
+
+    /**
      * Thuật toán phát hiện overlap giữa các time interval (start, end) của các sự kiện (KAN-350)
      */
-    private List<ScheduleConflictDto> detectScheduleConflicts(List<PersonalScheduleItemDto> items, String scope) {
+    public List<ScheduleConflictDto> detectScheduleConflicts(List<PersonalScheduleItemDto> items, String scope) {
         List<ScheduleConflictDto> conflicts = new ArrayList<>();
 
         for (int i = 0; i < items.size(); i++) {
