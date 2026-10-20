@@ -42,6 +42,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.TimeZone;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Sinh hoá đơn PDF từ một bản ghi tất toán.
@@ -75,6 +77,7 @@ public class InvoicePdfService {
     private final FolioSettlementRepository settlementRepository;
     private final FolioInvoiceRepository invoiceRepository;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate transactionTemplate;
 
     /**
      * Sinh hoá đơn cho folio đã tất toán.
@@ -95,16 +98,7 @@ public class InvoicePdfService {
 
         FolioInvoice invoice = invoiceRepository.findBySettlementUuid(settlement.getSettlementUuid())
                 .map(existing -> updateExisting(existing, pdf, sha256, regenerate))
-                .orElseGet(() -> invoiceRepository.saveAndFlush(FolioInvoice.builder()
-                        .invoiceNumber(settlement.getInvoiceNumber())
-                        .settlementUuid(settlement.getSettlementUuid())
-                        .folioId(settlement.getFolioId())
-                        .cabinNumber(settlement.getCabinNumber())
-                        .sha256(sha256)
-                        .byteSize((long) pdf.length)
-                        .generatedAt(settlement.getSettledAt())
-                        .regeneratedCount(regenerate ? 1 : 0)
-                        .build()));
+                .orElseGet(() -> insertOrReload(settlement, pdf, sha256, regenerate));
 
         log.info("Rendered invoice {} for cabin {} ({} bytes, sha {})",
                 invoice.getInvoiceNumber(), cabinNumber, pdf.length, sha256);
@@ -126,6 +120,37 @@ public class InvoicePdfService {
                 .generatedAt(invoice.getGeneratedAt())
                 .regeneratedCount(invoice.getRegeneratedCount())
                 .build();
+    }
+
+    private FolioInvoice insertOrReload(FolioSettlement settlement, byte[] pdf, String sha256, boolean regenerate) {
+        FolioInvoice newInvoice = FolioInvoice.builder()
+                .invoiceNumber(settlement.getInvoiceNumber())
+                .settlementUuid(settlement.getSettlementUuid())
+                .folioId(settlement.getFolioId())
+                .cabinNumber(settlement.getCabinNumber())
+                .sha256(sha256)
+                .byteSize((long) pdf.length)
+                .generatedAt(settlement.getSettledAt())
+                .regeneratedCount(regenerate ? 1 : 0)
+                .build();
+
+        if (transactionTemplate == null) {
+            try {
+                return invoiceRepository.saveAndFlush(newInvoice);
+            } catch (DataIntegrityViolationException ex) {
+                return invoiceRepository.findBySettlementUuid(settlement.getSettlementUuid())
+                        .map(existing -> updateExisting(existing, pdf, sha256, regenerate))
+                        .orElseThrow(() -> ex);
+            }
+        }
+
+        try {
+            return transactionTemplate.execute(status -> invoiceRepository.saveAndFlush(newInvoice));
+        } catch (DataIntegrityViolationException ex) {
+            return invoiceRepository.findBySettlementUuid(settlement.getSettlementUuid())
+                    .map(existing -> updateExisting(existing, pdf, sha256, regenerate))
+                    .orElseThrow(() -> ex);
+        }
     }
 
     private FolioInvoice updateExisting(FolioInvoice existing, byte[] pdf, String sha256, boolean regenerate) {
@@ -313,6 +338,20 @@ public class InvoicePdfService {
      * Kết quả render hoá đơn.
      */
     public record InvoicePdfResult(byte[] content, String fileName, String invoiceNumber) {
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof InvoicePdfResult that)) return false;
+            return java.util.Arrays.equals(content, that.content) &&
+                    java.util.Objects.equals(fileName, that.fileName) &&
+                    java.util.Objects.equals(invoiceNumber, that.invoiceNumber);
+        }
+
+        @Override
+        public int hashCode() {
+            int result = java.util.Objects.hash(fileName, invoiceNumber);
+            return 31 * result + java.util.Arrays.hashCode(content);
+        }
     }
 
     /**
@@ -348,18 +387,40 @@ public class InvoicePdfService {
             }
         }
 
+        private String sanitize(String input) {
+            if (input == null) {
+                return "";
+            }
+            StringBuilder sb = new StringBuilder(input.length());
+            for (int i = 0; i < input.length(); i++) {
+                char c = input.charAt(i);
+                if (Character.isISOControl(c)) {
+                    sb.append(' ');
+                    continue;
+                }
+                try {
+                    font.encode(Character.toString(c));
+                    sb.append(c);
+                } catch (Exception ex) {
+                    sb.append('?');
+                }
+            }
+            return sb.toString();
+        }
+
         void text(float x, float size, String value) throws IOException {
+            String sanitized = sanitize(value);
             stream.beginText();
             stream.setFont(font, size);
             stream.newLineAtOffset(x, y);
-            stream.showText(value == null ? "" : value);
+            stream.showText(sanitized);
             stream.endText();
         }
 
         void rightText(float size, String value) throws IOException {
-            String safe = value == null ? "" : value;
-            float width = font.getStringWidth(safe) / 1000f * size;
-            text(COL_AMOUNT_RIGHT - width, size, safe);
+            String sanitized = sanitize(value);
+            float width = font.getStringWidth(sanitized) / 1000f * size;
+            text(COL_AMOUNT_RIGHT - width, size, sanitized);
         }
 
         void totalRow(float labelX, String label, BigDecimal amount) throws IOException {

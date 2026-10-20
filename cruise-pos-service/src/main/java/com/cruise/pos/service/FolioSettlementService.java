@@ -41,8 +41,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -180,7 +182,8 @@ public class FolioSettlementService {
             if (tx.getType() == TransactionType.CHARGE) {
                 if (tx.getStatus() == TransactionStatus.COMPLETED
                         || tx.getStatus() == TransactionStatus.PARTIALLY_REFUNDED
-                        || tx.getStatus() == TransactionStatus.FULLY_REFUNDED) {
+                        || tx.getStatus() == TransactionStatus.FULLY_REFUNDED
+                        || tx.getStatus() == TransactionStatus.VOIDED) {
                     subtotal = subtotal.add(nullSafe(tx.getSubtotal()));
                     tax = tax.add(nullSafe(tx.getTax()));
                     gratuity = gratuity.add(nullSafe(tx.getGratuity()));
@@ -202,17 +205,16 @@ public class FolioSettlementService {
         List<SettlementLineItemDto> items = new ArrayList<>();
 
         for (PosTransaction tx : transactions) {
-            boolean reversed = tx.getStatus() == TransactionStatus.VOIDED
-                    || tx.getType() != TransactionType.CHARGE;
-
-            if (reversed) {
-                items.add(SettlementLineItemDto.builder()
-                        .description(describeReversal(tx))
-                        .serviceArea("POS")
-                        .postedAt(tx.getCreatedAt())
-                        .amount(money(nullSafe(tx.getTotalAmount()).negate()))
-                        .isReversal(true)
-                        .build());
+            if (tx.getType() != TransactionType.CHARGE) {
+                if (tx.getStatus() == TransactionStatus.COMPLETED) {
+                    items.add(SettlementLineItemDto.builder()
+                            .description(describeReversal(tx))
+                            .serviceArea("POS")
+                            .postedAt(tx.getCreatedAt())
+                            .amount(money(nullSafe(tx.getTotalAmount()).negate()))
+                            .isReversal(true)
+                            .build());
+                }
                 continue;
             }
 
@@ -236,6 +238,15 @@ public class FolioSettlementService {
             }
             if (tx.getDiscount() != null && tx.getDiscount().signum() > 0) {
                 items.add(extraRow("Giảm giá", tx, money(tx.getDiscount()).negate()));
+            }
+            if (tx.getStatus() == TransactionStatus.VOIDED) {
+                items.add(SettlementLineItemDto.builder()
+                        .description(describeReversal(tx))
+                        .serviceArea("POS")
+                        .postedAt(tx.getCreatedAt())
+                        .amount(money(nullSafe(tx.getTotalAmount()).negate()))
+                        .isReversal(true)
+                        .build());
             }
             if (tx.getRefundedAmount() != null && tx.getRefundedAmount().signum() > 0) {
                 items.add(SettlementLineItemDto.builder()
@@ -380,14 +391,23 @@ public class FolioSettlementService {
     }
 
     private void writeAuditLog(FolioSettlement settlement, CabinFolioAccount folio) {
-        String details = String.format(Locale.ROOT,
-                "{\"cabinNumber\":\"%s\",\"settlementUuid\":\"%s\",\"invoiceNumber\":\"%s\","
-                        + "\"netAmount\":%s,\"amountTendered\":%s,\"heldDisputeAmount\":%s,"
-                        + "\"balanceBefore\":%s,\"idempotencyKey\":\"%s\"}",
-                settlement.getCabinNumber(), settlement.getSettlementUuid(), settlement.getInvoiceNumber(),
-                settlement.getNetAmount().toPlainString(), settlement.getAmountTendered().toPlainString(),
-                settlement.getHeldDisputeAmount().toPlainString(), folio.getCurrentBalance().toPlainString(),
-                settlement.getIdempotencyKey());
+        String details;
+        try {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("cabinNumber", settlement.getCabinNumber());
+            map.put("settlementUuid", settlement.getSettlementUuid());
+            map.put("invoiceNumber", settlement.getInvoiceNumber());
+            map.put("netAmount", settlement.getNetAmount());
+            map.put("amountTendered", settlement.getAmountTendered());
+            map.put("heldDisputeAmount", settlement.getHeldDisputeAmount());
+            map.put("balanceBefore", folio.getCurrentBalance());
+            map.put("idempotencyKey", settlement.getIdempotencyKey());
+            details = objectMapper.writeValueAsString(map);
+        } catch (Exception ex) {
+            log.warn("Không thể tuần tự hoá audit details cho settlement {}: {}",
+                    settlement.getSettlementUuid(), ex.getMessage());
+            details = "{}";
+        }
 
         auditLogRepository.save(PosAuditLog.builder()
                 .transactionId(null)

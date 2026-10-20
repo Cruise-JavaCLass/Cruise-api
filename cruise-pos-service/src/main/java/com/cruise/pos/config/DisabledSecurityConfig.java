@@ -15,7 +15,7 @@ import org.springframework.security.web.SecurityFilterChain;
  * với {@code JWT_SECRET} là đủ để bảo vệ API.</p>
  */
 @Configuration
-@ConditionalOnProperty(name = "pos.security.enabled", havingValue = "false", matchIfMissing = true)
+@ConditionalOnProperty(name = "pos.security.enabled", havingValue = "false", matchIfMissing = false)
 public class DisabledSecurityConfig {
 
     @Bean

@@ -68,7 +68,7 @@ public class JwtVerificationService {
             }
 
             Object exp = claims.get("exp");
-            if (exp instanceof Number expNumber && Instant.now().getEpochSecond() >= expNumber.longValue()) {
+            if (!(exp instanceof Number expNumber) || Instant.now().getEpochSecond() >= expNumber.longValue()) {
                 return Optional.empty();
             }
 

@@ -15,6 +15,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 
@@ -60,13 +61,20 @@ public class InvoiceController {
     }
 
     @GetMapping("/invoices/{invoiceNumber}")
-    public ApiResponse<InvoiceMetadataDto> getInvoiceMetadata(@PathVariable("invoiceNumber") String invoiceNumber) {
-        return ApiResponse.ok(invoicePdfService.getMetadata(invoiceNumber));
+    public ApiResponse<InvoiceMetadataDto> getInvoiceMetadata(
+            @PathVariable("invoiceNumber") String invoiceNumber,
+            Authentication authentication) {
+        InvoiceMetadataDto metadata = invoicePdfService.getMetadata(invoiceNumber);
+        assertPassengerOwnsCabin(authentication, metadata.getCabinNumber());
+        return ApiResponse.ok(metadata);
     }
 
     @GetMapping("/settlements/{settlementUuid}")
-    public ApiResponse<SettlementResponse> getSettlement(@PathVariable("settlementUuid") String settlementUuid) {
+    public ApiResponse<SettlementResponse> getSettlement(
+            @PathVariable("settlementUuid") String settlementUuid,
+            Authentication authentication) {
         FolioSettlement settlement = settlementService.getSettlement(settlementUuid);
+        assertPassengerOwnsCabin(authentication, settlement.getCabinNumber());
         CabinFolioAccount folio = folioRepository.findById(settlement.getFolioId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Không tìm thấy folio của settlement: " + settlementUuid));
@@ -77,15 +85,16 @@ public class InvoiceController {
      * Hành khách chỉ được tải hoá đơn của cabin mình. Các role vận hành được xem tất cả.
      */
     private void assertPassengerOwnsCabin(Authentication authentication, String cabinNumber) {
-        if (authentication == null) {
+        Authentication auth = resolveAuth(authentication);
+        if (auth == null) {
             return;
         }
-        Set<String> roles = resolveRoles(authentication);
+        Set<String> roles = resolveRoles(auth);
         boolean isPassenger = roles.contains("PASSENGER");
         if (!isPassenger) {
             return;
         }
-        if (!(authentication.getPrincipal() instanceof com.cruise.pos.security.AuthPrincipal principal)
+        if (!(auth.getPrincipal() instanceof com.cruise.pos.security.AuthPrincipal principal)
                 || principal.cabinNumber() == null
                 || !principal.cabinNumber().equals(cabinNumber)) {
             throw new org.springframework.security.access.AccessDeniedException(
@@ -93,11 +102,19 @@ public class InvoiceController {
         }
     }
 
+    private Authentication resolveAuth(Authentication authentication) {
+        if (authentication != null) {
+            return authentication;
+        }
+        return SecurityContextHolder.getContext().getAuthentication();
+    }
+
     private Set<String> resolveRoles(Authentication authentication) {
-        if (authentication == null) {
+        Authentication auth = resolveAuth(authentication);
+        if (auth == null) {
             return Set.of();
         }
-        return authentication.getAuthorities().stream()
+        return auth.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .filter(authority -> authority.startsWith("ROLE_"))
                 .map(authority -> authority.substring("ROLE_".length()))

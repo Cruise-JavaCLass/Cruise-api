@@ -13,7 +13,7 @@ import java.time.Instant;
 @Entity
 @Table(name = "pos_folio_invoices", indexes = {
         @Index(name = "idx_invoice_number", columnList = "invoice_number", unique = true),
-        @Index(name = "idx_invoice_settlement", columnList = "settlement_uuid")
+        @Index(name = "idx_invoice_settlement", columnList = "settlement_uuid", unique = true)
 })
 @Getter
 @Setter
@@ -25,7 +25,7 @@ public class FolioInvoice extends BaseEntity {
     @Column(name = "invoice_number", nullable = false, unique = true, length = 64)
     private String invoiceNumber;
 
-    @Column(name = "settlement_uuid", nullable = false, length = 64)
+    @Column(name = "settlement_uuid", nullable = false, unique = true, length = 64)
     private String settlementUuid;
 
     @Column(name = "folio_id", nullable = false)

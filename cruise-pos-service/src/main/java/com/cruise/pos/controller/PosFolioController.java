@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -72,7 +73,8 @@ public class PosFolioController {
     }
 
     private String resolveActor(Authentication authentication) {
-        if (authentication == null || !authentication.isAuthenticated()) {
+        if (authentication == null || !authentication.isAuthenticated()
+                || authentication instanceof AnonymousAuthenticationToken) {
             return "system";
         }
         if (authentication.getPrincipal() instanceof AuthPrincipal principal) {
@@ -82,7 +84,7 @@ public class PosFolioController {
     }
 
     private Set<String> resolveRoles(Authentication authentication) {
-        if (authentication == null) {
+        if (authentication == null || authentication instanceof AnonymousAuthenticationToken) {
             return Set.of();
         }
         return authentication.getAuthorities().stream()
