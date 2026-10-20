@@ -262,4 +262,75 @@ class PosOfflineSyncServiceTest {
 
         assertThat(offlineSyncService.generateEtag(pkg1)).isNotEqualTo(offlineSyncService.generateEtag(pkg2));
     }
+
+    @Test
+    @DisplayName("getAuditLogs delegates to repository with pagination")
+    void testGetAuditLogs() {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 10);
+        org.springframework.data.domain.Page<PosCatalogAuditLog> expectedPage = new org.springframework.data.domain.PageImpl<>(Collections.emptyList());
+        when(auditLogRepository.findAllByOrderByCreatedAtDesc(pageable)).thenReturn(expectedPage);
+
+        org.springframework.data.domain.Page<PosCatalogAuditLog> actual = offlineSyncService.getAuditLogs(pageable);
+        assertThat(actual).isSameAs(expectedPage);
+    }
+
+    @Test
+    @DisplayName("generateEtag with outletId and productCount returns formatted tag")
+    void testGenerateEtagCountFallback() {
+        String tag = offlineSyncService.generateEtag(10L, 50);
+        assertThat(tag).isEqualTo("\"10-50\"");
+
+        String tagNull = offlineSyncService.generateEtag(null, 5);
+        assertThat(tagNull).isEqualTo("\"0-5\"");
+    }
+
+    @Test
+    @DisplayName("bulkImportProducts updates existing product and replaces modifiers")
+    void testBulkImportProductsUpdatesExistingProduct() {
+        when(outletRepository.findAll()).thenReturn(Collections.emptyList());
+        when(categoryRepository.findAll()).thenReturn(Collections.emptyList());
+
+        PosProduct existing = PosProduct.builder()
+                .sku("UPDATE-SKU")
+                .name("Old Name")
+                .basePrice(new BigDecimal("10.00"))
+                .build();
+        existing.setId(555L);
+
+        when(productRepository.findBySku("UPDATE-SKU")).thenReturn(Optional.of(existing));
+        when(productRepository.save(any(PosProduct.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        BulkProductImportItem updateItem = BulkProductImportItem.builder()
+                .sku("UPDATE-SKU")
+                .name("New Name")
+                .basePrice(new BigDecimal("12.50"))
+                .costPrice(new BigDecimal("4.00"))
+                .barcode("NEW-BAR")
+                .description("New Description")
+                .categoryCode("MAIN")
+                .taxCategory("STANDARD_VAT")
+                .stockQuantity(200)
+                .imageUrl("https://img.jpg")
+                .modifiers(List.of(ProductModifierDto.builder().name("Extra Ice").priceDelta(BigDecimal.ZERO).build()))
+                .build();
+
+        BulkCatalogImportRequest request = BulkCatalogImportRequest.builder()
+                .supplierManifestNumber("MANIFEST-UPDATE")
+                .products(List.of(updateItem))
+                .build();
+
+        when(categoryRepository.save(any(PosCategory.class))).thenAnswer(inv -> {
+            PosCategory c = inv.getArgument(0);
+            c.setId(10L);
+            return c;
+        });
+
+        BulkImportResponse response = offlineSyncService.bulkImportProducts(request);
+
+        assertThat(response.getSuccessCount()).isEqualTo(1);
+        assertThat(existing.getName()).isEqualTo("New Name");
+        assertThat(existing.getBasePrice()).isEqualByComparingTo(new BigDecimal("12.50"));
+        verify(modifierRepository).deleteByProductId(555L);
+        verify(modifierRepository).save(any(PosProductModifier.class));
+    }
 }

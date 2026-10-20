@@ -191,4 +191,45 @@ class BarcodeLookupServiceTest {
         barcodeLookupService.lookupProductByBarcodeOrSku("BAR-100", 1L);
         verify(productRepository, times(2)).findByCodeAndOutlet("BAR-100", 1L);
     }
+
+    @Test
+    @DisplayName("lookupProductByBarcodeOrSku throws ResourceNotFoundException when code is null or empty")
+    void testLookupBlankCodeThrowsNotFound() {
+        assertThatThrownBy(() -> barcodeLookupService.lookupProductByBarcodeOrSku(null, 1L))
+                .isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(() -> barcodeLookupService.lookupProductByBarcodeOrSku("   ", 1L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("lookupProductByBarcodeOrSku falls back to global product when outlet product is not found")
+    void testLookupFallbackToGlobalProduct() {
+        PosProduct globalProduct = PosProduct.builder()
+                .sku("GLOBAL-SKU")
+                .name("Global Product")
+                .basePrice(new BigDecimal("20.00"))
+                .status(ProductStatus.ACTIVE)
+                .categoryId(99L)
+                .build();
+        globalProduct.setId(77L);
+
+        when(productRepository.findByCodeAndOutlet("GLOBAL-SKU", 5L)).thenReturn(Collections.emptyList());
+        when(productRepository.findByCodeAndOutlet("GLOBAL-SKU", null)).thenReturn(List.of(globalProduct));
+        when(categoryRepository.findById(99L)).thenReturn(Optional.empty());
+        when(modifierRepository.findByProductIdOrderByDisplayOrderAsc(77L)).thenReturn(Collections.emptyList());
+
+        ProductDetailDto result = barcodeLookupService.lookupProductByBarcodeOrSku("GLOBAL-SKU", 5L);
+        assertThat(result.getId()).isEqualTo(77L);
+        assertThat(result.getOutletName()).isEqualTo("Tất cả điểm bán");
+        assertThat(result.getCategoryName()).isEqualTo("Không xác định");
+    }
+
+    @Test
+    @DisplayName("evictProduct handles null and empty parameters safely without outletId")
+    void testEvictProductNullAndPartialSafely() {
+        barcodeLookupService.evictProduct(null, null, null);
+        barcodeLookupService.evictProduct("  ", "  ", null);
+        barcodeLookupService.evictProduct("SKU-ONLY", null, null);
+        barcodeLookupService.evictProduct(null, "BAR-ONLY", null);
+    }
 }

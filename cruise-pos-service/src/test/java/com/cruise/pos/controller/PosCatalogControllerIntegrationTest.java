@@ -344,4 +344,72 @@ class PosCatalogControllerIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false));
     }
+
+    @Test
+    @DisplayName("Happy Hour rule CRUD endpoints return expected responses")
+    void testHappyHourRuleCrudEndpoints() throws Exception {
+        HappyHourRuleDto validRule = HappyHourRuleDto.builder()
+                .id(1L)
+                .name("Evening HH")
+                .startTime("17:00")
+                .endTime("19:00")
+                .discountPercent(new BigDecimal("20.00"))
+                .daysOfWeek("ALL")
+                .build();
+
+        when(dynamicPricingEngine.getRulesByOutlet(1L)).thenReturn(List.of(validRule));
+        when(dynamicPricingEngine.createRule(any())).thenReturn(validRule);
+        when(dynamicPricingEngine.updateRule(eq(1L), any())).thenReturn(validRule);
+
+        mockMvc.perform(get("/api/pos/pricing/happy-hour-rules?outletId=1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].name").value("Evening HH"));
+
+        mockMvc.perform(post("/api/pos/pricing/happy-hour-rules")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validRule)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.name").value("Evening HH"));
+
+        mockMvc.perform(put("/api/pos/pricing/happy-hour-rules/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validRule)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("Evening HH"));
+
+        mockMvc.perform(delete("/api/pos/pricing/happy-hour-rules/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    @DisplayName("GET /api/pos/catalog/audit-logs and POST /api/pos/catalog/bulk-import return 200 OK")
+    void testAuditLogsAndBulkImportEndpoints() throws Exception {
+        when(offlineSyncService.getAuditLogs(any())).thenReturn(new org.springframework.data.domain.PageImpl<>(Collections.emptyList()));
+        mockMvc.perform(get("/api/pos/catalog/audit-logs?page=0&size=10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        BulkProductImportItem item = BulkProductImportItem.builder()
+                .sku("SKU-BULK-1")
+                .name("Imported Rum")
+                .basePrice(new BigDecimal("12.50"))
+                .build();
+        BulkCatalogImportRequest req = BulkCatalogImportRequest.builder()
+                .supplierManifestNumber("MAN-TEST")
+                .products(List.of(item))
+                .build();
+        BulkImportResponse resp = BulkImportResponse.builder()
+                .totalItems(1)
+                .successCount(1)
+                .failedCount(0)
+                .build();
+        when(offlineSyncService.bulkImportProducts(any())).thenReturn(resp);
+
+        mockMvc.perform(post("/api/pos/catalog/bulk-import")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalItems").value(1));
+    }
 }

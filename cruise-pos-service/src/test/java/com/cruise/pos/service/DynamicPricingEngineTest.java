@@ -172,4 +172,137 @@ class DynamicPricingEngineTest {
         // 50.00 * 20% = 10.00
         assertThat(discount).isEqualByComparingTo(new BigDecimal("10.00"));
     }
+
+    @Test
+    @DisplayName("calculateItemDiscount falls back to product discount percent when rule discount percent is null or non-positive")
+    void testCalculateItemDiscountFallbackToProduct() {
+        PosProduct product = PosProduct.builder()
+                .sku("BEV-BEER-01")
+                .happyHourEligible(true)
+                .happyHourDiscountPercent(new BigDecimal("15.00"))
+                .build();
+
+        PosHappyHourRule ruleWithNullPercent = PosHappyHourRule.builder()
+                .discountPercent(null)
+                .build();
+        BigDecimal discount = pricingEngine.calculateItemDiscount(product, new BigDecimal("40.00"), ruleWithNullPercent);
+        // 40.00 * 15% = 6.00
+        assertThat(discount).isEqualByComparingTo(new BigDecimal("6.00"));
+
+        PosProduct productNoDiscount = PosProduct.builder()
+                .sku("BEV-BEER-02")
+                .happyHourEligible(true)
+                .happyHourDiscountPercent(BigDecimal.ZERO)
+                .build();
+        BigDecimal zeroDiscount = pricingEngine.calculateItemDiscount(productNoDiscount, new BigDecimal("40.00"), ruleWithNullPercent);
+        assertThat(zeroDiscount).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    @DisplayName("isRuleActive checks day of week, active flag and invalid time format")
+    void testIsRuleActiveEdgeCases() {
+        PosHappyHourRule inactiveRule = PosHappyHourRule.builder()
+                .isActive(false)
+                .startTime("17:00")
+                .endTime("19:00")
+                .build();
+        assertThat(pricingEngine.isRuleActive(inactiveRule, LocalTime.of(18, 0), DayOfWeek.MONDAY)).isFalse();
+
+        PosHappyHourRule specificDayRule = PosHappyHourRule.builder()
+                .isActive(true)
+                .daysOfWeek("MONDAY,WEDNESDAY,FRIDAY")
+                .startTime("17:00")
+                .endTime("19:00")
+                .build();
+        assertThat(pricingEngine.isRuleActive(specificDayRule, LocalTime.of(18, 0), DayOfWeek.MONDAY)).isTrue();
+        assertThat(pricingEngine.isRuleActive(specificDayRule, LocalTime.of(18, 0), DayOfWeek.TUESDAY)).isFalse();
+
+        PosHappyHourRule invalidTimeRule = PosHappyHourRule.builder()
+                .isActive(true)
+                .daysOfWeek("ALL")
+                .startTime("NOT_A_TIME")
+                .endTime("19:00")
+                .build();
+        assertThat(pricingEngine.isRuleActive(invalidTimeRule, LocalTime.of(18, 0), DayOfWeek.MONDAY)).isFalse();
+    }
+
+    @Test
+    @DisplayName("findActiveRule and getRulesByOutlet delegate to repository and evaluate correctly")
+    void testFindActiveRuleAndGetRulesByOutlet() {
+        PosHappyHourRule rule1 = PosHappyHourRule.builder()
+                .outletId(1L)
+                .name("Evening HH")
+                .startTime("17:00")
+                .endTime("19:00")
+                .discountPercent(new BigDecimal("20.00"))
+                .daysOfWeek("ALL")
+                .isActive(true)
+                .build();
+        rule1.setId(10L);
+
+        when(happyHourRuleRepository.findActiveRulesByOutlet(1L)).thenReturn(List.of(rule1));
+
+        List<HappyHourRuleDto> dtos = pricingEngine.getRulesByOutlet(1L);
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).getName()).isEqualTo("Evening HH");
+
+        Optional<PosHappyHourRule> activeRule = pricingEngine.findActiveRule(1L, LocalTime.of(18, 0), DayOfWeek.FRIDAY);
+        assertThat(activeRule).isPresent();
+        assertThat(activeRule.get().getId()).isEqualTo(10L);
+
+        Optional<PosHappyHourRule> outsideRule = pricingEngine.findActiveRule(1L, LocalTime.of(12, 0), DayOfWeek.FRIDAY);
+        assertThat(outsideRule).isEmpty();
+    }
+
+    @Test
+    @DisplayName("createRule, updateRule and deleteRule perform CRUD correctly and throw on missing rule")
+    void testRuleCrudLifecycle() {
+        HappyHourRuleDto createDto = HappyHourRuleDto.builder()
+                .outletId(1L)
+                .name("Poolside HH")
+                .startTime("14:00")
+                .endTime("16:00")
+                .discountPercent(new BigDecimal("25.00"))
+                .description("Afternoon discount")
+                .build();
+
+        PosHappyHourRule savedEntity = PosHappyHourRule.builder()
+                .outletId(1L)
+                .name("Poolside HH")
+                .startTime("14:00")
+                .endTime("16:00")
+                .discountPercent(new BigDecimal("25.00"))
+                .daysOfWeek("ALL")
+                .isActive(true)
+                .description("Afternoon discount")
+                .build();
+        savedEntity.setId(100L);
+
+        when(happyHourRuleRepository.save(org.mockito.ArgumentMatchers.any(PosHappyHourRule.class))).thenReturn(savedEntity);
+
+        HappyHourRuleDto created = pricingEngine.createRule(createDto);
+        assertThat(created.getId()).isEqualTo(100L);
+        assertThat(created.getDaysOfWeek()).isEqualTo("ALL");
+
+        when(happyHourRuleRepository.findById(100L)).thenReturn(Optional.of(savedEntity));
+        HappyHourRuleDto updateDto = HappyHourRuleDto.builder()
+                .name("Updated Poolside HH")
+                .discountPercent(new BigDecimal("30.00"))
+                .build();
+
+        HappyHourRuleDto updated = pricingEngine.updateRule(100L, updateDto);
+        assertThat(updated.getName()).isEqualTo("Updated Poolside HH");
+
+        when(happyHourRuleRepository.findById(999L)).thenReturn(Optional.empty());
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> pricingEngine.updateRule(999L, updateDto))
+                .isInstanceOf(com.cruise.pos.exception.ResourceNotFoundException.class);
+
+        when(happyHourRuleRepository.existsById(100L)).thenReturn(true);
+        pricingEngine.deleteRule(100L);
+        org.mockito.Mockito.verify(happyHourRuleRepository).deleteById(100L);
+
+        when(happyHourRuleRepository.existsById(999L)).thenReturn(false);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> pricingEngine.deleteRule(999L))
+                .isInstanceOf(com.cruise.pos.exception.ResourceNotFoundException.class);
+    }
 }
