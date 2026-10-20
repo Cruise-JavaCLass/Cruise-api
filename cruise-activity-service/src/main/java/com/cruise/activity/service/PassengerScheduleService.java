@@ -77,9 +77,11 @@ public class PassengerScheduleService {
         // 2. Thu thập tour tham quan trên bờ (Shore Excursions)
         collectExcursionItems(targetPassengers, passenger, normalizedScope, dayNumber, items);
 
-        // 3. Sắp xếp theo thứ tự startTime tăng dần, sau đó theo endTime và title
+        // 3. Sắp xếp theo ngày (activityDate, dayNumber), sau đó theo startTime, endTime và title
         items.sort(Comparator
-                .comparing(PersonalScheduleItemDto::getStartTime, Comparator.nullsLast(Comparator.naturalOrder()))
+                .comparing(PersonalScheduleItemDto::getActivityDate, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(PersonalScheduleItemDto::getDayNumber, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(PersonalScheduleItemDto::getStartTime, Comparator.nullsLast(Comparator.naturalOrder()))
                 .thenComparing(PersonalScheduleItemDto::getEndTime, Comparator.nullsLast(Comparator.naturalOrder()))
                 .thenComparing(PersonalScheduleItemDto::getTitle, Comparator.nullsLast(Comparator.naturalOrder())));
 
@@ -192,7 +194,10 @@ public class PassengerScheduleService {
                 }
             }
             if (excBookings.isEmpty()) {
-                excBookings = excursionPassengerRepository.findByPassengerNameIgnoreCaseAndActiveTrue(primaryPassenger.getFullName());
+                List<ExcursionPassenger> byName = excursionPassengerRepository.findByPassengerNameIgnoreCaseAndActiveTrue(primaryPassenger.getFullName());
+                excBookings = byName.stream()
+                        .filter(ep -> primaryPassenger.getId().equals(ep.getPassengerId()))
+                        .toList();
             }
         }
 
@@ -240,7 +245,7 @@ public class PassengerScheduleService {
                     .location(exc.getPortName() != null ? exc.getPortName() : exc.getMeetingPoint())
                     .deck(exc.getMeetingPoint())
                     .status(status)
-                    .passengerId(ep.getPassengerId() != null ? ep.getPassengerId() : primaryPassenger.getId())
+                    .passengerId(ep.getPassengerId() != null ? ep.getPassengerId() : ("cabin".equals(scope) ? null : primaryPassenger.getId()))
                     .passengerName(ep.getPassengerName())
                     .cabinNumber(ep.getCabinNumber())
                     .ticketCode(ep.getTicketCode())
@@ -325,6 +330,14 @@ public class PassengerScheduleService {
             for (int j = i + 1; j < items.size(); j++) {
                 PersonalScheduleItemDto b = items.get(j);
                 if ("CANCELLED".equals(b.getStatus()) || b.getStartTime() == null || b.getEndTime() == null) {
+                    continue;
+                }
+
+                // Không kiểm tra xung đột nếu hai sự kiện diễn ra vào ngày khác nhau
+                if (a.getActivityDate() != null && b.getActivityDate() != null && !a.getActivityDate().equals(b.getActivityDate())) {
+                    continue;
+                }
+                if (a.getDayNumber() != null && b.getDayNumber() != null && !a.getDayNumber().equals(b.getDayNumber())) {
                     continue;
                 }
 

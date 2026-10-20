@@ -376,4 +376,150 @@ class PassengerScheduleServiceTest {
         assertThat(response.getItems().get(0).getItemType()).isEqualTo("EXCURSION");
         assertThat(response.getItems().get(0).getAssemblyWarning()).isNotNull();
     }
+
+    @Test
+    @DisplayName("Kiểm tra trạng thái CANCELLED từ ActivityAttendance và Registration")
+    void getPersonalSchedule_CancelledStatuses() {
+        when(passengerRepository.findById(1L)).thenReturn(Optional.of(passenger1));
+
+        ActivityRegistration reg1 = ActivityRegistration.builder()
+                .activityId(10L)
+                .passengerId(1L)
+                .status(RegistrationStatus.CANCELLED)
+                .build();
+        ActivityRegistration reg2 = ActivityRegistration.builder()
+                .activityId(20L)
+                .passengerId(1L)
+                .status(RegistrationStatus.CONFIRMED)
+                .build();
+
+        when(activityRegistrationRepository.findByPassengerIdAndActiveTrueOrderByRegisteredAtDesc(1L))
+                .thenReturn(List.of(reg1, reg2));
+        when(onboardActivityRepository.findById(10L)).thenReturn(Optional.of(activity1));
+        when(onboardActivityRepository.findById(20L)).thenReturn(Optional.of(activity2));
+        when(excursionPassengerRepository.findByCabinNumberAndActiveTrue("701")).thenReturn(Collections.emptyList());
+
+        when(activityAttendanceRepository.findByActivityIdAndPassengerIdAndActiveTrue(10L, 1L))
+                .thenReturn(Optional.empty());
+
+        ActivityAttendance attendance2 = ActivityAttendance.builder()
+                .activityId(20L)
+                .passengerId(1L)
+                .status(ActivityAttendanceStatus.CANCELLED)
+                .build();
+        when(activityAttendanceRepository.findByActivityIdAndPassengerIdAndActiveTrue(20L, 1L))
+                .thenReturn(Optional.of(attendance2));
+
+        PersonalScheduleResponse response = scheduleService.getPersonalSchedule(1L, 1, "my");
+        assertThat(response.getItems()).hasSize(2);
+        assertThat(response.getItems().get(0).getStatus()).isEqualTo("CANCELLED");
+        assertThat(response.getItems().get(1).getStatus()).isEqualTo("CANCELLED");
+        assertThat(response.getTotalConflicts()).isZero();
+    }
+
+    @Test
+    @DisplayName("Kiểm tra tour trên bờ với status ON_TOUR và status null")
+    void getPersonalSchedule_ExcursionOnTourAndNullStatus() {
+        when(passengerRepository.findById(1L)).thenReturn(Optional.of(passenger1));
+        when(activityRegistrationRepository.findByPassengerIdAndActiveTrueOrderByRegisteredAtDesc(1L))
+                .thenReturn(Collections.emptyList());
+
+        ExcursionPassenger ep1 = ExcursionPassenger.builder()
+                .excursionId(30L)
+                .passengerId(1L)
+                .passengerName("Nguyễn Văn A")
+                .cabinNumber("701")
+                .ticketCode("TCK-001")
+                .status(ExcursionPassengerStatus.ON_TOUR)
+                .build();
+        ExcursionPassenger ep2 = ExcursionPassenger.builder()
+                .excursionId(30L)
+                .passengerId(1L)
+                .passengerName("Nguyễn Văn A")
+                .cabinNumber("701")
+                .ticketCode("TCK-002")
+                .status(null)
+                .build();
+
+        when(excursionPassengerRepository.findByCabinNumberAndActiveTrue("701"))
+                .thenReturn(List.of(ep1, ep2));
+        when(shoreExcursionRepository.findById(30L)).thenReturn(Optional.of(excursion1));
+
+        PersonalScheduleResponse response = scheduleService.getPersonalSchedule(1L, 1, "my");
+        assertThat(response.getItems()).hasSize(2);
+        assertThat(response.getItems().get(0).getStatus()).isEqualTo("CHECKED_IN");
+        assertThat(response.getItems().get(1).getStatus()).isEqualTo("REGISTERED");
+    }
+
+    @Test
+    @DisplayName("Kiểm tra computeAssemblyWarning khi giờ tập trung không hợp lệ hoặc bằng giờ xuất phát")
+    void computeAssemblyWarning_InvalidOrEqualTime_ReturnsNull() {
+        assertThat(scheduleService.computeAssemblyWarning(null)).isNull();
+
+        ShoreExcursion exc = ShoreExcursion.builder()
+                .gatheringTime(LocalTime.of(8, 0))
+                .departureTime(LocalTime.of(8, 0))
+                .build();
+        assertThat(scheduleService.computeAssemblyWarning(exc)).isNull();
+
+        ShoreExcursion excAfter = ShoreExcursion.builder()
+                .gatheringTime(LocalTime.of(8, 30))
+                .departureTime(LocalTime.of(8, 0))
+                .build();
+        assertThat(scheduleService.computeAssemblyWarning(excAfter)).isNull();
+    }
+
+    @Test
+    @DisplayName("Kiểm tra không xung đột khi hai sự kiện diễn ra ở hai ngày khác nhau")
+    void detectScheduleConflicts_DifferentDays_NoConflict() {
+        PersonalScheduleItemDto item1 = PersonalScheduleItemDto.builder()
+                .eventId(1L)
+                .title("Sự kiện Ngày 1")
+                .dayNumber(1)
+                .activityDate(LocalDate.of(2026, 11, 1))
+                .startTime(LocalTime.of(9, 0))
+                .endTime(LocalTime.of(10, 0))
+                .build();
+
+        PersonalScheduleItemDto item2 = PersonalScheduleItemDto.builder()
+                .eventId(2L)
+                .title("Sự kiện Ngày 2")
+                .dayNumber(2)
+                .activityDate(LocalDate.of(2026, 11, 2))
+                .startTime(LocalTime.of(9, 0))
+                .endTime(LocalTime.of(10, 0))
+                .build();
+
+        List<ScheduleConflictDto> conflicts = scheduleService.detectScheduleConflicts(List.of(item1, item2), "my");
+        assertThat(conflicts).isEmpty();
+        assertThat(item1.getHasConflict()).isFalse();
+        assertThat(item2.getHasConflict()).isFalse();
+    }
+
+    @Test
+    @DisplayName("Kiểm tra scope cabin: hai hành khách khác nhau trùng giờ không bị tính là xung đột")
+    void detectScheduleConflicts_CabinScope_DifferentPassengers_NoConflict() {
+        PersonalScheduleItemDto item1 = PersonalScheduleItemDto.builder()
+                .eventId(1L)
+                .title("Yoga Nguyễn Văn A")
+                .passengerId(1L)
+                .passengerName("Nguyễn Văn A")
+                .startTime(LocalTime.of(9, 0))
+                .endTime(LocalTime.of(10, 0))
+                .build();
+
+        PersonalScheduleItemDto item2 = PersonalScheduleItemDto.builder()
+                .eventId(2L)
+                .title("Spa Trần Thị B")
+                .passengerId(2L)
+                .passengerName("Trần Thị B")
+                .startTime(LocalTime.of(9, 30))
+                .endTime(LocalTime.of(10, 30))
+                .build();
+
+        List<ScheduleConflictDto> conflicts = scheduleService.detectScheduleConflicts(List.of(item1, item2), "cabin");
+        assertThat(conflicts).isEmpty();
+        assertThat(item1.getHasConflict()).isFalse();
+        assertThat(item2.getHasConflict()).isFalse();
+    }
 }
