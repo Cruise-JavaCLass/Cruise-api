@@ -31,6 +31,9 @@ class DynamicPricingEngineTest {
     @InjectMocks
     private DynamicPricingEngine pricingEngine;
 
+    /**
+     * Verifies that Happy Hour includes its end boundary and excludes times outside the window.
+     */
     @Test
     @DisplayName("isRuleActive returns true when current time is inside Happy Hour window")
     void testIsRuleActiveWithinWindow() {
@@ -53,6 +56,9 @@ class DynamicPricingEngineTest {
         assertThat(inactiveAt1901).isFalse();
     }
 
+    /**
+     * Verifies that an overnight Happy Hour spans midnight and excludes afternoon hours.
+     */
     @Test
     @DisplayName("isRuleActive handles overnight window spanning past midnight (e.g. 22:00 to 02:00)")
     void testIsRuleActiveOvernight() {
@@ -73,6 +79,9 @@ class DynamicPricingEngineTest {
         assertThat(inactiveAt1500).isFalse();
     }
 
+    /**
+     * Verifies that an eligible product receives the rule percentage discount.
+     */
     @Test
     @DisplayName("calculateItemDiscount applies percentage discount on eligible products")
     void testCalculateItemDiscountEligible() {
@@ -92,6 +101,9 @@ class DynamicPricingEngineTest {
         assertThat(discount).isEqualByComparingTo(new BigDecimal("3.00"));
     }
 
+    /**
+     * Verifies that an ineligible product receives no Happy Hour discount.
+     */
     @Test
     @DisplayName("calculateItemDiscount returns ZERO when product is not eligible for Happy Hour")
     void testCalculateItemDiscountNonEligible() {

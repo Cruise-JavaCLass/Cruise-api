@@ -44,6 +44,9 @@ class MaritimeTaxEngineTest {
     @InjectMocks
     private MaritimeTaxEngine taxEngine;
 
+    /**
+     * Verifies that standard and reduced VAT categories are duty-free in international waters.
+     */
     @Test
     @DisplayName("resolveTaxRate returns 0% when ship is in INTERNATIONAL_WATERS (Duty-Free)")
     void testTaxRateInternationalWatersDutyFree() {
@@ -54,6 +57,9 @@ class MaritimeTaxEngineTest {
         assertThat(rateReduced).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
+    /**
+     * Verifies standard, reduced, and zero-rated VAT percentages for sales in port.
+     */
     @Test
     @DisplayName("resolveTaxRate returns standard 10% VAT and reduced 5% VAT when IN_PORT")
     void testTaxRateInPort() {
@@ -66,6 +72,9 @@ class MaritimeTaxEngineTest {
         assertThat(rateZero).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
+    /**
+     * Verifies in-port cart subtotal, VAT, 18% gratuity, and grand total.
+     */
     @Test
     @DisplayName("calculateCartPricing computes subtotal, 18% gratuity, VAT and grand total in port")
     void testCalculateCartPricingInPort() {
@@ -111,6 +120,9 @@ class MaritimeTaxEngineTest {
         assertThat(response.getIsDutyFree()).isFalse();
     }
 
+    /**
+     * Verifies modifier pricing and gratuity with zero VAT in international waters.
+     */
     @Test
     @DisplayName("calculateCartPricing with modifiers and Duty-Free in INTERNATIONAL_WATERS")
     void testCalculateCartPricingDutyFreeWithModifiers() {

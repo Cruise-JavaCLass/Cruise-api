@@ -15,17 +15,35 @@ import java.util.Optional;
 @Repository
 public interface PosProductRepository extends JpaRepository<PosProduct, Long> {
 
+    /**
+     * Finds a product by its SKU.
+     */
     Optional<PosProduct> findBySku(String sku);
 
+    /**
+     * Finds a product by its barcode.
+     */
     Optional<PosProduct> findByBarcode(String barcode);
 
+    /**
+     * Finds barcode or SKU matches among outlet and shared products; null searches all outlets.
+     */
     @Query("SELECT p FROM PosProduct p WHERE (p.barcode = :code OR p.sku = :code) AND (:outletId IS NULL OR p.outletId IS NULL OR p.outletId = :outletId)")
     List<PosProduct> findByCodeAndOutlet(@Param("code") String code, @Param("outletId") Long outletId);
 
+    /**
+     * Reports whether a product with the specified SKU exists.
+     */
     boolean existsBySku(String sku);
 
+    /**
+     * Reports whether a product with the specified barcode exists.
+     */
     boolean existsByBarcode(String barcode);
 
+    /**
+     * Searches products with optional filters and pagination; outlet filtering includes shared products.
+     */
     @Query("SELECT p FROM PosProduct p WHERE " +
            "(:outletId IS NULL OR p.outletId IS NULL OR p.outletId = :outletId) AND " +
            "(:categoryId IS NULL OR p.categoryId = :categoryId) AND " +
@@ -39,6 +57,9 @@ public interface PosProductRepository extends JpaRepository<PosProduct, Long> {
             Pageable pageable
     );
 
+    /**
+     * Returns non-archived outlet and shared products by display order and name; null selects all outlets.
+     */
     @Query("SELECT p FROM PosProduct p WHERE " +
            "(:outletId IS NULL OR p.outletId IS NULL OR p.outletId = :outletId) AND " +
            "p.status <> 'ARCHIVED' ORDER BY p.displayOrder ASC, p.name ASC")

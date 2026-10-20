@@ -32,6 +32,9 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(ex.getMessage());
     }
 
+    /**
+     * Handles a duplicate-resource conflict using HTTP 409.
+     */
     @ExceptionHandler(DuplicateResourceException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public ApiResponse<Void> handleDuplicateResource(DuplicateResourceException ex) {

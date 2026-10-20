@@ -9,7 +9,16 @@ import java.util.Optional;
 
 @Repository
 public interface PosOutletRepository extends JpaRepository<PosOutlet, Long> {
+    /**
+     * Finds an outlet by its catalog code.
+     */
     Optional<PosOutlet> findByCode(String code);
+    /**
+     * Reports whether an outlet with the specified code exists.
+     */
     boolean existsByCode(String code);
+    /**
+     * Returns all active POS outlets.
+     */
     List<PosOutlet> findByIsActiveTrue();
 }

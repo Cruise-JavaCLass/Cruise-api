@@ -57,6 +57,9 @@ class PosCatalogServiceTest {
     @InjectMocks
     private PosCatalogService catalogService;
 
+    /**
+     * Verifies that active outlets are returned with their catalog fields.
+     */
     @Test
     @DisplayName("getOutlets returns active outlets list")
     void testGetOutlets() {
@@ -75,6 +78,9 @@ class PosCatalogServiceTest {
         assertThat(result.get(0).getCode()).isEqualTo("SKY-BAR");
     }
 
+    /**
+     * Verifies that root and child categories are assembled into a nested tree.
+     */
     @Test
     @DisplayName("getCategories builds hierarchical tree with root and child categories")
     void testGetCategoriesHierarchical() {
@@ -107,6 +113,9 @@ class PosCatalogServiceTest {
         assertThat(result.get(0).getChildren().get(0).getCode()).isEqualTo("COCKTAILS");
     }
 
+    /**
+     * Verifies that an existing SKU prevents the product from being saved.
+     */
     @Test
     @DisplayName("createProduct throws DuplicateResourceException when SKU already exists")
     void testCreateProductDuplicateSkuThrowsException() {
@@ -126,6 +135,9 @@ class PosCatalogServiceTest {
         verify(productRepository, never()).save(any());
     }
 
+    /**
+     * Verifies that an existing barcode prevents product creation.
+     */
     @Test
     @DisplayName("createProduct throws DuplicateResourceException when barcode already exists")
     void testCreateProductDuplicateBarcodeThrowsException() {
@@ -145,6 +157,9 @@ class PosCatalogServiceTest {
                 .hasMessageContaining("893850000001");
     }
 
+    /**
+     * Verifies successful product creation and the expected product details.
+     */
     @Test
     @DisplayName("createProduct saves product and its modifiers successfully")
     void testCreateProductSuccess() {
@@ -186,6 +201,9 @@ class PosCatalogServiceTest {
         verify(modifierRepository, times(1)).save(any(PosProductModifier.class));
     }
 
+    /**
+     * Verifies that marking a product out of stock disables availability and writes an audit entry.
+     */
     @Test
     @DisplayName("updateProductStatus marks product 86'd (out-of-stock) and records audit log")
     void testUpdateProductStatusEightySixed() {
@@ -217,6 +235,9 @@ class PosCatalogServiceTest {
         verify(auditLogRepository, times(1)).save(any());
     }
 
+    /**
+     * Verifies that restoring an out-of-stock product activates it and enables availability.
+     */
     @Test
     @DisplayName("updateProductStatus restores 86'd product back to ACTIVE")
     void testUpdateProductStatusRestore86ed() {

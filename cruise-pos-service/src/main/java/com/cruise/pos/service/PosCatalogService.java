@@ -37,6 +37,9 @@ public class PosCatalogService {
     private final com.cruise.pos.repository.PosHappyHourRuleRepository happyHourRuleRepository;
     private final com.cruise.pos.repository.PosCatalogAuditLogRepository auditLogRepository;
 
+    /**
+     * Returns the active POS outlets.
+     */
     @Transactional(readOnly = true)
     public List<OutletDto> getOutlets() {
         return outletRepository.findByIsActiveTrue().stream()
@@ -44,6 +47,9 @@ public class PosCatalogService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Returns an outlet by ID, or throws if it does not exist.
+     */
     @Transactional(readOnly = true)
     public OutletDto getOutletById(Long id) {
         return outletRepository.findById(id)
@@ -51,6 +57,9 @@ public class PosCatalogService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy điểm bán với ID: " + id));
     }
 
+    /**
+     * Returns the active category tree for the outlet, including shared categories; null selects all outlets.
+     */
     @Transactional(readOnly = true)
     public List<CategoryDto> getCategories(Long outletId) {
         List<PosCategory> all = categoryRepository.findCategoriesByOutlet(outletId);
@@ -70,6 +79,9 @@ public class PosCatalogService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Returns a page of products matching the optional outlet, category, status, and keyword filters.
+     */
     @Transactional(readOnly = true)
     public Page<ProductDto> getProducts(Long outletId, Long categoryId, ProductStatus status, String keyword, Pageable pageable) {
         Page<PosProduct> page = productRepository.searchProducts(outletId, categoryId, status, keyword, pageable);
@@ -79,6 +91,9 @@ public class PosCatalogService {
         return page.map(p -> toProductDto(p, categoryNames.get(p.getCategoryId())));
     }
 
+    /**
+     * Returns product details with outlet, category, and modifiers, or throws if the product is missing.
+     */
     @Transactional(readOnly = true)
     public ProductDetailDto getProductById(Long id) {
         PosProduct product = productRepository.findById(id)
@@ -97,6 +112,9 @@ public class PosCatalogService {
         return toProductDetailDto(product, outletName, categoryName, modifiers);
     }
 
+    /**
+     * Creates a product and its modifiers, rejecting an existing SKU or nonblank barcode.
+     */
     @Transactional
     public ProductDetailDto createProduct(CreateProductRequest req) {
         if (productRepository.existsBySku(req.getSku())) {
@@ -149,6 +167,9 @@ public class PosCatalogService {
         return getProductById(saved.getId());
     }
 
+    /**
+     * Applies supplied product fields, replaces modifiers when provided, and records an audit entry.
+     */
     @Transactional
     public ProductDetailDto updateProduct(Long id, UpdateProductRequest req) {
         PosProduct product = productRepository.findById(id)
@@ -215,6 +236,9 @@ public class PosCatalogService {
         return getProductById(product.getId());
     }
 
+    /**
+     * Applies status and availability changes, handles out-of-stock flags, and records an audit entry.
+     */
     @Transactional
     public ProductDetailDto updateProductStatus(Long id, ProductStatusUpdateRequest req) {
         PosProduct product = productRepository.findById(id)
@@ -271,6 +295,9 @@ public class PosCatalogService {
         return getProductById(product.getId());
     }
 
+    /**
+     * Maps an outlet and its timestamps to a catalog response DTO.
+     */
     private OutletDto toOutletDto(PosOutlet o) {
         return OutletDto.builder()
                 .id(o.getId())
@@ -287,6 +314,9 @@ public class PosCatalogService {
                 .build();
     }
 
+    /**
+     * Recursively maps a category and its descendants using the supplied parent-to-children index.
+     */
     private CategoryDto toCategoryDtoWithChildren(PosCategory c, Map<Long, List<PosCategory>> childMap) {
         List<CategoryDto> children = childMap.getOrDefault(c.getId(), Collections.emptyList()).stream()
                 .map(child -> toCategoryDtoWithChildren(child, childMap))
@@ -309,6 +339,9 @@ public class PosCatalogService {
                 .build();
     }
 
+    /**
+     * Maps a product to a catalog listing DTO with its resolved category name.
+     */
     private ProductDto toProductDto(PosProduct p, String categoryName) {
         return ProductDto.builder()
                 .id(p.getId())
@@ -335,6 +368,9 @@ public class PosCatalogService {
                 .build();
     }
 
+    /**
+     * Maps a product to a detail DTO with resolved outlet and category names and modifiers.
+     */
     private ProductDetailDto toProductDetailDto(PosProduct p, String outletName, String categoryName, List<ProductModifierDto> modifiers) {
         return ProductDetailDto.builder()
                 .id(p.getId())
@@ -363,6 +399,9 @@ public class PosCatalogService {
                 .build();
     }
 
+    /**
+     * Maps a product modifier to its catalog response DTO.
+     */
     private ProductModifierDto toModifierDto(PosProductModifier m) {
         return ProductModifierDto.builder()
                 .id(m.getId())
@@ -377,6 +416,9 @@ public class PosCatalogService {
                 .build();
     }
 
+    /**
+     * Seeds sample outlets, categories, products, modifiers, and a Happy Hour rule if no outlets exist.
+     */
     @Transactional
     public void seedDefaultCatalog() {
         if (outletRepository.count() > 0) {

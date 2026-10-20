@@ -31,21 +31,33 @@ public class PosCatalogController {
     private final MaritimeTaxEngine maritimeTaxEngine;
     private final PosOfflineSyncService offlineSyncService;
 
+    /**
+     * Returns the active POS outlets in an API response.
+     */
     @GetMapping("/outlets")
     public ApiResponse<List<OutletDto>> getOutlets() {
         return ApiResponse.ok(catalogService.getOutlets());
     }
 
+    /**
+     * Returns the requested outlet in an API response.
+     */
     @GetMapping("/outlets/{id}")
     public ApiResponse<OutletDto> getOutletById(@PathVariable Long id) {
         return ApiResponse.ok(catalogService.getOutletById(id));
     }
 
+    /**
+     * Returns the active category tree, optionally filtered by outlet and including shared categories.
+     */
     @GetMapping("/categories")
     public ApiResponse<List<CategoryDto>> getCategories(@RequestParam(required = false) Long outletId) {
         return ApiResponse.ok(catalogService.getCategories(outletId));
     }
 
+    /**
+     * Returns products matching the optional filters with the requested pagination and sorting.
+     */
     @GetMapping("/products")
     public ApiResponse<Page<ProductDto>> getProducts(
             @RequestParam(required = false) Long outletId,
@@ -62,17 +74,26 @@ public class PosCatalogController {
         return ApiResponse.ok(catalogService.getProducts(outletId, categoryId, status, keyword, pageable));
     }
 
+    /**
+     * Returns the requested product with outlet, category, and modifier details.
+     */
     @GetMapping("/products/{id}")
     public ApiResponse<ProductDetailDto> getProductById(@PathVariable Long id) {
         return ApiResponse.ok(catalogService.getProductById(id));
     }
 
+    /**
+     * Creates a validated product and returns its details with HTTP 201.
+     */
     @PostMapping("/products")
     public ResponseEntity<ApiResponse<ProductDetailDto>> createProduct(@Valid @RequestBody CreateProductRequest req) {
         ProductDetailDto created = catalogService.createProduct(req);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok("Tạo sản phẩm thành công", created));
     }
 
+    /**
+     * Updates the requested product with validated fields and returns its details.
+     */
     @PutMapping("/products/{id}")
     public ApiResponse<ProductDetailDto> updateProduct(
             @PathVariable Long id,
@@ -82,6 +103,9 @@ public class PosCatalogController {
         return ApiResponse.ok("Cập nhật thông tin sản phẩm thành công", updated);
     }
 
+    /**
+     * Updates product status and availability, including out-of-stock flags.
+     */
     @PatchMapping("/products/{id}/status")
     public ApiResponse<ProductDetailDto> updateProductStatus(
             @PathVariable Long id,
@@ -91,6 +115,9 @@ public class PosCatalogController {
         return ApiResponse.ok("Cập nhật trạng thái sản phẩm thành công", updated);
     }
 
+    /**
+     * Looks up a barcode or SKU, optionally by outlet, using the lookup service cache.
+     */
     @GetMapping("/products/lookup")
     public ApiResponse<ProductDetailDto> lookupProduct(
             @RequestParam String code,
@@ -100,6 +127,9 @@ public class PosCatalogController {
         return ApiResponse.ok(product);
     }
 
+    /**
+     * Returns cart totals with modifiers, discounts, maritime tax, and service charges.
+     */
     @PostMapping("/pricing/calculate")
     public ApiResponse<CartPriceCalculationResponse> calculatePricing(
             @Valid @RequestBody CartPriceCalculationRequest req
@@ -108,17 +138,26 @@ public class PosCatalogController {
         return ApiResponse.ok(response);
     }
 
+    /**
+     * Returns active Happy Hour rules for the outlet, including shared rules; null selects all outlets.
+     */
     @GetMapping("/pricing/happy-hour-rules")
     public ApiResponse<List<HappyHourRuleDto>> getHappyHourRules(@RequestParam(required = false) Long outletId) {
         return ApiResponse.ok(dynamicPricingEngine.getRulesByOutlet(outletId));
     }
 
+    /**
+     * Creates a validated Happy Hour rule and returns it with HTTP 201.
+     */
     @PostMapping("/pricing/happy-hour-rules")
     public ResponseEntity<ApiResponse<HappyHourRuleDto>> createHappyHourRule(@Valid @RequestBody HappyHourRuleDto req) {
         HappyHourRuleDto created = dynamicPricingEngine.createRule(req);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok("Tạo quy tắc Happy Hour thành công", created));
     }
 
+    /**
+     * Applies supplied fields to an existing Happy Hour rule and returns the updated rule.
+     */
     @PutMapping("/pricing/happy-hour-rules/{id}")
     public ApiResponse<HappyHourRuleDto> updateHappyHourRule(
             @PathVariable Long id,
@@ -128,12 +167,18 @@ public class PosCatalogController {
         return ApiResponse.ok("Cập nhật quy tắc Happy Hour thành công", updated);
     }
 
+    /**
+     * Deletes the requested Happy Hour rule and returns a success response.
+     */
     @DeleteMapping("/pricing/happy-hour-rules/{id}")
     public ApiResponse<Void> deleteHappyHourRule(@PathVariable Long id) {
         dynamicPricingEngine.deleteRule(id);
         return ApiResponse.ok("Xóa quy tắc Happy Hour thành công", null);
     }
 
+    /**
+     * Exports the offline catalog with an ETag, or returns HTTP 304 when If-None-Match matches.
+     */
     @GetMapping("/catalog/offline-package")
     public ResponseEntity<ApiResponse<PosOfflineCatalogPackageDto>> getOfflinePackage(
             @RequestParam(required = false) Long outletId,
@@ -153,6 +198,9 @@ public class PosCatalogController {
                 .body(ApiResponse.ok("Xuất gói catalog offline thành công", pkg));
     }
 
+    /**
+     * Imports a validated supplier manifest and returns success counts and per-item errors.
+     */
     @PostMapping("/catalog/bulk-import")
     public ApiResponse<BulkImportResponse> bulkImportProducts(
             @Valid @RequestBody BulkCatalogImportRequest req
@@ -161,6 +209,9 @@ public class PosCatalogController {
         return ApiResponse.ok("Nhập dữ liệu danh mục thành công", response);
     }
 
+    /**
+     * Returns a page of catalog audit entries ordered from newest to oldest.
+     */
     @GetMapping("/catalog/audit-logs")
     public ApiResponse<Page<com.cruise.pos.entity.PosCatalogAuditLog>> getCatalogAuditLogs(
             @RequestParam(defaultValue = "0") int page,

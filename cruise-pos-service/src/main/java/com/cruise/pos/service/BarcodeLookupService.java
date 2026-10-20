@@ -36,16 +36,28 @@ public class BarcodeLookupService {
     private static final long CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
     private record CacheEntry(ProductDetailDto dto, long timestamp) {
+        /**
+         * Reports whether the cached lookup result is older than the five-minute TTL.
+         */
         boolean isExpired() {
             return System.currentTimeMillis() - timestamp > CACHE_TTL_MS;
         }
     }
 
+    /**
+     * Clears all cached barcode and SKU lookup results.
+     */
     public void evictCache() {
         lookupCache.clear();
         log.info("Barcode lookup cache cleared.");
     }
 
+    /**
+     * Returns cached or loaded product details for a trimmed barcode or SKU.
+     *
+     * Outlet lookups include shared products and fall back to searching all outlets.
+     * Results are cached for five minutes; blank or unknown codes raise ResourceNotFoundException.
+     */
     @Transactional(readOnly = true)
     public ProductDetailDto lookupProductByBarcodeOrSku(String code, Long outletId) {
         if (code == null || code.trim().isEmpty()) {
@@ -119,6 +131,9 @@ public class BarcodeLookupService {
         return dto;
     }
 
+    /**
+     * Maps a product modifier to its catalog response DTO.
+     */
     private ProductModifierDto toModifierDto(PosProductModifier m) {
         return ProductModifierDto.builder()
                 .id(m.getId())

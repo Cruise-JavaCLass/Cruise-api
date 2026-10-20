@@ -18,6 +18,9 @@ public class PosFolioSeeder implements ApplicationRunner {
     private final PosFolioService folioService;
     private final PosCatalogService catalogService;
 
+    /**
+     * Seeds default folios and the POS catalog when the dev or test profile is active.
+     */
     @Override
     public void run(ApplicationArguments args) {
         log.info("Running PosFolioSeeder for dev/test environment...");

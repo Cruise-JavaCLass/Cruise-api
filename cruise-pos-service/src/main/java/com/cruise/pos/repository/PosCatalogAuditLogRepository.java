@@ -10,6 +10,12 @@ import java.util.List;
 
 @Repository
 public interface PosCatalogAuditLogRepository extends JpaRepository<PosCatalogAuditLog, Long> {
+    /**
+     * Returns audit entries for a SKU ordered from newest to oldest.
+     */
     List<PosCatalogAuditLog> findBySkuOrderByCreatedAtDesc(String sku);
+    /**
+     * Returns a page of audit entries ordered from newest to oldest.
+     */
     Page<PosCatalogAuditLog> findAllByOrderByCreatedAtDesc(Pageable pageable);
 }

@@ -32,6 +32,9 @@ public class PosOfflineSyncService {
     private final PosProductModifierRepository modifierRepository;
     private final PosCatalogAuditLogRepository auditLogRepository;
 
+    /**
+     * Builds an offline package of outlets, scoped categories, non-archived products, and active pricing rules.
+     */
     @Transactional(readOnly = true)
     public PosOfflineCatalogPackageDto exportOfflinePackage(Long outletId) {
         List<OutletDto> outlets = catalogService.getOutlets();
@@ -61,6 +64,11 @@ public class PosOfflineSyncService {
                 .build();
     }
 
+    /**
+     * Builds a quoted ETag from the outlet, product count, and latest product update across all outlets.
+     *
+     * Uses the first eight bytes of a SHA-256 digest, falling back to the current timestamp on failure.
+     */
     public String generateEtag(Long outletId, int productCount) {
         try {
             long outletKey = outletId != null ? outletId : 0L;
@@ -85,6 +93,9 @@ public class PosOfflineSyncService {
         }
     }
 
+    /**
+     * Imports products by SKU, creates missing outlets and categories, and reports per-item errors.
+     */
     @Transactional
     public BulkImportResponse bulkImportProducts(BulkCatalogImportRequest request) {
         int total = request.getProducts().size();
@@ -231,6 +242,9 @@ public class PosOfflineSyncService {
                 .build();
     }
 
+    /**
+     * Returns a page of catalog audit entries ordered from newest to oldest.
+     */
     @Transactional(readOnly = true)
     public Page<PosCatalogAuditLog> getAuditLogs(Pageable pageable) {
         return auditLogRepository.findAllByOrderByCreatedAtDesc(pageable);

@@ -11,11 +11,26 @@ import java.util.Optional;
 
 @Repository
 public interface PosCategoryRepository extends JpaRepository<PosCategory, Long> {
+    /**
+     * Finds a category by its catalog code.
+     */
     Optional<PosCategory> findByCode(String code);
+    /**
+     * Returns categories assigned to the outlet in ascending display order.
+     */
     List<PosCategory> findByOutletIdOrderByDisplayOrderAsc(Long outletId);
+    /**
+     * Returns the direct children of the specified category.
+     */
     List<PosCategory> findByParentId(Long parentId);
+    /**
+     * Returns active categories in ascending display order.
+     */
     List<PosCategory> findByIsActiveTrueOrderByDisplayOrderAsc();
 
+    /**
+     * Returns active outlet and shared categories in display order; null selects all outlets.
+     */
     @Query("SELECT c FROM PosCategory c WHERE (:outletId IS NULL OR c.outletId IS NULL OR c.outletId = :outletId) AND c.isActive = true ORDER BY c.displayOrder ASC")
     List<PosCategory> findCategoriesByOutlet(@Param("outletId") Long outletId);
 }

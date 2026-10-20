@@ -52,6 +52,9 @@ class PosOfflinePackageIntegrationTest {
     @MockitoBean
     private PosOfflineSyncService offlineSyncService;
 
+    /**
+     * Verifies that offline export returns the package and its ETag header.
+     */
     @Test
     @DisplayName("GET /api/pos/catalog/offline-package returns full package with ETag header (200 OK)")
     void testGetOfflinePackageSuccess() throws Exception {
@@ -75,6 +78,9 @@ class PosOfflinePackageIntegrationTest {
                 .andExpect(jsonPath("$.data.etag").value("\"abc12345\""));
     }
 
+    /**
+     * Verifies HTTP 304 and the ETag header when the request ETag matches the export.
+     */
     @Test
     @DisplayName("GET /api/pos/catalog/offline-package returns 304 Not Modified when If-None-Match matches ETag")
     void testGetOfflinePackageNotModified() throws Exception {
@@ -93,6 +99,9 @@ class PosOfflinePackageIntegrationTest {
                 .andExpect(header().string("ETag", "\"abc12345\""));
     }
 
+    /**
+     * Verifies that the bulk-import endpoint returns the manifest import counts.
+     */
     @Test
     @DisplayName("POST /api/pos/catalog/bulk-import ingests supplier manifest products (200 OK)")
     void testBulkImportProducts() throws Exception {
@@ -126,6 +135,9 @@ class PosOfflinePackageIntegrationTest {
                 .andExpect(jsonPath("$.data.successCount").value(1));
     }
 
+    /**
+     * Verifies that the audit endpoint returns the expected catalog action.
+     */
     @Test
     @DisplayName("GET /api/pos/catalog/audit-logs returns audit log entries (200 OK)")
     void testGetCatalogAuditLogs() throws Exception {

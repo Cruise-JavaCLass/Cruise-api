@@ -56,6 +56,9 @@ class PosCatalogControllerIntegrationTest {
     @MockitoBean
     private PosOfflineSyncService offlineSyncService;
 
+    /**
+     * Verifies that active outlets are returned with their catalog fields.
+     */
     @Test
     @DisplayName("GET /api/pos/outlets returns list of active outlets (200 OK)")
     void testGetOutlets() throws Exception {
@@ -76,6 +79,9 @@ class PosCatalogControllerIntegrationTest {
                 .andExpect(jsonPath("$.data[0].name").value("Sky Bar & Lounge"));
     }
 
+    /**
+     * Verifies that the category endpoint returns the requested outlet category tree.
+     */
     @Test
     @DisplayName("GET /api/pos/categories returns category tree (200 OK)")
     void testGetCategories() throws Exception {
@@ -95,6 +101,9 @@ class PosCatalogControllerIntegrationTest {
                 .andExpect(jsonPath("$.data[0].code").value("CAT-COCKTAILS"));
     }
 
+    /**
+     * Verifies that the product endpoint returns a page containing the expected SKU.
+     */
     @Test
     @DisplayName("GET /api/pos/products returns paginated products list (200 OK)")
     void testGetProductsPaginated() throws Exception {
@@ -115,6 +124,9 @@ class PosCatalogControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.content[0].sku").value("BEV-MOJ-001"));
     }
 
+    /**
+     * Verifies successful product creation and the expected product details.
+     */
     @Test
     @DisplayName("POST /api/pos/products creates new product (201 Created)")
     void testCreateProductSuccess() throws Exception {
@@ -146,6 +158,9 @@ class PosCatalogControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.sku").value("NEW-GIN-001"));
     }
 
+    /**
+     * Verifies that a duplicate SKU produces HTTP 409 with the service error message.
+     */
     @Test
     @DisplayName("POST /api/pos/products returns 409 Conflict when SKU already exists")
     void testCreateProductDuplicateSkuConflict() throws Exception {
@@ -167,6 +182,9 @@ class PosCatalogControllerIntegrationTest {
                 .andExpect(jsonPath("$.message").value("Mã SKU 'DUP-SKU-999' đã tồn tại trong hệ thống"));
     }
 
+    /**
+     * Verifies that marking a product out of stock returns its updated status and flag.
+     */
     @Test
     @DisplayName("PATCH /api/pos/products/{id}/status toggles 86'd status (200 OK)")
     void testPatchProductStatus86ed() throws Exception {
@@ -196,6 +214,9 @@ class PosCatalogControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.status").value("EIGHTY_SIXED"));
     }
 
+    /**
+     * Verifies that the barcode endpoint returns the matched barcode and SKU.
+     */
     @Test
     @DisplayName("GET /api/pos/products/lookup finds product fast by barcode (200 OK)")
     void testLookupProductByBarcode() throws Exception {
@@ -216,6 +237,9 @@ class PosCatalogControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.sku").value("BEV-MOJ-001"));
     }
 
+    /**
+     * Verifies that the pricing endpoint returns the calculated subtotal and grand total.
+     */
     @Test
     @DisplayName("POST /api/pos/pricing/calculate calculates cart total with maritime tax & gratuity (200 OK)")
     void testCalculateCartPricing() throws Exception {

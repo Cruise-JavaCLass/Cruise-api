@@ -48,11 +48,17 @@ class BarcodeLookupServiceTest {
     @InjectMocks
     private BarcodeLookupService barcodeLookupService;
 
+    /**
+     * Clears cached barcode lookups before each test.
+     */
     @BeforeEach
     void setUp() {
         barcodeLookupService.evictCache();
     }
 
+    /**
+     * Verifies that repeated barcode lookups return the product without a second repository lookup.
+     */
     @Test
     @DisplayName("lookupProductByBarcodeOrSku returns product and caches result for subsequent fast calls (< 50ms)")
     void testLookupProductSuccessAndCacheHit() {
@@ -86,6 +92,9 @@ class BarcodeLookupServiceTest {
         verify(productRepository, times(1)).findByCodeAndOutlet("893850123401", 10L);
     }
 
+    /**
+     * Verifies that an unknown barcode raises a not-found error after the fallback lookup.
+     */
     @Test
     @DisplayName("lookupProductByBarcodeOrSku throws ResourceNotFoundException when barcode is unknown")
     void testLookupUnknownBarcodeThrowsNotFound() {

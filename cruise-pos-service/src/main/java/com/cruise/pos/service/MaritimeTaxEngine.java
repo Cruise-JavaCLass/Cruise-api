@@ -39,6 +39,12 @@ public class MaritimeTaxEngine {
 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
+    /**
+     * Calculates cart totals with product modifiers, discounts, location-based VAT, and 18% gratuity.
+     *
+     * Taxes and gratuity use discounted amounts and HALF_EVEN rounding to two decimals.
+     * A valid simulated time overrides the current time; rule matching uses the current day.
+     */
     @Transactional(readOnly = true)
     public CartPriceCalculationResponse calculateCartPricing(CartPriceCalculationRequest request) {
         LocalTime evalTime = LocalTime.now();
@@ -158,6 +164,9 @@ public class MaritimeTaxEngine {
                 .build();
     }
 
+    /**
+     * Returns zero for duty-free sales; otherwise returns the category VAT rate, defaulting null to 10%.
+     */
     public BigDecimal resolveTaxRate(TaxCategory category, boolean isDutyFree) {
         if (isDutyFree) {
             return DUTY_FREE_RATE;

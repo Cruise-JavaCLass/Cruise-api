@@ -8,6 +8,12 @@ import java.util.List;
 
 @Repository
 public interface PosProductModifierRepository extends JpaRepository<PosProductModifier, Long> {
+    /**
+     * Returns modifiers for the product in ascending display order.
+     */
     List<PosProductModifier> findByProductIdOrderByDisplayOrderAsc(Long productId);
+    /**
+     * Deletes all modifiers belonging to the specified product.
+     */
     void deleteByProductId(Long productId);
 }
