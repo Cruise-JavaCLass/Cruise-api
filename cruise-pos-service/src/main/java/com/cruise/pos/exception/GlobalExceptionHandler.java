@@ -35,6 +35,9 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DuplicateResourceException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public ApiResponse<Void> handleDuplicateResource(DuplicateResourceException ex) {
+    @ExceptionHandler(IllegalStateException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResponse<Void> handleConflict(IllegalStateException ex) {
         return ApiResponse.error(ex.getMessage());
     }
 
@@ -60,7 +63,11 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(msg);
     }
 
-    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
+    @ExceptionHandler({
+            HttpMessageNotReadableException.class,
+            MethodArgumentTypeMismatchException.class,
+            IllegalArgumentException.class
+    })
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleBadRequest(Exception ex) {
         log.warn("Invalid client request format: {}", ex.getMessage());
