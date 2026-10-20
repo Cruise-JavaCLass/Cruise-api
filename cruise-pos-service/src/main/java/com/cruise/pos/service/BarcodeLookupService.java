@@ -6,6 +6,7 @@ import com.cruise.pos.entity.PosCategory;
 import com.cruise.pos.entity.PosOutlet;
 import com.cruise.pos.entity.PosProduct;
 import com.cruise.pos.entity.PosProductModifier;
+import com.cruise.pos.enums.ProductStatus;
 import com.cruise.pos.exception.ResourceNotFoundException;
 import com.cruise.pos.repository.PosCategoryRepository;
 import com.cruise.pos.repository.PosOutletRepository;
@@ -16,9 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,8 +30,16 @@ public class BarcodeLookupService {
     private final PosOutletRepository outletRepository;
     private final PosCategoryRepository categoryRepository;
 
-    // High performance in-memory cache for ultra-fast barcode scanner response (< 50ms)
-    private final Map<String, CacheEntry> lookupCache = new ConcurrentHashMap<>();
+    // Bounded high performance in-memory cache for ultra-fast barcode scanner response (< 50ms)
+    private static final int MAX_CACHE_ENTRIES = 1000;
+    private final Map<String, CacheEntry> lookupCache = Collections.synchronizedMap(
+            new LinkedHashMap<>(128, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, CacheEntry> eldest) {
+                    return size() > MAX_CACHE_ENTRIES;
+                }
+            }
+    );
     private static final long CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
     private record CacheEntry(ProductDetailDto dto, long timestamp) {
@@ -41,6 +48,26 @@ public class BarcodeLookupService {
          */
         boolean isExpired() {
             return System.currentTimeMillis() - timestamp > CACHE_TTL_MS;
+        }
+    }
+
+    /**
+     * Evicts specific product entries from the barcode lookup cache.
+     */
+    public void evictProduct(String sku, String barcode, Long outletId) {
+        if (sku != null && !sku.isBlank()) {
+            String trimmedSku = sku.trim();
+            lookupCache.remove("ALL:" + trimmedSku);
+            if (outletId != null) {
+                lookupCache.remove(outletId + ":" + trimmedSku);
+            }
+        }
+        if (barcode != null && !barcode.isBlank()) {
+            String trimmedBarcode = barcode.trim();
+            lookupCache.remove("ALL:" + trimmedBarcode);
+            if (outletId != null) {
+                lookupCache.remove(outletId + ":" + trimmedBarcode);
+            }
         }
     }
 
@@ -81,11 +108,20 @@ public class BarcodeLookupService {
             matches = productRepository.findByCodeAndOutlet(trimmedCode, null);
         }
 
-        if (matches.isEmpty()) {
+        List<PosProduct> eligible = matches.stream()
+                .filter(p -> p.getStatus() != ProductStatus.ARCHIVED)
+                .sorted(Comparator
+                        .comparing((PosProduct p) -> (outletId != null && outletId.equals(p.getOutletId())) ? 0 : 1)
+                        .thenComparing((PosProduct p) -> trimmedCode.equalsIgnoreCase(p.getBarcode()) ? 0 : 1)
+                        .thenComparing(PosProduct::getId, Comparator.nullsLast(Comparator.naturalOrder()))
+                )
+                .toList();
+
+        if (eligible.isEmpty()) {
             throw new ResourceNotFoundException("Không tìm thấy sản phẩm với mã barcode/SKU: " + trimmedCode);
         }
 
-        PosProduct product = matches.get(0);
+        PosProduct product = eligible.get(0);
 
         String outletName = product.getOutletId() != null
                 ? outletRepository.findById(product.getOutletId()).map(PosOutlet::getName).orElse(null)

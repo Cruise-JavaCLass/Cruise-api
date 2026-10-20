@@ -8,6 +8,7 @@ import com.cruise.pos.service.BarcodeLookupService;
 import com.cruise.pos.service.DynamicPricingEngine;
 import com.cruise.pos.service.MaritimeTaxEngine;
 import com.cruise.pos.service.PosOfflineSyncService;
+import com.cruise.pos.exception.BusinessRuleException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -19,11 +20,18 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/pos")
 @RequiredArgsConstructor
 public class PosCatalogController {
+
+    private static final Set<String> SUPPORTED_SORT_FIELDS = Set.of(
+            "id", "name", "sku", "barcode", "basePrice", "costPrice",
+            "displayOrder", "createdAt", "updatedAt", "status", "stockQuantity",
+            "isAvailable", "is86ed"
+    );
 
     private final PosCatalogService catalogService;
     private final BarcodeLookupService barcodeLookupService;
@@ -69,8 +77,22 @@ public class PosCatalogController {
             @RequestParam(defaultValue = "displayOrder") String sortBy,
             @RequestParam(defaultValue = "ASC") String direction
     ) {
-        Sort sort = Sort.by(Sort.Direction.fromString(direction), sortBy);
-        Pageable pageable = PageRequest.of(page, size, sort);
+        Sort.Direction sortDirection;
+        try {
+            sortDirection = Sort.Direction.fromString(direction);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessRuleException("Hướng sắp xếp không hợp lệ: " + direction + ". Chỉ chấp nhận ASC hoặc DESC");
+        }
+
+        if (!SUPPORTED_SORT_FIELDS.contains(sortBy)) {
+            throw new BusinessRuleException("Trường sắp xếp không hợp lệ: " + sortBy);
+        }
+
+        int pageSize = Math.min(Math.max(1, size), 200);
+        int pageNumber = Math.max(0, page);
+
+        Sort sort = Sort.by(sortDirection, sortBy);
+        Pageable pageable = PageRequest.of(pageNumber, pageSize, sort);
         return ApiResponse.ok(catalogService.getProducts(outletId, categoryId, status, keyword, pageable));
     }
 

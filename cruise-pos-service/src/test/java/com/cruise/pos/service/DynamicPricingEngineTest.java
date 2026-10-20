@@ -119,4 +119,57 @@ class DynamicPricingEngineTest {
         BigDecimal discount = pricingEngine.calculateItemDiscount(product, new BigDecimal("45.00"), rule);
         assertThat(discount).isEqualByComparingTo(BigDecimal.ZERO);
     }
+
+    @Test
+    @DisplayName("isRuleActive matches only exact time when start equals end")
+    void testIsRuleActiveEqualStartEndMatchesExactTimeOnly() {
+        PosHappyHourRule rule = PosHappyHourRule.builder()
+                .startTime("17:00")
+                .endTime("17:00")
+                .discountPercent(new BigDecimal("15.00"))
+                .daysOfWeek("ALL")
+                .isActive(true)
+                .build();
+
+        boolean activeAt1700 = pricingEngine.isRuleActive(rule, LocalTime.of(17, 0), DayOfWeek.MONDAY);
+        boolean activeAt1701 = pricingEngine.isRuleActive(rule, LocalTime.of(17, 1), DayOfWeek.MONDAY);
+        boolean activeAt1659 = pricingEngine.isRuleActive(rule, LocalTime.of(16, 59), DayOfWeek.MONDAY);
+        boolean activeAt1200 = pricingEngine.isRuleActive(rule, LocalTime.of(12, 0), DayOfWeek.MONDAY);
+
+        assertThat(activeAt1700).isTrue();
+        assertThat(activeAt1701).isFalse();
+        assertThat(activeAt1659).isFalse();
+        assertThat(activeAt1200).isFalse();
+    }
+
+    @Test
+    @DisplayName("calculateItemDiscount returns zero when rule is null even if product has discount percent")
+    void testCalculateItemDiscountNullRuleReturnsZero() {
+        PosProduct product = PosProduct.builder()
+                .sku("BEV-WINE-01")
+                .happyHourEligible(true)
+                .happyHourDiscountPercent(new BigDecimal("25.00"))
+                .build();
+
+        BigDecimal discount = pricingEngine.calculateItemDiscount(product, new BigDecimal("20.00"), null);
+        assertThat(discount).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    @DisplayName("calculateItemDiscount uses rule discount percent over product level percent")
+    void testCalculateItemDiscountRulePrecedence() {
+        PosProduct product = PosProduct.builder()
+                .sku("BEV-WINE-01")
+                .happyHourEligible(true)
+                .happyHourDiscountPercent(new BigDecimal("10.00"))
+                .build();
+
+        PosHappyHourRule rule = PosHappyHourRule.builder()
+                .discountPercent(new BigDecimal("20.00"))
+                .build();
+
+        BigDecimal discount = pricingEngine.calculateItemDiscount(product, new BigDecimal("50.00"), rule);
+        // 50.00 * 20% = 10.00
+        assertThat(discount).isEqualByComparingTo(new BigDecimal("10.00"));
+    }
 }

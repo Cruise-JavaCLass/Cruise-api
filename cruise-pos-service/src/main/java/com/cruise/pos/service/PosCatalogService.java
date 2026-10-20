@@ -36,6 +36,7 @@ public class PosCatalogService {
     private final PosProductModifierRepository modifierRepository;
     private final com.cruise.pos.repository.PosHappyHourRuleRepository happyHourRuleRepository;
     private final com.cruise.pos.repository.PosCatalogAuditLogRepository auditLogRepository;
+    private final BarcodeLookupService barcodeLookupService;
 
     /**
      * Returns the active POS outlets.
@@ -144,7 +145,12 @@ public class PosCatalogService {
                 .happyHourDiscountPercent(req.getHappyHourDiscountPercent() != null ? req.getHappyHourDiscountPercent() : BigDecimal.ZERO)
                 .build();
 
-        PosProduct saved = productRepository.save(product);
+        PosProduct saved;
+        try {
+            saved = productRepository.save(product);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            throw new DuplicateResourceException("Mã SKU '" + req.getSku() + "' hoặc mã vạch đã tồn tại trong hệ thống");
+        }
 
         List<ProductModifierDto> savedModifiers = new ArrayList<>();
         if (req.getModifiers() != null && !req.getModifiers().isEmpty()) {
@@ -174,6 +180,8 @@ public class PosCatalogService {
     public ProductDetailDto updateProduct(Long id, UpdateProductRequest req) {
         PosProduct product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sản phẩm với ID: " + id));
+
+        BigDecimal oldPrice = product.getBasePrice();
 
         if (req.getBarcode() != null && !req.getBarcode().isBlank() && !req.getBarcode().equals(product.getBarcode())) {
             if (productRepository.existsByBarcode(req.getBarcode())) {
@@ -211,26 +219,35 @@ public class PosCatalogService {
             for (ProductModifierDto mDto : req.getModifiers()) {
                 PosProductModifier mod = PosProductModifier.builder()
                         .productId(product.getId())
-                        .name(mDto.getName())
-                        .priceDelta(mDto.getPriceDelta() != null ? mDto.getPriceDelta() : BigDecimal.ZERO)
-                        .isRequired(Boolean.TRUE.equals(mDto.getIsRequired()))
-                        .minSelection(mDto.getMinSelection() != null ? mDto.getMinSelection() : 0)
-                        .maxSelection(mDto.getMaxSelection() != null ? mDto.getMaxSelection() : 1)
-                        .displayOrder(mDto.getDisplayOrder() != null ? mDto.getDisplayOrder() : 0)
-                        .status("ACTIVE")
-                        .build();
+                .name(mDto.getName())
+                .priceDelta(mDto.getPriceDelta() != null ? mDto.getPriceDelta() : BigDecimal.ZERO)
+                .isRequired(Boolean.TRUE.equals(mDto.getIsRequired()))
+                .minSelection(mDto.getMinSelection() != null ? mDto.getMinSelection() : 0)
+                .maxSelection(mDto.getMaxSelection() != null ? mDto.getMaxSelection() : 1)
+                .displayOrder(mDto.getDisplayOrder() != null ? mDto.getDisplayOrder() : 0)
+                .status("ACTIVE")
+                .build();
                 modifierRepository.save(mod);
             }
         }
 
+        boolean priceChanged = req.getBasePrice() != null && (oldPrice == null || req.getBasePrice().compareTo(oldPrice) != 0);
+        String action = priceChanged ? "PRICE_UPDATE" : "PRODUCT_UPDATE";
+        String oldValue = priceChanged ? (oldPrice != null ? oldPrice.toString() : null) : null;
+        String newValue = priceChanged ? (updated.getBasePrice() != null ? updated.getBasePrice().toString() : null) : "Product updated";
+        String performedBy = resolveCurrentPrincipal();
+
         auditLogRepository.save(com.cruise.pos.entity.PosCatalogAuditLog.builder()
                 .productId(updated.getId())
                 .sku(updated.getSku())
-                .action("PRICE_UPDATE")
-                .newValue("Base price: " + updated.getBasePrice())
-                .performedBy("SUPERVISOR")
-                .reason("Product information and price update")
+                .action(action)
+                .oldValue(oldValue)
+                .newValue(newValue)
+                .performedBy(performedBy)
+                .reason(priceChanged ? "Base price updated" : "Product information and price update")
                 .build());
+
+        barcodeLookupService.evictProduct(updated.getSku(), updated.getBarcode(), updated.getOutletId());
 
         log.info("Updated POS product: ID={}, Name={}", product.getId(), product.getName());
         return getProductById(product.getId());
@@ -287,13 +304,44 @@ public class PosCatalogService {
                 .sku(saved.getSku())
                 .action(action)
                 .newValue(saved.getStatus().name())
-                .performedBy(req.getStaffId() != null ? req.getStaffId() : "BAR_STAFF")
+                .performedBy(req.getStaffId() != null ? req.getStaffId() : resolveCurrentPrincipal())
                 .reason(req.getReason())
                 .details(details)
                 .build());
 
+        barcodeLookupService.evictProduct(saved.getSku(), saved.getBarcode(), saved.getOutletId());
+
         return getProductById(product.getId());
     }
+
+    private String resolveCurrentPrincipal() {
+        try {
+            org.springframework.web.context.request.RequestAttributes attrs =
+                    org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+            if (attrs instanceof org.springframework.web.context.request.ServletRequestAttributes servletAttrs) {
+                jakarta.servlet.http.HttpServletRequest request = servletAttrs.getRequest();
+                java.security.Principal principal = request.getUserPrincipal();
+                if (principal != null && principal.getName() != null && !principal.getName().isBlank()) {
+                    return principal.getName();
+                }
+                String staffId = request.getHeader("X-Staff-Id");
+                if (staffId != null && !staffId.isBlank()) {
+                    return staffId;
+                }
+                String userId = request.getHeader("X-User-Id");
+                if (userId != null && !userId.isBlank()) {
+                    return userId;
+                }
+                String remoteUser = request.getRemoteUser();
+                if (remoteUser != null && !remoteUser.isBlank()) {
+                    return remoteUser;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "SUPERVISOR";
+    }
+
 
     /**
      * Maps an outlet and its timestamps to a catalog response DTO.

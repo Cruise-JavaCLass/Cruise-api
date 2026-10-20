@@ -271,4 +271,77 @@ class PosCatalogControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.subtotal").value(20.00))
                 .andExpect(jsonPath("$.data.grandTotal").value(25.60));
     }
+
+    @Test
+    @DisplayName("GET /api/pos/products with invalid sortBy returns 400 Bad Request")
+    void testGetProductsInvalidSortByReturns400() throws Exception {
+        mockMvc.perform(get("/api/pos/products?sortBy=invalidField"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Trường sắp xếp không hợp lệ")));
+    }
+
+    @Test
+    @DisplayName("GET /api/pos/products with invalid direction returns 400 Bad Request")
+    void testGetProductsInvalidDirectionReturns400() throws Exception {
+        mockMvc.perform(get("/api/pos/products?direction=SIDEWAYS"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Hướng sắp xếp không hợp lệ")));
+    }
+
+    @Test
+    @DisplayName("POST /api/pos/products with invalid happyHourDiscountPercent returns 400 Bad Request")
+    void testCreateProductInvalidDiscountPercentReturns400() throws Exception {
+        CreateProductRequest req = CreateProductRequest.builder()
+                .sku("BEV-TEST-999")
+                .name("Test Wine")
+                .categoryId(1L)
+                .basePrice(new BigDecimal("10.00"))
+                .happyHourDiscountPercent(new BigDecimal("150.00"))
+                .build();
+
+        mockMvc.perform(post("/api/pos/products")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("POST /api/pos/products cascades validation to modifiers and returns 400 on blank modifier name")
+    void testCreateProductInvalidModifierReturns400() throws Exception {
+        CreateProductRequest req = CreateProductRequest.builder()
+                .sku("BEV-TEST-888")
+                .name("Test Drink")
+                .categoryId(1L)
+                .basePrice(new BigDecimal("10.00"))
+                .modifiers(List.of(
+                        ProductModifierDto.builder().name("").priceDelta(new BigDecimal("1.00")).build()
+                ))
+                .build();
+
+        mockMvc.perform(post("/api/pos/products")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("POST /api/pos/pricing/happy-hour-rules with invalid startTime format returns 400 Bad Request")
+    void testCreateHappyHourRuleInvalidTimeFormatReturns400() throws Exception {
+        HappyHourRuleDto dto = HappyHourRuleDto.builder()
+                .name("Invalid Hour")
+                .startTime("25:99")
+                .endTime("18:00")
+                .discountPercent(new BigDecimal("20.00"))
+                .build();
+
+        mockMvc.perform(post("/api/pos/pricing/happy-hour-rules")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
 }

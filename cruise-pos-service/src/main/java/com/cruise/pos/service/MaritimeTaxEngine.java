@@ -4,8 +4,10 @@ import com.cruise.pos.dto.*;
 import com.cruise.pos.entity.PosHappyHourRule;
 import com.cruise.pos.entity.PosProduct;
 import com.cruise.pos.entity.PosProductModifier;
+import com.cruise.pos.enums.ProductStatus;
 import com.cruise.pos.enums.TaxCategory;
 import com.cruise.pos.enums.VoyageLocationStatus;
+import com.cruise.pos.exception.BusinessRuleException;
 import com.cruise.pos.exception.ResourceNotFoundException;
 import com.cruise.pos.repository.PosProductModifierRepository;
 import com.cruise.pos.repository.PosProductRepository;
@@ -21,6 +23,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -85,6 +88,16 @@ public class MaritimeTaxEngine {
                 throw new ResourceNotFoundException("Item thiếu productId hoặc sku");
             }
 
+            if (product.getStatus() != null && product.getStatus() != ProductStatus.ACTIVE) {
+                throw new BusinessRuleException("Sản phẩm không hoạt động: " + product.getName());
+            }
+            if (Boolean.FALSE.equals(product.getIsAvailable()) || Boolean.TRUE.equals(product.getIs86ed())) {
+                throw new BusinessRuleException("Sản phẩm hiện không khả dụng: " + product.getName());
+            }
+            if (request.getOutletId() != null && product.getOutletId() != null && !product.getOutletId().equals(request.getOutletId())) {
+                throw new BusinessRuleException("Sản phẩm " + product.getName() + " không thuộc điểm bán ID: " + request.getOutletId());
+            }
+
             int qty = itemReq.getQuantity() != null ? itemReq.getQuantity() : 1;
 
             BigDecimal basePrice = product.getBasePrice().setScale(2, RoundingMode.HALF_EVEN);
@@ -95,8 +108,30 @@ public class MaritimeTaxEngine {
 
             if (itemReq.getSelectedModifierIds() != null && !itemReq.getSelectedModifierIds().isEmpty()) {
                 List<PosProductModifier> modifiers = modifierRepository.findAllById(itemReq.getSelectedModifierIds());
-                for (PosProductModifier mod : modifiers) {
-                    if (mod.getProductId().equals(product.getId())) {
+                Map<Long, PosProductModifier> modMap = modifiers.stream()
+                        .collect(Collectors.toMap(PosProductModifier::getId, m -> m));
+
+                Map<Long, Long> counts = itemReq.getSelectedModifierIds().stream()
+                        .collect(Collectors.groupingBy(id -> id, Collectors.counting()));
+
+                for (Map.Entry<Long, Long> entry : counts.entrySet()) {
+                    Long modId = entry.getKey();
+                    long count = entry.getValue();
+                    PosProductModifier mod = modMap.get(modId);
+                    if (mod == null) {
+                        throw new ResourceNotFoundException("Không tìm thấy modifier ID: " + modId);
+                    }
+                    if (!product.getId().equals(mod.getProductId())) {
+                        throw new BusinessRuleException("Modifier " + mod.getName() + " không thuộc sản phẩm ID: " + product.getId());
+                    }
+                    if (mod.getMaxSelection() != null && count > mod.getMaxSelection()) {
+                        throw new BusinessRuleException("Modifier " + mod.getName() + " vượt quá số lượng tối đa cho phép (" + mod.getMaxSelection() + ")");
+                    }
+                }
+
+                for (Long modId : itemReq.getSelectedModifierIds()) {
+                    PosProductModifier mod = modMap.get(modId);
+                    if (mod != null) {
                         modifierUnitPrice = modifierUnitPrice.add(mod.getPriceDelta());
                         modNames.add(mod.getName());
                     }

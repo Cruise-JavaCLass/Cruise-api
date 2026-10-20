@@ -105,4 +105,90 @@ class BarcodeLookupServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("UNKNOWN-999");
     }
+
+    @Test
+    @DisplayName("lookupProductByBarcodeOrSku excludes ARCHIVED products")
+    void testLookupExcludesArchivedProducts() {
+        PosProduct archived = PosProduct.builder()
+                .sku("OLD-001")
+                .barcode("111222")
+                .name("Old Product")
+                .basePrice(new BigDecimal("10.00"))
+                .status(ProductStatus.ARCHIVED)
+                .outletId(1L)
+                .categoryId(1L)
+                .build();
+        archived.setId(99L);
+
+        when(productRepository.findByCodeAndOutlet("111222", 1L)).thenReturn(List.of(archived));
+
+        assertThatThrownBy(() -> barcodeLookupService.lookupProductByBarcodeOrSku("111222", 1L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("lookupProductByBarcodeOrSku prefers outlet match over global and barcode over SKU")
+    void testLookupDeterministicPreference() {
+        PosProduct globalSkuMatch = PosProduct.builder()
+                .sku("MATCH-CODE")
+                .barcode("OTHER-BARCODE")
+                .name("Global SKU Match")
+                .basePrice(new BigDecimal("10.00"))
+                .status(ProductStatus.ACTIVE)
+                .outletId(null)
+                .categoryId(1L)
+                .build();
+        globalSkuMatch.setId(1L);
+
+        PosProduct outletBarcodeMatch = PosProduct.builder()
+                .sku("DIFFERENT-SKU")
+                .barcode("MATCH-CODE")
+                .name("Outlet Barcode Match")
+                .basePrice(new BigDecimal("12.00"))
+                .status(ProductStatus.ACTIVE)
+                .outletId(10L)
+                .categoryId(1L)
+                .build();
+        outletBarcodeMatch.setId(2L);
+
+        when(productRepository.findByCodeAndOutlet("MATCH-CODE", 10L))
+                .thenReturn(List.of(globalSkuMatch, outletBarcodeMatch));
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(PosCategory.builder().name("Drinks").build()));
+        when(outletRepository.findById(10L)).thenReturn(Optional.of(PosOutlet.builder().name("Lounge").build()));
+        when(modifierRepository.findByProductIdOrderByDisplayOrderAsc(2L)).thenReturn(Collections.emptyList());
+
+        ProductDetailDto result = barcodeLookupService.lookupProductByBarcodeOrSku("MATCH-CODE", 10L);
+        assertThat(result.getId()).isEqualTo(2L);
+        assertThat(result.getName()).isEqualTo("Outlet Barcode Match");
+    }
+
+    @Test
+    @DisplayName("evictProduct removes targeted entry from cache")
+    void testEvictProductTargeted() {
+        PosProduct product = PosProduct.builder()
+                .sku("SKU-100")
+                .barcode("BAR-100")
+                .name("Test Product")
+                .basePrice(new BigDecimal("5.00"))
+                .status(ProductStatus.ACTIVE)
+                .outletId(1L)
+                .categoryId(1L)
+                .build();
+        product.setId(100L);
+
+        when(productRepository.findByCodeAndOutlet("BAR-100", 1L)).thenReturn(List.of(product));
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(PosCategory.builder().name("Snacks").build()));
+        when(outletRepository.findById(1L)).thenReturn(Optional.of(PosOutlet.builder().name("Cafe").build()));
+        when(modifierRepository.findByProductIdOrderByDisplayOrderAsc(100L)).thenReturn(Collections.emptyList());
+
+        barcodeLookupService.lookupProductByBarcodeOrSku("BAR-100", 1L);
+        verify(productRepository, times(1)).findByCodeAndOutlet("BAR-100", 1L);
+
+        // Evict
+        barcodeLookupService.evictProduct("SKU-100", "BAR-100", 1L);
+
+        // Next lookup should hit repository again
+        barcodeLookupService.lookupProductByBarcodeOrSku("BAR-100", 1L);
+        verify(productRepository, times(2)).findByCodeAndOutlet("BAR-100", 1L);
+    }
 }

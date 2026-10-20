@@ -2,6 +2,8 @@ package com.cruise.pos.dto;
 
 import com.cruise.pos.enums.ProductStatus;
 import com.cruise.pos.enums.TaxCategory;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -41,7 +43,11 @@ public class UpdateProductRequest {
     private String imageUrl;
     private Integer displayOrder;
     private Boolean happyHourEligible;
+
+    @DecimalMin(value = "0.00", message = "Giảm giá Happy Hour phải >= 0")
+    @DecimalMax(value = "100.00", message = "Giảm giá Happy Hour phải <= 100")
     private BigDecimal happyHourDiscountPercent;
 
-    private List<ProductModifierDto> modifiers;
+    @Valid
+    private List<@Valid ProductModifierDto> modifiers;
 }

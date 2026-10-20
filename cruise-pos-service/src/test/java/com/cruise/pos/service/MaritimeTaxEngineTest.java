@@ -174,4 +174,110 @@ class MaritimeTaxEngineTest {
         // Grand total = 17.50 + 3.15 = 20.65
         assertThat(response.getGrandTotal()).isEqualByComparingTo(new BigDecimal("20.65"));
     }
+
+    @Test
+    @DisplayName("calculateCartPricing throws BusinessRuleException when product is INACTIVE or 86ed")
+    void testCalculateCartPricingInactiveProductThrowsException() {
+        PosProduct inactiveProduct = PosProduct.builder()
+                .sku("FOOD-OUT")
+                .name("Out of stock soup")
+                .basePrice(new BigDecimal("8.00"))
+                .status(com.cruise.pos.enums.ProductStatus.EIGHTY_SIXED)
+                .isAvailable(false)
+                .is86ed(true)
+                .build();
+        inactiveProduct.setId(5L);
+
+        when(productRepository.findById(5L)).thenReturn(Optional.of(inactiveProduct));
+
+        CartPriceCalculationRequest request = CartPriceCalculationRequest.builder()
+                .outletId(1L)
+                .voyageLocation(VoyageLocationStatus.IN_PORT)
+                .items(List.of(CartItemCalculationRequest.builder().productId(5L).quantity(1).build()))
+                .build();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> taxEngine.calculateCartPricing(request))
+                .isInstanceOf(com.cruise.pos.exception.BusinessRuleException.class);
+    }
+
+    @Test
+    @DisplayName("calculateCartPricing throws BusinessRuleException when modifier belongs to different product")
+    void testCalculateCartPricingWrongModifierThrowsException() {
+        PosProduct product = PosProduct.builder()
+                .sku("FOOD-PIZZA")
+                .name("Pizza")
+                .basePrice(new BigDecimal("12.00"))
+                .status(com.cruise.pos.enums.ProductStatus.ACTIVE)
+                .isAvailable(true)
+                .is86ed(false)
+                .build();
+        product.setId(20L);
+
+        PosProductModifier foreignModifier = PosProductModifier.builder()
+                .productId(999L) // belongs to different product
+                .name("Extra Syrup")
+                .priceDelta(new BigDecimal("1.00"))
+                .build();
+        foreignModifier.setId(50L);
+
+        when(productRepository.findById(20L)).thenReturn(Optional.of(product));
+        when(modifierRepository.findAllById(List.of(50L))).thenReturn(List.of(foreignModifier));
+
+        CartPriceCalculationRequest request = CartPriceCalculationRequest.builder()
+                .outletId(1L)
+                .voyageLocation(VoyageLocationStatus.IN_PORT)
+                .items(List.of(
+                        CartItemCalculationRequest.builder()
+                                .productId(20L)
+                                .quantity(1)
+                                .selectedModifierIds(List.of(50L))
+                                .build()
+                ))
+                .build();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> taxEngine.calculateCartPricing(request))
+                .isInstanceOf(com.cruise.pos.exception.BusinessRuleException.class)
+                .hasMessageContaining("không thuộc sản phẩm");
+    }
+
+    @Test
+    @DisplayName("calculateCartPricing throws BusinessRuleException when modifier exceeds maxSelection")
+    void testCalculateCartPricingModifierExceedsMaxSelection() {
+        PosProduct product = PosProduct.builder()
+                .sku("FOOD-SALAD")
+                .name("Caesar Salad")
+                .basePrice(new BigDecimal("10.00"))
+                .status(com.cruise.pos.enums.ProductStatus.ACTIVE)
+                .isAvailable(true)
+                .is86ed(false)
+                .build();
+        product.setId(30L);
+
+        PosProductModifier modifier = PosProductModifier.builder()
+                .productId(30L)
+                .name("Dressing")
+                .priceDelta(new BigDecimal("0.50"))
+                .maxSelection(1) // only 1 allowed
+                .build();
+        modifier.setId(60L);
+
+        when(productRepository.findById(30L)).thenReturn(Optional.of(product));
+        when(modifierRepository.findAllById(List.of(60L, 60L))).thenReturn(List.of(modifier));
+
+        CartPriceCalculationRequest request = CartPriceCalculationRequest.builder()
+                .outletId(1L)
+                .voyageLocation(VoyageLocationStatus.IN_PORT)
+                .items(List.of(
+                        CartItemCalculationRequest.builder()
+                                .productId(30L)
+                                .quantity(1)
+                                .selectedModifierIds(List.of(60L, 60L)) // 2 selected!
+                                .build()
+                ))
+                .build();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> taxEngine.calculateCartPricing(request))
+                .isInstanceOf(com.cruise.pos.exception.BusinessRuleException.class)
+                .hasMessageContaining("vượt quá số lượng tối đa");
+    }
 }

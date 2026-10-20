@@ -1,5 +1,6 @@
 package com.cruise.pos.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -40,5 +41,7 @@ public class BulkProductImportItem {
     private String imageUrl;
     private Boolean happyHourEligible;
     private BigDecimal happyHourDiscountPercent;
-    private List<ProductModifierDto> modifiers;
+
+    @Valid
+    private List<@Valid ProductModifierDto> modifiers;
 }

@@ -54,6 +54,9 @@ class PosCatalogServiceTest {
     @Mock
     private PosCatalogAuditLogRepository auditLogRepository;
 
+    @Mock
+    private BarcodeLookupService barcodeLookupService;
+
     @InjectMocks
     private PosCatalogService catalogService;
 
@@ -265,5 +268,62 @@ class PosCatalogServiceTest {
         assertThat(result.getStatus()).isEqualTo(ProductStatus.ACTIVE);
         assertThat(result.getIs86ed()).isFalse();
         assertThat(result.getIsAvailable()).isTrue();
+    }
+
+    @Test
+    @DisplayName("createProduct translates DataIntegrityViolationException into DuplicateResourceException")
+    void testCreateProductDataIntegrityViolationThrowsDuplicateException() {
+        CreateProductRequest req = CreateProductRequest.builder()
+                .sku("DUP-SKU-001")
+                .name("Duplicate SKU Item")
+                .categoryId(1L)
+                .basePrice(new BigDecimal("10.00"))
+                .build();
+
+        when(productRepository.existsBySku("DUP-SKU-001")).thenReturn(false);
+        when(productRepository.save(any(PosProduct.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("Unique constraint violation"));
+
+        assertThatThrownBy(() -> catalogService.createProduct(req))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessageContaining("DUP-SKU-001");
+    }
+
+    @Test
+    @DisplayName("updateProduct logs PRICE_UPDATE and evicts cache when basePrice changes")
+    void testUpdateProductPriceChangeAuditLog() {
+        PosProduct existing = PosProduct.builder()
+                .sku("COCKTAIL-1")
+                .name("Margarita")
+                .categoryId(1L)
+                .outletId(1L)
+                .basePrice(new BigDecimal("12.00"))
+                .status(ProductStatus.ACTIVE)
+                .build();
+        existing.setId(50L);
+
+        when(productRepository.findById(50L)).thenReturn(Optional.of(existing));
+        when(productRepository.save(any(PosProduct.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(PosCategory.builder().name("Drinks").build()));
+        when(outletRepository.findById(1L)).thenReturn(Optional.of(PosOutlet.builder().name("Bar").build()));
+        when(modifierRepository.findByProductIdOrderByDisplayOrderAsc(50L)).thenReturn(Collections.emptyList());
+
+        UpdateProductRequest updateReq = UpdateProductRequest.builder()
+                .name("Margarita Premium")
+                .basePrice(new BigDecimal("15.00"))
+                .build();
+
+        catalogService.updateProduct(50L, updateReq);
+
+        org.mockito.ArgumentCaptor<com.cruise.pos.entity.PosCatalogAuditLog> captor =
+                org.mockito.ArgumentCaptor.forClass(com.cruise.pos.entity.PosCatalogAuditLog.class);
+        verify(auditLogRepository).save(captor.capture());
+
+        com.cruise.pos.entity.PosCatalogAuditLog log = captor.getValue();
+        assertThat(log.getAction()).isEqualTo("PRICE_UPDATE");
+        assertThat(log.getOldValue()).isEqualTo("12.00");
+        assertThat(log.getNewValue()).isEqualTo("15.00");
+
+        verify(barcodeLookupService).evictProduct(eq("COCKTAIL-1"), any(), eq(1L));
     }
 }

@@ -71,7 +71,9 @@ public class DynamicPricingEngine {
             LocalTime start = LocalTime.parse(rule.getStartTime(), TIME_FORMATTER);
             LocalTime end = LocalTime.parse(rule.getEndTime(), TIME_FORMATTER);
 
-            if (start.isBefore(end)) {
+            if (start.equals(end)) {
+                return checkTime.equals(start);
+            } else if (start.isBefore(end)) {
                 return !checkTime.isBefore(start) && !checkTime.isAfter(end);
             } else {
                 // Overnight rule (e.g. 22:00 to 02:00)
@@ -89,12 +91,12 @@ public class DynamicPricingEngine {
      * Returns zero for ineligible products or nonpositive percentages and rounds to two decimals using HALF_EVEN.
      */
     public BigDecimal calculateItemDiscount(PosProduct product, BigDecimal grossPrice, PosHappyHourRule rule) {
-        if (!Boolean.TRUE.equals(product.getHappyHourEligible())) {
+        if (rule == null || !Boolean.TRUE.equals(product.getHappyHourEligible())) {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_EVEN);
         }
 
         BigDecimal discountPercent = BigDecimal.ZERO;
-        if (rule != null && rule.getDiscountPercent() != null) {
+        if (rule.getDiscountPercent() != null && rule.getDiscountPercent().compareTo(BigDecimal.ZERO) > 0) {
             discountPercent = rule.getDiscountPercent();
         } else if (product.getHappyHourDiscountPercent() != null && product.getHappyHourDiscountPercent().compareTo(BigDecimal.ZERO) > 0) {
             discountPercent = product.getHappyHourDiscountPercent();
@@ -104,10 +106,8 @@ public class DynamicPricingEngine {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_EVEN);
         }
 
-        BigDecimal discount = grossPrice.multiply(discountPercent)
+        return grossPrice.multiply(discountPercent)
                 .divide(new BigDecimal("100"), 2, RoundingMode.HALF_EVEN);
-
-        return discount;
     }
 
     /**
