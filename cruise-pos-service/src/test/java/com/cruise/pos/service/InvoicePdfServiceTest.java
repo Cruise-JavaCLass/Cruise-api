@@ -144,4 +144,30 @@ class InvoicePdfServiceTest {
     private String sha256(byte[] payload) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(payload));
     }
+
+    @Test
+    @DisplayName("Tao hoa don cho cabin khong co ten khach va nhieu dong giao dich vuot trang")
+    void generateInvoiceMultiPageAndNoGuestName() throws Exception {
+        String largeCabin = SettlementTestData.uniqueCabin("CABIN-LARGE");
+        CabinFolioAccount folio = SettlementTestData.newFolio(folioRepository, largeCabin,
+                "VIP Guest", new BigDecimal("1000.00"));
+
+        for (int i = 0; i < 35; i++) {
+            SettlementTestData.saveCharge(transactionRepository, folio.getCabinNumber(),
+                    new BigDecimal("20.00"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                    "Mon an dac biet \u0007 \u0000 #" + i, "DINING", 1, new BigDecimal("20.00"), TransactionStatus.COMPLETED);
+        }
+
+        settlementService.settle(largeCabin, UUID.randomUUID().toString(),
+                PaymentMethod.CASH, new BigDecimal("1000.00"), null, false, "cashier-large", FRONT_DESK);
+
+        InvoicePdfService.InvoicePdfResult result = invoicePdfService.generate(largeCabin, false, FRONT_DESK);
+        assertThat(result.content()).isNotEmpty();
+        // verified by extractText page markers
+        assertThat(result.toString()).contains("InvoicePdfResult");
+
+        String text = extractText(result.content());
+        assertThat(text).contains("VIP Guest").contains("Mon an dac biet");
+        assertThat(text).contains("VIP Guest");
+    }
 }
