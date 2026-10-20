@@ -29,6 +29,7 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @Bean
+    @SuppressWarnings("java:S4502") // REST API sử dụng Stateless JWT Authentication nên CSRF protection được tắt an toàn
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)

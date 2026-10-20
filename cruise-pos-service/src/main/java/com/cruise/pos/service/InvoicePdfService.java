@@ -352,6 +352,14 @@ public class InvoicePdfService {
             int result = java.util.Objects.hash(fileName, invoiceNumber);
             return 31 * result + java.util.Arrays.hashCode(content);
         }
+
+        @Override
+        public String toString() {
+            return "InvoicePdfResult[" +
+                    "fileName=" + fileName + ", " +
+                    "invoiceNumber=" + invoiceNumber + ", " +
+                    "contentLength=" + (content != null ? content.length : 0) + ']';
+        }
     }
 
     /**

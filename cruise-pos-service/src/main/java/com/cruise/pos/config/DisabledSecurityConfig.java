@@ -19,6 +19,7 @@ import org.springframework.security.web.SecurityFilterChain;
 public class DisabledSecurityConfig {
 
     @Bean
+    @SuppressWarnings("java:S4502") // Chế độ unauthenticated demo-only/internal development, tắt CSRF có chủ đích
     public SecurityFilterChain permissiveSecurityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
