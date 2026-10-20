@@ -330,6 +330,7 @@ public class PosTransactionService {
         int duplicates = 0;
         int failed = 0;
         List<String> processedUuids = new ArrayList<>();
+        List<String> duplicateUuids = new ArrayList<>();
         List<String> failedReasons = new ArrayList<>();
 
         if (batch != null && batch.getTransactions() != null) {
@@ -343,6 +344,7 @@ public class PosTransactionService {
                 try {
                     if (transactionRepository.findByTransactionUuid(txReq.getTransactionUuid()).isPresent()) {
                         duplicates++;
+                        duplicateUuids.add(txReq.getTransactionUuid());
                         continue;
                     }
 
@@ -373,6 +375,7 @@ public class PosTransactionService {
                 .duplicateCount(duplicates)
                 .failedCount(failed)
                 .processedUuids(processedUuids)
+                .duplicateUuids(duplicateUuids)
                 .failedReasons(failedReasons)
                 .build();
     }
