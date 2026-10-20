@@ -1,5 +1,6 @@
 package com.cruise.pos.config;
 
+import com.cruise.pos.service.PosCatalogService;
 import com.cruise.pos.service.PosFolioService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,10 +16,15 @@ import org.springframework.stereotype.Component;
 public class PosFolioSeeder implements ApplicationRunner {
 
     private final PosFolioService folioService;
+    private final PosCatalogService catalogService;
 
+    /**
+     * Seeds default folios and the POS catalog when the dev or test profile is active.
+     */
     @Override
     public void run(ApplicationArguments args) {
         log.info("Running PosFolioSeeder for dev/test environment...");
         folioService.seedDefaultFolios();
+        catalogService.seedDefaultCatalog();
     }
 }
