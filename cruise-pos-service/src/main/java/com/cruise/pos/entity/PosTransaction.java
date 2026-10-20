@@ -18,6 +18,7 @@ import java.util.List;
         @Index(name = "idx_tx_idempotency", columnList = "idempotency_key"),
         @Index(name = "idx_tx_shift", columnList = "shift_id"),
         @Index(name = "idx_tx_cabin", columnList = "cabin_number"),
+        @Index(name = "idx_tx_cabin_created", columnList = "cabin_number, created_at"),
         @Index(name = "idx_tx_status", columnList = "status"),
         @Index(name = "idx_tx_station", columnList = "station_id")
 })

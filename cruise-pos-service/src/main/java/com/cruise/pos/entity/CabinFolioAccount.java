@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 @Entity
 @Table(name = "pos_cabin_folios", indexes = {
@@ -40,6 +41,12 @@ public class CabinFolioAccount extends BaseEntity {
     @Builder.Default
     private FolioStatus status = FolioStatus.ACTIVE;
 
+    @Column(name = "settlement_id")
+    private Long settlementId;
+
+    @Column(name = "settled_at")
+    private Instant settledAt;
+
     public BigDecimal getAvailableLimit() {
         return creditLimit.subtract(currentBalance);
     }
@@ -49,6 +56,15 @@ public class CabinFolioAccount extends BaseEntity {
             return false;
         }
         return getAvailableLimit().compareTo(amount) >= 0;
+    }
+
+    /**
+     * Đánh dấu folio đã tất toán. Sau thời điểm này folio không thể ghi nợ thêm.
+     */
+    public void markSettled(Long settlementId, Instant settledAt) {
+        this.status = FolioStatus.SETTLED;
+        this.settlementId = settlementId;
+        this.settledAt = settledAt;
     }
 
     public void debit(BigDecimal amount) {
