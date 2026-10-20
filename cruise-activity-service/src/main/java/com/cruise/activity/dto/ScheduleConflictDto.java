@@ -29,5 +29,9 @@ public class ScheduleConflictDto {
     private LocalTime secondEndTime;
 
     private Long overlapMinutes;
+
+    @Builder.Default
+    private String conflictType = "OVERLAP"; // OVERLAP hoặc TIGHT_BUFFER
+
     private String description;
 }
