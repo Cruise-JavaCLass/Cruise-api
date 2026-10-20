@@ -120,15 +120,19 @@ public class PosOfflineSyncService {
         categoryRepository.findAll().forEach(c -> categoryCache.put(c.getCode().toUpperCase(), c));
 
         for (BulkProductImportItem item : request.getProducts()) {
+            Map<String, PosOutlet> stagedOutlets = new HashMap<>();
+            Map<String, PosCategory> stagedCategories = new HashMap<>();
             try {
                 if (transactionTemplate != null) {
                     transactionTemplate.execute(status -> {
-                        processImportItem(item, request, outletCache, categoryCache);
+                        processImportItem(item, request, outletCache, categoryCache, stagedOutlets, stagedCategories);
                         return null;
                     });
                 } else {
-                    processImportItem(item, request, outletCache, categoryCache);
+                    processImportItem(item, request, outletCache, categoryCache, stagedOutlets, stagedCategories);
                 }
+                outletCache.putAll(stagedOutlets);
+                categoryCache.putAll(stagedCategories);
                 successCount++;
             } catch (Exception e) {
                 failedCount++;
@@ -154,7 +158,9 @@ public class PosOfflineSyncService {
             BulkProductImportItem item,
             BulkCatalogImportRequest request,
             Map<String, PosOutlet> outletCache,
-            Map<String, PosCategory> categoryCache
+            Map<String, PosCategory> categoryCache,
+            Map<String, PosOutlet> stagedOutlets,
+            Map<String, PosCategory> stagedCategories
     ) {
         if (item.getSku() == null || item.getSku().isBlank()) {
             throw new IllegalArgumentException("SKU is mandatory");
@@ -171,28 +177,36 @@ public class PosOfflineSyncService {
 
         Long outletId = null;
         if (item.getOutletCode() != null && !item.getOutletCode().isBlank()) {
-            PosOutlet outlet = outletCache.get(item.getOutletCode().toUpperCase());
+            String outletCodeKey = item.getOutletCode().toUpperCase();
+            PosOutlet outlet = stagedOutlets.get(outletCodeKey);
+            if (outlet == null) {
+                outlet = outletCache.get(outletCodeKey);
+            }
             if (outlet == null) {
                 outlet = outletRepository.save(PosOutlet.builder()
-                        .code(item.getOutletCode().toUpperCase())
+                        .code(outletCodeKey)
                         .name(item.getOutletCode())
                         .outletType(OutletType.BAR)
                         .isActive(true)
                         .build());
-                outletCache.put(outlet.getCode().toUpperCase(), outlet);
+                stagedOutlets.put(outletCodeKey, outlet);
             }
             outletId = outlet.getId();
         }
 
-        PosCategory category = categoryCache.get(item.getCategoryCode().toUpperCase());
+        String catCodeKey = item.getCategoryCode().toUpperCase();
+        PosCategory category = stagedCategories.get(catCodeKey);
+        if (category == null) {
+            category = categoryCache.get(catCodeKey);
+        }
         if (category == null) {
             category = categoryRepository.save(PosCategory.builder()
                     .outletId(outletId)
-                    .code(item.getCategoryCode().toUpperCase())
+                    .code(catCodeKey)
                     .name(item.getCategoryCode())
                     .isActive(true)
                     .build());
-            categoryCache.put(category.getCode().toUpperCase(), category);
+            stagedCategories.put(catCodeKey, category);
         }
         Long categoryId = category.getId();
 

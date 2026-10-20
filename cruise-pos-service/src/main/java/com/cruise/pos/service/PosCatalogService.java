@@ -181,6 +181,9 @@ public class PosCatalogService {
         PosProduct product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sản phẩm với ID: " + id));
 
+        String oldSku = product.getSku();
+        String oldBarcode = product.getBarcode();
+        Long oldOutletId = product.getOutletId();
         BigDecimal oldPrice = product.getBasePrice();
 
         if (req.getBarcode() != null && !req.getBarcode().isBlank() && !req.getBarcode().equals(product.getBarcode())) {
@@ -237,6 +240,7 @@ public class PosCatalogService {
         String newValue = priceChanged ? (updated.getBasePrice() != null ? updated.getBasePrice().toString() : null) : "Product updated";
         String performedBy = resolveCurrentPrincipal();
 
+
         auditLogRepository.save(com.cruise.pos.entity.PosCatalogAuditLog.builder()
                 .productId(updated.getId())
                 .sku(updated.getSku())
@@ -248,6 +252,11 @@ public class PosCatalogService {
                 .build());
 
         barcodeLookupService.evictProduct(updated.getSku(), updated.getBarcode(), updated.getOutletId());
+        if (!Objects.equals(oldBarcode, updated.getBarcode())
+                || !Objects.equals(oldOutletId, updated.getOutletId())
+                || !Objects.equals(oldSku, updated.getSku())) {
+            barcodeLookupService.evictProduct(oldSku, oldBarcode, oldOutletId);
+        }
 
         log.info("Updated POS product: ID={}, Name={}", product.getId(), product.getName());
         return getProductById(product.getId());
@@ -298,13 +307,17 @@ public class PosCatalogService {
         }
 
         PosProduct saved = productRepository.save(product);
+        if (req.getStaffId() != null && !req.getStaffId().isBlank()) {
+            details = details + " [claimedStaffId: " + req.getStaffId() + "]";
+        }
+
 
         auditLogRepository.save(com.cruise.pos.entity.PosCatalogAuditLog.builder()
                 .productId(saved.getId())
                 .sku(saved.getSku())
                 .action(action)
                 .newValue(saved.getStatus().name())
-                .performedBy(req.getStaffId() != null ? req.getStaffId() : resolveCurrentPrincipal())
+                .performedBy(resolveCurrentPrincipal())
                 .reason(req.getReason())
                 .details(details)
                 .build());
@@ -323,14 +336,6 @@ public class PosCatalogService {
                 java.security.Principal principal = request.getUserPrincipal();
                 if (principal != null && principal.getName() != null && !principal.getName().isBlank()) {
                     return principal.getName();
-                }
-                String staffId = request.getHeader("X-Staff-Id");
-                if (staffId != null && !staffId.isBlank()) {
-                    return staffId;
-                }
-                String userId = request.getHeader("X-User-Id");
-                if (userId != null && !userId.isBlank()) {
-                    return userId;
                 }
                 String remoteUser = request.getRemoteUser();
                 if (remoteUser != null && !remoteUser.isBlank()) {

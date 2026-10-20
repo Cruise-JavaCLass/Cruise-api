@@ -38,6 +38,9 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DuplicateResourceException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public ApiResponse<Void> handleDuplicateResource(DuplicateResourceException ex) {
+        return ApiResponse.error(ex.getMessage());
+    }
+
     @ExceptionHandler(IllegalStateException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public ApiResponse<Void> handleConflict(IllegalStateException ex) {

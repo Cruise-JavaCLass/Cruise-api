@@ -326,4 +326,33 @@ class PosCatalogServiceTest {
 
         verify(barcodeLookupService).evictProduct(eq("COCKTAIL-1"), any(), eq(1L));
     }
+
+    @Test
+    @DisplayName("updateProduct when barcode or outlet changes evicts both previous and updated keys")
+    void testUpdateProductBarcodeAndOutletChangeEvictsBothKeys() {
+        PosProduct existing = PosProduct.builder()
+                .sku("COCKTAIL-1")
+                .barcode("OLD-BARCODE")
+                .outletId(1L)
+                .name("Cocktail")
+                .basePrice(new BigDecimal("12.00"))
+                .status(ProductStatus.ACTIVE)
+                .build();
+        existing.setId(50L);
+
+        when(productRepository.findById(50L)).thenReturn(Optional.of(existing));
+        when(productRepository.existsByBarcode("NEW-BARCODE")).thenReturn(false);
+        when(productRepository.save(any(PosProduct.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(modifierRepository.findByProductIdOrderByDisplayOrderAsc(50L)).thenReturn(Collections.emptyList());
+
+        UpdateProductRequest updateReq = UpdateProductRequest.builder()
+                .barcode("NEW-BARCODE")
+                .outletId(2L)
+                .build();
+
+        catalogService.updateProduct(50L, updateReq);
+
+        verify(barcodeLookupService).evictProduct(eq("COCKTAIL-1"), eq("OLD-BARCODE"), eq(1L));
+        verify(barcodeLookupService).evictProduct(eq("COCKTAIL-1"), eq("NEW-BARCODE"), eq(2L));
+    }
 }

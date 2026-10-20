@@ -7,6 +7,7 @@ import com.cruise.pos.enums.ProductStatus;
 import com.cruise.pos.enums.TaxCategory;
 import com.cruise.pos.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -56,21 +58,31 @@ class PosOfflineSyncServiceTest {
     private BarcodeLookupService barcodeLookupService;
 
     @Mock
-    private ObjectMapper objectMapper;
-
-    @Mock
     private TransactionTemplate transactionTemplate;
 
-    @InjectMocks
+    private final ObjectMapper realObjectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+
     private PosOfflineSyncService offlineSyncService;
 
     @BeforeEach
     void setUp() {
-        // By default, execute transaction callback synchronously
         lenient().when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
             TransactionCallback<?> callback = invocation.getArgument(0);
             return callback.doInTransaction(mock(TransactionStatus.class));
         });
+
+        offlineSyncService = new PosOfflineSyncService(
+                catalogService,
+                pricingEngine,
+                outletRepository,
+                categoryRepository,
+                productRepository,
+                modifierRepository,
+                auditLogRepository,
+                barcodeLookupService,
+                realObjectMapper,
+                transactionTemplate
+        );
     }
 
     @Test
@@ -123,8 +135,57 @@ class PosOfflineSyncServiceTest {
     }
 
     @Test
-    @DisplayName("exportOfflinePackage generates package and computes ETag via serialization without full table scan")
-    void testExportOfflinePackageComputesEtag() throws Exception {
+    @DisplayName("bulkImportProducts: failed transaction does not publish rolled-back outlets or categories into shared cache")
+    void testFailedTransactionDoesNotPublishStagedCaches() {
+        when(outletRepository.findAll()).thenReturn(Collections.emptyList());
+        when(categoryRepository.findAll()).thenReturn(Collections.emptyList());
+
+        // First item fails after creating outlet during transaction because basePrice is invalid
+        BulkProductImportItem failingItem = BulkProductImportItem.builder()
+                .sku("FAIL-01")
+                .name("Fail Item")
+                .outletCode("NEW-OUTLET")
+                .categoryCode("NEW-CAT")
+                .basePrice(new BigDecimal("-5.00"))
+                .build();
+
+        BulkProductImportItem validItem = BulkProductImportItem.builder()
+                .sku("PASS-02")
+                .name("Pass Item")
+                .outletCode("NEW-OUTLET")
+                .categoryCode("NEW-CAT")
+                .basePrice(new BigDecimal("10.00"))
+                .build();
+
+        BulkCatalogImportRequest request = BulkCatalogImportRequest.builder()
+                .supplierManifestNumber("MAN-TEST")
+                .products(List.of(failingItem, validItem))
+                .build();
+
+        when(outletRepository.save(any(PosOutlet.class))).thenAnswer(inv -> {
+            PosOutlet o = inv.getArgument(0);
+            o.setId(99L);
+            return o;
+        });
+        when(categoryRepository.save(any(PosCategory.class))).thenAnswer(inv -> {
+            PosCategory c = inv.getArgument(0);
+            c.setId(999L);
+            return c;
+        });
+        when(productRepository.findBySku("PASS-02")).thenReturn(Optional.empty());
+        when(productRepository.save(any(PosProduct.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        BulkImportResponse response = offlineSyncService.bulkImportProducts(request);
+
+        assertThat(response.getFailedCount()).isEqualTo(1);
+        assertThat(response.getSuccessCount()).isEqualTo(1);
+        // Because first transaction failed, NEW-OUTLET was not retained in shared cache, so save was invoked for validItem
+        verify(outletRepository, times(1)).save(any(PosOutlet.class));
+    }
+
+    @Test
+    @DisplayName("exportOfflinePackage generates package and computes valid SHA-256 ETag without full table scan")
+    void testExportOfflinePackageComputesEtag() {
         OutletDto outlet = OutletDto.builder().id(1L).code("BAR").name("Lounge Bar").build();
         CategoryDto category = CategoryDto.builder().id(10L).code("BEV").name("Beverages").build();
         HappyHourRuleDto rule = HappyHourRuleDto.builder().id(5L).name("Evening HH").startTime("17:00").endTime("19:00").discountPercent(new BigDecimal("20.00")).build();
@@ -136,13 +197,69 @@ class PosOfflineSyncServiceTest {
         when(pricingEngine.getRulesByOutlet(1L)).thenReturn(List.of(rule));
         when(productRepository.findActiveCatalogByOutlet(1L)).thenReturn(List.of(product));
         when(catalogService.getProductById(101L)).thenReturn(ProductDetailDto.builder().id(101L).sku("MOJITO").basePrice(new BigDecimal("12.00")).build());
-        when(objectMapper.writeValueAsBytes(any())).thenReturn("package-json-content".getBytes());
 
         PosOfflineCatalogPackageDto pkg = offlineSyncService.exportOfflinePackage(1L);
 
         assertThat(pkg).isNotNull();
-        assertThat(pkg.getEtag()).isNotNull();
+        assertThat(pkg.getEtag()).isNotNull().matches("^\"[a-f0-9]{16}\"$");
         assertThat(pkg.getProducts()).hasSize(1);
-        verify(productRepository, never()).findAll(); // Verifies table scan was removed!
+        verify(productRepository, never()).findAll();
+    }
+
+    @Test
+    @DisplayName("generateEtag: identical content produces same ETag despite different exportedAt timestamps")
+    void testGenerateEtagIdenticalContentSameEtag() {
+        OutletDto outlet = OutletDto.builder().id(1L).code("BAR").name("Bar").build();
+        CategoryDto category = CategoryDto.builder().id(10L).code("BEV").name("Beverages").build();
+        ProductDetailDto product = ProductDetailDto.builder().id(101L).sku("BEER").basePrice(new BigDecimal("8.00")).build();
+        HappyHourRuleDto rule = HappyHourRuleDto.builder().id(5L).discountPercent(new BigDecimal("15.00")).build();
+
+        PosOfflineCatalogPackageDto pkg1 = PosOfflineCatalogPackageDto.builder()
+                .version("1.0.0").outletId(1L)
+                .exportedAt(Instant.parse("2026-10-20T10:00:00Z"))
+                .outlets(List.of(outlet)).categories(List.of(category))
+                .products(List.of(product)).happyHourRules(List.of(rule))
+                .build();
+
+        PosOfflineCatalogPackageDto pkg2 = PosOfflineCatalogPackageDto.builder()
+                .version("1.0.0").outletId(1L)
+                .exportedAt(Instant.parse("2026-10-20T12:34:56Z"))
+                .outlets(List.of(outlet)).categories(List.of(category))
+                .products(List.of(product)).happyHourRules(List.of(rule))
+                .build();
+
+        String etag1 = offlineSyncService.generateEtag(pkg1);
+        String etag2 = offlineSyncService.generateEtag(pkg2);
+
+        assertThat(etag1).isEqualTo(etag2);
+    }
+
+    @Test
+    @DisplayName("generateEtag: changing HappyHourRuleDto discountPercent produces different ETag")
+    void testGenerateEtagChangingDiscountPercentProducesDifferentEtag() {
+        HappyHourRuleDto rule1 = HappyHourRuleDto.builder().id(5L).discountPercent(new BigDecimal("15.00")).build();
+        HappyHourRuleDto rule2 = HappyHourRuleDto.builder().id(5L).discountPercent(new BigDecimal("25.00")).build();
+
+        PosOfflineCatalogPackageDto pkg1 = PosOfflineCatalogPackageDto.builder()
+                .version("1.0.0").outletId(1L).happyHourRules(List.of(rule1)).build();
+        PosOfflineCatalogPackageDto pkg2 = PosOfflineCatalogPackageDto.builder()
+                .version("1.0.0").outletId(1L).happyHourRules(List.of(rule2)).build();
+
+        assertThat(offlineSyncService.generateEtag(pkg1)).isNotEqualTo(offlineSyncService.generateEtag(pkg2));
+    }
+
+    @Test
+    @DisplayName("generateEtag: changing modifier list produces different ETag")
+    void testGenerateEtagChangingModifiersProducesDifferentEtag() {
+        ProductModifierDto mod = ProductModifierDto.builder().id(1L).name("Lime").priceDelta(new BigDecimal("1.00")).build();
+        ProductDetailDto prod1 = ProductDetailDto.builder().id(101L).sku("BEER").modifiers(Collections.emptyList()).build();
+        ProductDetailDto prod2 = ProductDetailDto.builder().id(101L).sku("BEER").modifiers(List.of(mod)).build();
+
+        PosOfflineCatalogPackageDto pkg1 = PosOfflineCatalogPackageDto.builder()
+                .version("1.0.0").outletId(1L).products(List.of(prod1)).build();
+        PosOfflineCatalogPackageDto pkg2 = PosOfflineCatalogPackageDto.builder()
+                .version("1.0.0").outletId(1L).products(List.of(prod2)).build();
+
+        assertThat(offlineSyncService.generateEtag(pkg1)).isNotEqualTo(offlineSyncService.generateEtag(pkg2));
     }
 }
