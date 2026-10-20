@@ -35,6 +35,9 @@ class PassengerControllerTest {
     @MockitoBean
     private PassengerService passengerService;
 
+    @MockitoBean
+    private com.cruise.activity.service.PassengerScheduleService passengerScheduleService;
+
     @Test
     @DisplayName("POST /api/activities/passengers/register - Đăng ký hành khách thành công")
     void registerPassengerSuccess() throws Exception {

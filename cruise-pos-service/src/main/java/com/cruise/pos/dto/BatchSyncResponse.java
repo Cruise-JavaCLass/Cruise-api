@@ -18,5 +18,6 @@ public class BatchSyncResponse {
     private Integer duplicateCount;
     private Integer failedCount;
     private List<String> processedUuids;
+    private List<String> duplicateUuids;
     private List<String> failedReasons;
 }
