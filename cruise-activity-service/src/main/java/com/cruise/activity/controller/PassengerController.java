@@ -1,8 +1,13 @@
 package com.cruise.activity.controller;
 
+import com.cruise.activity.dto.PassengerBookingSummaryResponse;
 import com.cruise.activity.dto.PassengerResponse;
+import com.cruise.activity.dto.PersonalScheduleResponse;
 import com.cruise.activity.dto.RegisterPassengerRequest;
+import com.cruise.activity.dto.ScheduleConflictDto;
 import com.cruise.activity.enums.CheckInStatus;
+import com.cruise.activity.enums.RegistrationStatus;
+import com.cruise.activity.service.PassengerScheduleService;
 import com.cruise.activity.service.PassengerService;
 import com.cruise.common.dto.ApiResponse;
 import jakarta.validation.Valid;
@@ -10,19 +15,23 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/activities/passengers")
+@RequestMapping({"/api/activities/passengers", "/api/passengers"})
 public class PassengerController {
 
     private final PassengerService passengerService;
+    private final PassengerScheduleService passengerScheduleService;
 
-    public PassengerController(PassengerService passengerService) {
+    public PassengerController(PassengerService passengerService, PassengerScheduleService passengerScheduleService) {
         this.passengerService = passengerService;
+        this.passengerScheduleService = passengerScheduleService;
     }
 
     @PostMapping("/register")
@@ -34,7 +43,7 @@ public class PassengerController {
     @GetMapping("/tour/{tourId}")
     public ApiResponse<List<PassengerResponse>> getRegisteredPassengersByTour(
             @PathVariable Long tourId,
-            @RequestParam(required = false) com.cruise.activity.enums.RegistrationStatus status
+            @RequestParam(required = false) RegistrationStatus status
     ) {
         return ApiResponse.ok("Lấy danh sách hành khách đăng ký theo tour thành công",
                 passengerService.getRegisteredPassengersByTourAndStatus(tourId, status));
@@ -44,7 +53,7 @@ public class PassengerController {
     public ApiResponse<Page<PassengerResponse>> getRegisteredPassengersByTourPaged(
             @PathVariable Long tourId,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) com.cruise.activity.enums.RegistrationStatus status,
+            @RequestParam(required = false) RegistrationStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "cabinNumber") String sortBy,
@@ -69,7 +78,7 @@ public class PassengerController {
      * @throws com.cruise.activity.exception.ResourceNotFoundException if the passenger is missing or inactive
      */
     @GetMapping("/{id}/summary")
-    public ApiResponse<com.cruise.activity.dto.PassengerBookingSummaryResponse> getPassengerBookingSummary(@PathVariable Long id) {
+    public ApiResponse<PassengerBookingSummaryResponse> getPassengerBookingSummary(@PathVariable Long id) {
         return ApiResponse.ok("Lấy thông tin tổng quan booking hành khách thành công",
                 passengerService.getPassengerBookingSummary(id));
     }
@@ -82,7 +91,7 @@ public class PassengerController {
      * @throws com.cruise.activity.exception.ResourceNotFoundException if the passenger is missing or inactive
      */
     @GetMapping("/summary")
-    public ApiResponse<com.cruise.activity.dto.PassengerBookingSummaryResponse> getCurrentPassengerBookingSummary(
+    public ApiResponse<PassengerBookingSummaryResponse> getCurrentPassengerBookingSummary(
             @RequestParam(defaultValue = "1") Long passengerId
     ) {
         return ApiResponse.ok("Lấy thông tin tổng quan booking hành khách hiện tại thành công",
@@ -104,25 +113,51 @@ public class PassengerController {
     }
 
     @GetMapping(value = "/tour/{tourId}/export/csv", produces = "text/csv; charset=UTF-8")
-    public org.springframework.http.ResponseEntity<byte[]> exportRegisteredPassengersCsv(
+    public ResponseEntity<byte[]> exportRegisteredPassengersCsv(
             @PathVariable Long tourId,
-            @RequestParam(required = false) com.cruise.activity.enums.RegistrationStatus status
+            @RequestParam(required = false) RegistrationStatus status
     ) {
         byte[] csvData = passengerService.exportRegisteredPassengersCsv(tourId, status);
         String fileName = String.format("passengers_tour_%d.csv", tourId);
 
-        return org.springframework.http.ResponseEntity.ok()
-                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
-                .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+                .header(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
                 .body(csvData);
     }
 
     @PatchMapping("/{id}/registration-status")
     public ApiResponse<PassengerResponse> updateRegistrationStatus(
             @PathVariable Long id,
-            @RequestParam com.cruise.activity.enums.RegistrationStatus status
+            @RequestParam RegistrationStatus status
     ) {
         return ApiResponse.ok("Cập nhật trạng thái đăng ký thành công",
                 passengerService.updateRegistrationStatus(id, status));
+    }
+
+    /**
+     * Lấy dòng thời gian lịch trình cá nhân / cabin theo ngày của hành khách (KAN-349 / KAN-350)
+     * Hỗ trợ cả 2 endpoint: /{id}/personal-schedule và /{id}/schedule
+     */
+    @GetMapping({"/{id}/personal-schedule", "/{id}/schedule"})
+    public ApiResponse<PersonalScheduleResponse> getPersonalSchedule(
+            @PathVariable Long id,
+            @RequestParam(required = false) Integer day,
+            @RequestParam(defaultValue = "my") String scope
+    ) {
+        return ApiResponse.ok("Lấy lịch trình cá nhân của hành khách thành công",
+                passengerScheduleService.getPersonalSchedule(id, day, scope));
+    }
+
+    /**
+     * Lấy danh sách cảnh báo xung đột lịch trình cá nhân (KAN-350)
+     */
+    @GetMapping("/{id}/personal-schedule/conflicts")
+    public ApiResponse<List<ScheduleConflictDto>> getScheduleConflicts(
+            @PathVariable Long id,
+            @RequestParam(required = false) Integer day
+    ) {
+        return ApiResponse.ok("Lấy danh sách xung đột lịch trình thành công",
+                passengerScheduleService.getScheduleConflicts(id, day));
     }
 }
