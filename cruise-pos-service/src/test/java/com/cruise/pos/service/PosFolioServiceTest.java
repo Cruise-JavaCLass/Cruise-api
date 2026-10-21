@@ -254,6 +254,46 @@ class PosFolioServiceTest {
     }
 
     @Test
+    @DisplayName("postExpense with reversal throws BusinessRuleException if folio is not ACTIVE")
+    void testPostExpenseReversalNotActive() {
+        folio.setStatus(FolioStatus.FROZEN);
+        PostExpenseRequest req = PostExpenseRequest.builder()
+                .transactionId("TX-REV-FROZEN")
+                .description("Refund for canceled excursion")
+                .serviceArea("Excursion Desk")
+                .amount(BigDecimal.valueOf(50.00))
+                .isReversal(true)
+                .build();
+
+        when(folioRepository.findByCabinNumberWithLock("CABIN-7012")).thenReturn(Optional.of(folio));
+        when(guestFolioLedgerRepository.existsByTransactionId("TX-REV-FROZEN")).thenReturn(false);
+
+        assertThatThrownBy(() -> folioService.postExpense("CABIN-7012", req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("chỉ áp dụng khi ACTIVE");
+    }
+
+    @Test
+    @DisplayName("postExpense with reversal throws BusinessRuleException if amount exceeds current balance")
+    void testPostExpenseReversalExceedsBalance() {
+        PostExpenseRequest req = PostExpenseRequest.builder()
+                .transactionId("TX-REV-TOO-MUCH")
+                .description("Refund exceeding balance")
+                .serviceArea("Excursion Desk")
+                .amount(BigDecimal.valueOf(500.00)) // Current balance is 200.00
+                .isReversal(true)
+                .build();
+
+        when(folioRepository.findByCabinNumberWithLock("CABIN-7012")).thenReturn(Optional.of(folio));
+        when(guestFolioLedgerRepository.existsByTransactionId("TX-REV-TOO-MUCH")).thenReturn(false);
+
+        assertThatThrownBy(() -> folioService.postExpense("CABIN-7012", req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("vượt quá số dư nợ hiện tại");
+    }
+
+
+    @Test
     @DisplayName("getFolioStatement calculates cumulative running balance correctly")
     void testGetFolioStatementRunningBalance() {
         when(folioRepository.findByCabinNumber("CABIN-7012")).thenReturn(Optional.of(folio));

@@ -185,6 +185,18 @@ public class PosFolioService {
 
         boolean isReversal = Boolean.TRUE.equals(request.getIsReversal());
         if (isReversal) {
+            if (folio.getStatus() != FolioStatus.ACTIVE) {
+                throw new BusinessRuleException(String.format(
+                        "Không thể hoàn tiền/hủy giao dịch cho cabin %s vì trạng thái tài khoản là %s (chỉ áp dụng khi ACTIVE)",
+                        cabinNumber, folio.getStatus()
+                ));
+            }
+            if (request.getAmount().compareTo(folio.getCurrentBalance()) > 0) {
+                throw new BusinessRuleException(String.format(
+                        "Số tiền hoàn ($%.2f) không thể vượt quá số dư nợ hiện tại ($%.2f) của cabin %s",
+                        request.getAmount(), folio.getCurrentBalance(), cabinNumber
+                ));
+            }
             folio.credit(request.getAmount());
         } else {
             if (!folio.canDebit(request.getAmount())) {
