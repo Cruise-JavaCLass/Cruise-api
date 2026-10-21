@@ -18,7 +18,6 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/passengers")
@@ -65,21 +64,23 @@ public class PassengerFolioController {
 
     private void verifyPassengerOwnership(Long passengerId) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated() && auth.getPrincipal() instanceof AuthPrincipal principal) {
-            String role = principal.role();
-            if (role != null && (role.contains("STAFF") || role.contains("ADMIN") || role.contains("MANAGER"))) {
-                return;
+        if (auth == null || !auth.isAuthenticated() || !(auth.getPrincipal() instanceof AuthPrincipal principal)) {
+            return;
+        }
+        String role = principal.role();
+        if (role != null && (role.contains("STAFF") || role.contains("ADMIN") || role.contains("MANAGER"))) {
+            return;
+        }
+        if (principal.username() == null) {
+            throw new AccessDeniedException("Hành khách chưa được xác định danh tính hợp lệ");
+        }
+        try {
+            Long authPassengerId = Long.parseLong(principal.username());
+            if (!authPassengerId.equals(passengerId)) {
+                throw new AccessDeniedException("Hành khách không có quyền truy cập dữ liệu của hành khách khác");
             }
-            if (principal.username() != null) {
-                try {
-                    Long authPassengerId = Long.parseLong(principal.username());
-                    if (!authPassengerId.equals(passengerId)) {
-                        throw new AccessDeniedException("Hành khách không có quyền truy cập dữ liệu của hành khách khác");
-                    }
-                } catch (NumberFormatException ignored) {
-                    // Non-numeric username, allow pass-through if not strictly mapping to passenger ID
-                }
-            }
+        } catch (NumberFormatException e) {
+            throw new AccessDeniedException("Định dạng định danh hành khách không hợp lệ");
         }
     }
 }

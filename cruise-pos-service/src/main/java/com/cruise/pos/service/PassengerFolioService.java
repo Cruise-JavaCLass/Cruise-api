@@ -77,15 +77,18 @@ public class PassengerFolioService {
         BigDecimal currentBalance = account.getCurrentBalance() != null ? account.getCurrentBalance() : BigDecimal.ZERO;
         BigDecimal availableLimit = account.getAvailableLimit() != null ? account.getAvailableLimit() : creditLimit.subtract(currentBalance);
 
-        BigDecimal spendingRatio = BigDecimal.ZERO;
         BigDecimal spendingPercentage = BigDecimal.ZERO;
-        if (creditLimit.compareTo(BigDecimal.ZERO) > 0) {
-            spendingRatio = currentBalance.divide(creditLimit, 4, RoundingMode.HALF_UP);
-            spendingPercentage = spendingRatio.multiply(BigDecimal.valueOf(100)).setScale(2, RoundingMode.HALF_UP);
-        }
+        boolean warningThresholdReached = false;
+        boolean limitExceeded = false;
 
-        boolean warningThresholdReached = spendingRatio.compareTo(new BigDecimal("0.80")) >= 0;
-        boolean limitExceeded = spendingRatio.compareTo(new BigDecimal("1.00")) >= 0;
+        if (creditLimit.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal warningThreshold = creditLimit.multiply(new BigDecimal("0.80"));
+            warningThresholdReached = currentBalance.compareTo(warningThreshold) >= 0;
+            limitExceeded = currentBalance.compareTo(creditLimit) >= 0;
+
+            spendingPercentage = currentBalance.multiply(BigDecimal.valueOf(100))
+                    .divide(creditLimit, 2, RoundingMode.HALF_UP);
+        }
 
         return PassengerFolioSummaryResponse.builder()
                 .passengerId(account.getPassengerId())

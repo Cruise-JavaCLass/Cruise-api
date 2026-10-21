@@ -109,14 +109,14 @@ class PassengerFolioControllerTest {
         mockMvc.perform(get("/api/passengers/101/folio"))
                 .andExpect(status().isOk());
 
-        // Non-numeric passenger username passes without error
+        // Non-numeric passenger username fails closed with 403 Forbidden
         AuthPrincipal guestPrincipal = new AuthPrincipal("non_numeric_guest", "ROLE_GUEST", "CABIN-1111");
         TestingAuthenticationToken authGuest = new TestingAuthenticationToken(guestPrincipal, null, "ROLE_GUEST");
         authGuest.setAuthenticated(true);
         SecurityContextHolder.getContext().setAuthentication(authGuest);
 
         mockMvc.perform(get("/api/passengers/101/folio"))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
 
         SecurityContextHolder.clearContext();
     }
