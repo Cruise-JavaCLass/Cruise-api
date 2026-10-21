@@ -14,11 +14,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 @Service
 @Transactional
@@ -138,6 +138,78 @@ public class EmbarkationService {
                 .folioStatus(saved.getFolioStatus())
                 .message("Gán thẻ RFID và kích hoạt tài khoản chi tiêu Folio thành công")
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public EmbarkationSummaryDto getEmbarkationSummary(Long tourId) {
+        List<Passenger> passengers = passengerRepository.findByTourIdAndActiveTrue(tourId);
+        long expectedTotal = passengers.size();
+        long boardedCount = passengers.stream()
+                .filter(p -> p.getCheckInStatus() == CheckInStatus.BOARDED)
+                .count();
+        long remainingCount = expectedTotal - boardedCount;
+        double progressPercent = expectedTotal > 0 ? ((double) boardedCount / expectedTotal) * 100.0 : 0.0;
+
+        Map<String, Long> categoryBreakdown = new HashMap<>();
+        long vipTotal = 0;
+        long vipBoarded = 0;
+
+        for (Passenger p : passengers) {
+            String cat = p.getCabinCategory() != null ? p.getCabinCategory() : "Standard Stateroom";
+            categoryBreakdown.put(cat, categoryBreakdown.getOrDefault(cat, 0L) + 1L);
+            if (Boolean.TRUE.equals(p.getIsVip())) {
+                vipTotal++;
+                if (p.getCheckInStatus() == CheckInStatus.BOARDED) {
+                    vipBoarded++;
+                }
+            }
+        }
+
+        return EmbarkationSummaryDto.builder()
+                .tourId(tourId)
+                .expectedTotal(expectedTotal)
+                .boardedCount(boardedCount)
+                .remainingCount(remainingCount)
+                .boardingProgressPercent(Math.round(progressPercent * 10.0) / 10.0)
+                .categoryBreakdown(categoryBreakdown)
+                .vipTotal(vipTotal)
+                .vipBoarded(vipBoarded)
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] exportBorderControlManifestCsv(Long tourId) {
+        List<Passenger> passengers = passengerRepository.findByTourIdAndActiveTrue(tourId);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append('\ufeff'); // UTF-8 BOM
+        sb.append("ID,BookingCode,FullName,PassportNumber,Nationality,CabinNumber,CabinCategory,VIP,HealthDeclaration,RFIDTag,CheckInStatus,BoardedAt,FolioStatus\n");
+
+        for (Passenger p : passengers) {
+            sb.append(escapeCsv(String.valueOf(p.getId()))).append(",");
+            sb.append(escapeCsv(p.getBookingCode())).append(",");
+            sb.append(escapeCsv(p.getFullName())).append(",");
+            sb.append(escapeCsv(p.getPassportNumber())).append(",");
+            sb.append(escapeCsv(p.getNationality())).append(",");
+            sb.append(escapeCsv(p.getCabinNumber())).append(",");
+            sb.append(escapeCsv(p.getCabinCategory())).append(",");
+            sb.append(escapeCsv(Boolean.TRUE.equals(p.getIsVip()) ? "YES" : "NO")).append(",");
+            sb.append(escapeCsv(Boolean.TRUE.equals(p.getHealthDeclarationCompleted()) ? "YES" : "NO")).append(",");
+            sb.append(escapeCsv(p.getRfidTag())).append(",");
+            sb.append(escapeCsv(p.getCheckInStatus() != null ? p.getCheckInStatus().name() : "")).append(",");
+            sb.append(escapeCsv(p.getBoardedAt() != null ? p.getBoardedAt().toString() : "")).append(",");
+            sb.append(escapeCsv(p.getFolioStatus())).append("\n");
+        }
+
+        return sb.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    private String escapeCsv(String val) {
+        if (val == null) return "";
+        if (val.contains(",") || val.contains("\"") || val.contains("\n") || val.contains("\r")) {
+            return "\"" + val.replace("\"", "\"\"") + "\"";
+        }
+        return val;
     }
 
     public PassengerEmbarkationProfileDto toProfileDto(Passenger p) {

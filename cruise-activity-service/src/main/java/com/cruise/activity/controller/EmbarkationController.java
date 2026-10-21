@@ -5,7 +5,9 @@ import com.cruise.activity.service.EmbarkationService;
 import com.cruise.common.dto.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -39,5 +41,22 @@ public class EmbarkationController {
     ) {
         return ApiResponse.ok("Gán thẻ RFID thành công",
                 embarkationService.bindRfid(id, request));
+    }
+
+    @GetMapping("/embarkation/summary")
+    public ApiResponse<EmbarkationSummaryDto> getEmbarkationSummary(@RequestParam Long tourId) {
+        return ApiResponse.ok("Lấy dữ liệu tổng quan tiến độ lên tàu thành công",
+                embarkationService.getEmbarkationSummary(tourId));
+    }
+
+    @GetMapping(value = "/embarkation/manifest/export", produces = "text/csv; charset=UTF-8")
+    public ResponseEntity<byte[]> exportBorderControlManifest(@RequestParam Long tourId) {
+        byte[] csvData = embarkationService.exportBorderControlManifestCsv(tourId);
+        String fileName = String.format("border_control_manifest_tour_%d.csv", tourId);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+                .header(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
+                .body(csvData);
     }
 }
