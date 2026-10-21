@@ -1,6 +1,7 @@
 package com.cruise.activity.dto;
 
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.*;
 
 import java.util.List;
@@ -30,5 +31,6 @@ public class ExcursionBookingRequest {
     /**
      * Danh sách cabin liên kết để ưu tiên xếp chung 1 xe (AC5)
      */
+    @Size(max = 10, message = "Danh sách cabin liên kết tối đa 10 cabin")
     private List<String> linkedCabins;
 }

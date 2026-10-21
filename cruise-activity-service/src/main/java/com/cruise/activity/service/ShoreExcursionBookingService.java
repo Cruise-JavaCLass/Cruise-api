@@ -213,26 +213,20 @@ public class ShoreExcursionBookingService {
 
         Instant now = Instant.now();
         LocalDateTime gatheringDateTime = LocalDateTime.of(excursion.getExcursionDate(), excursion.getGatheringTime());
-        LocalDateTime nowDateTime = LocalDateTime.now();
-
-        ZoneId systemZone = ZoneId.systemDefault();
-        ZonedDateTime nowZoned = nowDateTime.atZone(systemZone);
-        ZonedDateTime gatheringZoned = gatheringDateTime.atZone(systemZone);
+        ZoneId portZone = resolvePortZone(excursion);
+        Instant gatheringInstant = gatheringDateTime.atZone(portZone).toInstant();
 
         BigDecimal chargedAmount = booking.getChargedAmount() != null ? booking.getChargedAmount() : BigDecimal.ZERO;
         BigDecimal refundAmount = BigDecimal.ZERO;
         BigDecimal penaltyFee = BigDecimal.ZERO;
 
         // AC4: Port Cut-off Cancellation Policy
-        // Miễn phí trước 24 giờ. Hủy từ 12-24h phạt 50%, hủy dưới 12h phạt 100% trừ trường hợp thời tiết (weather)
-        boolean isWeatherCancellation = reason != null && (reason.toLowerCase().contains("thời tiết") ||
-                reason.toLowerCase().contains("weather") || reason.toLowerCase().contains("storm") || reason.toLowerCase().contains("bão"));
-
-        if (isWeatherCancellation || excursion.getStatus() == ExcursionStatus.CANCELLED) {
+        // Tour bị hủy do nhà vận hành/thời tiết (excursion CANCELLED): Hoàn 100%, không phạt
+        if (excursion.getStatus() == ExcursionStatus.CANCELLED) {
             refundAmount = chargedAmount;
             penaltyFee = BigDecimal.ZERO;
         } else {
-            long hoursUntilGathering = Duration.between(nowZoned, gatheringZoned).toHours();
+            long hoursUntilGathering = Duration.between(now, gatheringInstant).toHours();
             if (hoursUntilGathering >= 24) {
                 // Trước 24h: Hoàn 100%, 0 phạt
                 refundAmount = chargedAmount;
@@ -314,27 +308,29 @@ public class ShoreExcursionBookingService {
     public ReassignBusResponse reassignBus(Long excursionId, Long bookingId, ReassignBusRequest request) {
         log.info("Reassigning bus: excursionId={}, bookingId={}, newBusNumber={}", excursionId, bookingId, request.getNewBusNumber());
 
-        findActiveExcursion(excursionId);
+        ShoreExcursion excursion = excursionRepository.findByIdWithLock(excursionId)
+                .filter(ShoreExcursion::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Tour trên bờ với ID " + excursionId + " không tồn tại"));
 
         ExcursionPassenger booking = passengerRepository.findByIdAndExcursionIdAndActiveTrue(bookingId, excursionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thông tin vé đặt ID " + bookingId + " trong tour"));
 
         String oldBusNumber = booking.getBusNumber();
-        String newBusNumber = request.getNewBusNumber().trim();
+        String requestedBus = request.getNewBusNumber().trim();
 
-        // Kiểm tra sức chứa xe mới
+        // Kiểm tra phương tiện vận chuyển và sức chứa xe mới
         List<ExcursionVehicle> vehicles = vehicleRepository.findByExcursionIdAndActiveTrue(excursionId);
         ExcursionVehicle targetVehicle = vehicles.stream()
-                .filter(v -> newBusNumber.equalsIgnoreCase(v.getVehicleCode()) || newBusNumber.equalsIgnoreCase(v.getLicensePlate()))
+                .filter(v -> requestedBus.equalsIgnoreCase(v.getVehicleCode()) || requestedBus.equalsIgnoreCase(v.getLicensePlate()))
                 .findFirst()
-                .orElse(null);
+                .orElseThrow(() -> new BusinessRuleException(String.format("Phương tiện '%s' không tồn tại trong tour này", requestedBus)));
 
-        if (targetVehicle != null) {
-            long currentCountInBus = passengerRepository.countByExcursionIdAndBusNumberAndActiveTrue(excursionId, newBusNumber);
-            if (currentCountInBus >= targetVehicle.getCapacity()) {
-                throw new BusinessRuleException(String.format("Xe %s đã đủ sức chứa (%d/%d chỗ)",
-                        newBusNumber, currentCountInBus, targetVehicle.getCapacity()));
-            }
+        String newBusNumber = targetVehicle.getVehicleCode() != null ? targetVehicle.getVehicleCode() : targetVehicle.getLicensePlate();
+
+        long currentCountInBus = passengerRepository.countByExcursionIdAndBusNumberAndActiveTrue(excursionId, newBusNumber);
+        if (currentCountInBus >= targetVehicle.getCapacity()) {
+            throw new BusinessRuleException(String.format("Xe %s đã đủ sức chứa (%d/%d chỗ)",
+                    newBusNumber, currentCountInBus, targetVehicle.getCapacity()));
         }
 
         booking.setBusNumber(newBusNumber);
@@ -355,10 +351,8 @@ public class ShoreExcursionBookingService {
                         }
                     });
         }
-        if (targetVehicle != null) {
-            targetVehicle.setAssignedPassengers((targetVehicle.getAssignedPassengers() != null ? targetVehicle.getAssignedPassengers() : 0) + 1);
-            vehicleRepository.save(targetVehicle);
-        }
+        targetVehicle.setAssignedPassengers((targetVehicle.getAssignedPassengers() != null ? targetVehicle.getAssignedPassengers() : 0) + 1);
+        vehicleRepository.save(targetVehicle);
 
         // Ghi log kiểm toán (AC6)
         bookingLogRepository.save(ExcursionBookingLog.builder()
@@ -431,7 +425,18 @@ public class ShoreExcursionBookingService {
 
     private String resolveAssignedBus(ExcursionBookingRequest request, List<ExcursionVehicle> vehicles, Long excursionId, String cabinNumber) {
         if (request.getBusNumber() != null && !request.getBusNumber().isBlank()) {
-            return request.getBusNumber().trim();
+            String candidateBus = request.getBusNumber().trim();
+            ExcursionVehicle v = vehicles.stream()
+                    .filter(x -> candidateBus.equalsIgnoreCase(x.getVehicleCode()) || candidateBus.equalsIgnoreCase(x.getLicensePlate()))
+                    .findFirst()
+                    .orElse(null);
+            if (v != null) {
+                String canonicalCode = v.getVehicleCode() != null ? v.getVehicleCode() : v.getLicensePlate();
+                long count = passengerRepository.countByExcursionIdAndBusNumberAndActiveTrue(excursionId, canonicalCode);
+                if (count < v.getCapacity()) {
+                    return canonicalCode;
+                }
+            }
         }
 
         // AC5: Ưu tiên xếp chung xe với cùng Cabin hoặc Linked Cabins
@@ -451,9 +456,10 @@ public class ShoreExcursionBookingService {
                     if (v == null) {
                         return candidateBus;
                     }
-                    long count = passengerRepository.countByExcursionIdAndBusNumberAndActiveTrue(excursionId, candidateBus);
+                    String canonicalCode = v.getVehicleCode() != null ? v.getVehicleCode() : v.getLicensePlate();
+                    long count = passengerRepository.countByExcursionIdAndBusNumberAndActiveTrue(excursionId, canonicalCode);
                     if (count < v.getCapacity()) {
-                        return candidateBus;
+                        return canonicalCode;
                     }
                 }
             }
@@ -469,6 +475,11 @@ public class ShoreExcursionBookingService {
         }
 
         return vehicles.isEmpty() ? "XE-01" : (vehicles.get(0).getVehicleCode() != null ? vehicles.get(0).getVehicleCode() : vehicles.get(0).getLicensePlate());
+    }
+
+    private ZoneId resolvePortZone(ShoreExcursion excursion) {
+        // Có thể mở rộng mapping múi giờ theo portId nếu cần, mặc định Asia/Ho_Chi_Minh cho khu vực cruise
+        return ZoneId.of("Asia/Ho_Chi_Minh");
     }
 
     private boolean isFolioLocked(Passenger passenger) {

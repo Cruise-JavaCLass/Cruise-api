@@ -289,6 +289,7 @@ class ShoreExcursionBookingServiceTest {
     @Test
     @DisplayName("Hủy tour do thời tiết xấu (Weather): Hoàn 100% dù dưới 12h")
     void cancelBooking_WeatherForceMajeure_FullRefund() {
+        excursion.setStatus(ExcursionStatus.CANCELLED);
         LocalDateTime target = LocalDateTime.now().plusHours(2);
         excursion.setExcursionDate(target.toLocalDate());
         excursion.setGatheringTime(target.toLocalTime());
@@ -323,7 +324,7 @@ class ShoreExcursionBookingServiceTest {
                 .build();
         booking.setId(905L);
 
-        when(excursionRepository.findById(100L)).thenReturn(Optional.of(excursion));
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
         when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(905L, 100L)).thenReturn(Optional.of(booking));
         when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle1, vehicle2));
         when(passengerRepository.countByExcursionIdAndBusNumberAndActiveTrue(100L, "BUS-02")).thenReturn(5L);
@@ -547,7 +548,7 @@ class ShoreExcursionBookingServiceTest {
     @Test
     @DisplayName("reassignBus throws ResourceNotFoundException when booking does not exist")
     void reassignBus_ThrowsNotFound_WhenBookingMissing() {
-        when(excursionRepository.findById(100L)).thenReturn(Optional.of(excursion));
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
         when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(999L, 100L)).thenReturn(Optional.empty());
 
         ReassignBusRequest req = ReassignBusRequest.builder().newBusNumber("BUS-02").build();
@@ -565,7 +566,7 @@ class ShoreExcursionBookingServiceTest {
                 .build();
         booking.setId(901L);
 
-        when(excursionRepository.findById(100L)).thenReturn(Optional.of(excursion));
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
         when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(901L, 100L)).thenReturn(Optional.of(booking));
         when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle2)); // cap = 30
         when(passengerRepository.countByExcursionIdAndBusNumberAndActiveTrue(100L, "BUS-02")).thenReturn(30L);
@@ -590,7 +591,7 @@ class ShoreExcursionBookingServiceTest {
         vehicle1.setAssignedPassengers(5);
         vehicle2.setAssignedPassengers(10);
 
-        when(excursionRepository.findById(100L)).thenReturn(Optional.of(excursion));
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
         when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(901L, 100L)).thenReturn(Optional.of(booking));
         when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle1, vehicle2));
         when(passengerRepository.countByExcursionIdAndBusNumberAndActiveTrue(100L, "BUS-02")).thenReturn(10L);
