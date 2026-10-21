@@ -4,6 +4,7 @@ import com.cruise.pos.enums.DisputeReason;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -24,5 +25,6 @@ public class CreateFolioDisputeRequest {
     private BigDecimal disputeAmount;
 
     @NotBlank(message = "Ghi chú khiếu nại không được để trống")
+    @Size(max = 966, message = "Ghi chú khiếu nại không được vượt quá 966 ký tự")
     private String disputeNote;
 }

@@ -77,14 +77,15 @@ public class PassengerFolioService {
         BigDecimal currentBalance = account.getCurrentBalance() != null ? account.getCurrentBalance() : BigDecimal.ZERO;
         BigDecimal availableLimit = account.getAvailableLimit() != null ? account.getAvailableLimit() : creditLimit.subtract(currentBalance);
 
+        BigDecimal spendingRatio = BigDecimal.ZERO;
         BigDecimal spendingPercentage = BigDecimal.ZERO;
         if (creditLimit.compareTo(BigDecimal.ZERO) > 0) {
-            spendingPercentage = currentBalance.multiply(BigDecimal.valueOf(100))
-                    .divide(creditLimit, 2, RoundingMode.HALF_UP);
+            spendingRatio = currentBalance.divide(creditLimit, 4, RoundingMode.HALF_UP);
+            spendingPercentage = spendingRatio.multiply(BigDecimal.valueOf(100)).setScale(2, RoundingMode.HALF_UP);
         }
 
-        boolean warningThresholdReached = spendingPercentage.compareTo(BigDecimal.valueOf(80)) >= 0;
-        boolean limitExceeded = spendingPercentage.compareTo(BigDecimal.valueOf(100)) >= 0;
+        boolean warningThresholdReached = spendingRatio.compareTo(new BigDecimal("0.80")) >= 0;
+        boolean limitExceeded = spendingRatio.compareTo(new BigDecimal("1.00")) >= 0;
 
         return PassengerFolioSummaryResponse.builder()
                 .passengerId(account.getPassengerId())
@@ -118,9 +119,13 @@ public class PassengerFolioService {
                 .sorted(Comparator.comparing(FolioTransactionDto::getTime, Comparator.nullsLast(Comparator.reverseOrder())))
                 .collect(Collectors.toList());
 
-        int start = (int) pageable.getOffset();
-        int end = Math.min((start + pageable.getPageSize()), dtoList.size());
-        List<FolioTransactionDto> paged = start > dtoList.size() ? List.of() : dtoList.subList(start, end);
+        long offset = pageable.getOffset();
+        if (offset >= dtoList.size()) {
+            return new PageImpl<>(List.of(), pageable, dtoList.size());
+        }
+        int start = (int) offset;
+        int end = Math.min(start + pageable.getPageSize(), dtoList.size());
+        List<FolioTransactionDto> paged = dtoList.subList(start, end);
 
         return new PageImpl<>(paged, pageable, dtoList.size());
     }
@@ -131,9 +136,20 @@ public class PassengerFolioService {
         PosTransaction transaction = posTransactionRepository.findById(txId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giao dịch với ID: " + txId));
 
-        if (!Objects.equals(transaction.getCabinNumber(), account.getCabinNumber())
-                && !Objects.equals(transaction.getPassengerId(), passengerId)) {
+        if (!Objects.equals(transaction.getCabinNumber(), account.getCabinNumber())) {
             throw new BusinessRuleException("Giao dịch không thuộc về tài khoản cabin của hành khách");
+        }
+
+        if (transaction.getTotalAmount() == null) {
+            throw new BusinessRuleException("Giao dịch không có tổng tiền hợp lệ");
+        }
+
+        BigDecimal disputeAmount = request.getDisputeAmount() != null ? request.getDisputeAmount() : transaction.getTotalAmount();
+        if (disputeAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessRuleException("Số tiền khiếu nại phải lớn hơn 0");
+        }
+        if (disputeAmount.compareTo(transaction.getTotalAmount()) > 0) {
+            throw new BusinessRuleException("Số tiền khiếu nại không được vượt quá giá trị giao dịch (" + transaction.getTotalAmount() + ")");
         }
 
         String txIdentifier = transaction.getTransactionUuid() != null ? transaction.getTransactionUuid() : String.valueOf(transaction.getId());
@@ -144,11 +160,6 @@ public class PassengerFolioService {
         );
         if (activeDisputeExists) {
             throw new BusinessRuleException("Giao dịch này đang có khiếu nại đang xử lý hoặc đã hoàn tất");
-        }
-
-        BigDecimal disputeAmount = request.getDisputeAmount() != null ? request.getDisputeAmount() : transaction.getTotalAmount();
-        if (disputeAmount.compareTo(transaction.getTotalAmount()) > 0) {
-            throw new BusinessRuleException("Số tiền khiếu nại không được vượt quá giá trị giao dịch (" + transaction.getTotalAmount() + ")");
         }
 
         String disputeNumber = "DISP-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
@@ -240,30 +251,33 @@ public class PassengerFolioService {
 
     private FolioTransactionDto toDto(PosTransaction tx) {
         List<FolioTransactionDto.ItemDto> items = new ArrayList<>();
-        boolean hasComplimentary = false;
-        String dominantCategory = CAT_FOOD_AND_BEVERAGE;
+        Map<String, BigDecimal> categoryTotals = new HashMap<>();
 
         if (tx.getItems() != null && !tx.getItems().isEmpty()) {
             for (PosTransactionItem item : tx.getItems()) {
                 boolean isItemFree = item.getTotalPrice() == null || item.getTotalPrice().compareTo(BigDecimal.ZERO) == 0;
-                if (isItemFree) {
-                    hasComplimentary = true;
-                }
                 String stdCat = mapToStandardCategory(item.getCategory());
-                dominantCategory = stdCat;
+                BigDecimal price = item.getTotalPrice() != null ? item.getTotalPrice() : BigDecimal.ZERO;
+                categoryTotals.put(stdCat, categoryTotals.getOrDefault(stdCat, BigDecimal.ZERO).add(price));
+
                 items.add(FolioTransactionDto.ItemDto.builder()
                         .itemCode(item.getItemCode())
                         .itemName(item.getItemName())
                         .category(stdCat)
                         .quantity(item.getQuantity())
                         .unitPrice(item.getUnitPrice() != null ? item.getUnitPrice() : BigDecimal.ZERO)
-                        .totalPrice(item.getTotalPrice() != null ? item.getTotalPrice() : BigDecimal.ZERO)
+                        .totalPrice(price)
                         .complimentary(isItemFree)
                         .build());
             }
         }
 
-        boolean isTxFree = tx.getTotalAmount() == null || tx.getTotalAmount().compareTo(BigDecimal.ZERO) == 0 || hasComplimentary;
+        String dominantCategory = categoryTotals.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElseGet(() -> mapToStandardCategory(tx.getNotes()));
+
+        boolean isTxFree = tx.getTotalAmount() == null || tx.getTotalAmount().compareTo(BigDecimal.ZERO) == 0;
 
         return FolioTransactionDto.builder()
                 .id(tx.getId())

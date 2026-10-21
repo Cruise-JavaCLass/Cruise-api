@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -171,7 +172,7 @@ class PassengerFolioServiceTest {
         assertThat(txDto.getLocationCounter()).isEqualTo("BAR-DECK-9");
         assertThat(txDto.getPosCode()).isEqualTo("POS-001");
         assertThat(txDto.getSwipedBy()).isEqualTo("Nguyễn Văn An");
-        assertThat(txDto.isComplimentary()).isTrue(); // Contains $0 item
+        assertThat(txDto.isComplimentary()).isFalse(); // sampleTx total is $150
 
         assertThat(txDto.getItems()).hasSize(3);
         assertThat(txDto.getItems().get(2).isComplimentary()).isTrue();
@@ -179,7 +180,20 @@ class PassengerFolioServiceTest {
     }
 
     @Test
-    @DisplayName("Should successfully create a dispute for passenger transaction")
+    @DisplayName("Should filter transactions by category and handle out of bound pages")
+    void testGetTransactionsCategoryFilterAndOutOfBoundPage() {
+        when(cabinFolioAccountRepository.findByPassengerId(101L)).thenReturn(Optional.of(sampleAccount));
+        when(posTransactionRepository.findByCabinNumber("CABIN-7012")).thenReturn(List.of(sampleTx));
+
+        Page<FolioTransactionDto> pageFood = passengerFolioService.getTransactions(101L, PassengerFolioService.CAT_FOOD_AND_BEVERAGE, PageRequest.of(0, 10));
+        assertThat(pageFood.getContent()).hasSize(1);
+
+        Page<FolioTransactionDto> pageOutOfBound = passengerFolioService.getTransactions(101L, "ALL", PageRequest.of(5, 10));
+        assertThat(pageOutOfBound.getContent()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Should successfully create a dispute for passenger transaction and capture entities")
     void testDisputeTransactionSuccess() {
         when(cabinFolioAccountRepository.findByPassengerId(101L)).thenReturn(Optional.of(sampleAccount));
         sampleTx.setId(555L);
@@ -211,34 +225,112 @@ class PassengerFolioServiceTest {
         assertThat(response).isNotNull();
         assertThat(response.getDisputeNumber()).isEqualTo("DISP-12345678");
         assertThat(response.getStatus()).isEqualTo(DisputeStatus.SUBMITTED);
-        verify(disputeHistoryRepository).save(any(DisputeHistory.class));
+
+        ArgumentCaptor<DisputeCase> disputeCaptor = ArgumentCaptor.forClass(DisputeCase.class);
+        verify(disputeCaseRepository).save(disputeCaptor.capture());
+        DisputeCase capturedCase = disputeCaptor.getValue();
+        assertThat(capturedCase.getTransactionId()).isEqualTo("TX-UUID-999");
+        assertThat(capturedCase.getCabinNumber()).isEqualTo("CABIN-7012");
+        assertThat(capturedCase.getReason()).isEqualTo(DisputeReason.INCORRECT_AMOUNT);
+        assertThat(capturedCase.getDisputeAmount()).isEqualByComparingTo(BigDecimal.valueOf(50.00));
+
+        ArgumentCaptor<DisputeHistory> historyCaptor = ArgumentCaptor.forClass(DisputeHistory.class);
+        verify(disputeHistoryRepository).save(historyCaptor.capture());
+        DisputeHistory capturedHistory = historyCaptor.getValue();
+        assertThat(capturedHistory.getDisputeId()).isEqualTo(1L);
+        assertThat(capturedHistory.getNewStatus()).isEqualTo(DisputeStatus.SUBMITTED);
+        assertThat(capturedHistory.getActionBy()).isEqualTo("PASSENGER-101");
     }
 
     @Test
-    @DisplayName("Should throw exception if dispute amount exceeds transaction total")
-    void testDisputeExceedsTotalThrowsException() {
+    @DisplayName("Should throw exception if dispute amount exceeds transaction total or is invalid")
+    void testDisputeInvalidAmountThrowsException() {
         when(cabinFolioAccountRepository.findByPassengerId(101L)).thenReturn(Optional.of(sampleAccount));
         sampleTx.setId(555L);
         when(posTransactionRepository.findById(555L)).thenReturn(Optional.of(sampleTx));
 
-        CreateFolioDisputeRequest request = CreateFolioDisputeRequest.builder()
+        CreateFolioDisputeRequest reqOver = CreateFolioDisputeRequest.builder()
                 .reason(DisputeReason.INCORRECT_AMOUNT)
-                .disputeAmount(BigDecimal.valueOf(999.00)) // exceeds 150.00
+                .disputeAmount(BigDecimal.valueOf(999.00))
                 .disputeNote("Quá cao")
                 .build();
 
-        assertThatThrownBy(() -> passengerFolioService.disputeTransaction(101L, 555L, request))
+        assertThatThrownBy(() -> passengerFolioService.disputeTransaction(101L, 555L, reqOver))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("vượt quá");
+
+        CreateFolioDisputeRequest reqZero = CreateFolioDisputeRequest.builder()
+                .reason(DisputeReason.INCORRECT_AMOUNT)
+                .disputeAmount(BigDecimal.ZERO)
+                .disputeNote("Bằng 0")
+                .build();
+
+        assertThatThrownBy(() -> passengerFolioService.disputeTransaction(101L, 555L, reqZero))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("lớn hơn 0");
     }
 
     @Test
-    @DisplayName("Should throw exception if passenger folio account not found")
-    void testAccountNotFound() {
+    @DisplayName("Should throw exception if transaction belongs to another cabin")
+    void testDisputeOtherCabinThrowsException() {
+        when(cabinFolioAccountRepository.findByPassengerId(101L)).thenReturn(Optional.of(sampleAccount));
+        sampleTx.setId(555L);
+        sampleTx.setCabinNumber("CABIN-9999");
+        when(posTransactionRepository.findById(555L)).thenReturn(Optional.of(sampleTx));
+
+        CreateFolioDisputeRequest req = CreateFolioDisputeRequest.builder()
+                .reason(DisputeReason.INCORRECT_AMOUNT)
+                .disputeAmount(BigDecimal.valueOf(50.00))
+                .disputeNote("Sai cabin")
+                .build();
+
+        assertThatThrownBy(() -> passengerFolioService.disputeTransaction(101L, 555L, req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("không thuộc về tài khoản cabin");
+
+        verify(disputeCaseRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Should throw exception if transaction has an active dispute already")
+    void testDisputeAlreadyActiveThrowsException() {
+        when(cabinFolioAccountRepository.findByPassengerId(101L)).thenReturn(Optional.of(sampleAccount));
+        sampleTx.setId(555L);
+        when(posTransactionRepository.findById(555L)).thenReturn(Optional.of(sampleTx));
+        when(disputeCaseRepository.existsByTransactionIdAndStatusIn(any(), any())).thenReturn(true);
+
+        CreateFolioDisputeRequest req = CreateFolioDisputeRequest.builder()
+                .reason(DisputeReason.DUPLICATE_BILLING)
+                .disputeAmount(BigDecimal.valueOf(50.00))
+                .disputeNote("Trùng lặp")
+                .build();
+
+        assertThatThrownBy(() -> passengerFolioService.disputeTransaction(101L, 555L, req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("đang có khiếu nại đang xử lý");
+
+        verify(disputeCaseRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Should throw exception if passenger folio account or transaction not found")
+    void testNotFoundExceptions() {
         when(cabinFolioAccountRepository.findByPassengerId(999L)).thenReturn(Optional.empty());
         when(cabinFolioAccountRepository.findByCabinNumber("CABIN-999")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> passengerFolioService.getFolioSummary(999L))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        when(cabinFolioAccountRepository.findByPassengerId(101L)).thenReturn(Optional.of(sampleAccount));
+        when(posTransactionRepository.findById(888L)).thenReturn(Optional.empty());
+
+        CreateFolioDisputeRequest req = CreateFolioDisputeRequest.builder()
+                .reason(DisputeReason.INCORRECT_AMOUNT)
+                .disputeAmount(BigDecimal.valueOf(50.00))
+                .disputeNote("Không tìm thấy")
+                .build();
+
+        assertThatThrownBy(() -> passengerFolioService.disputeTransaction(101L, 888L, req))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 }
