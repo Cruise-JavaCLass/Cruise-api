@@ -5,9 +5,12 @@ import com.cruise.common.model.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
+import java.time.Instant;
+
 /**
  * Thực thể Hành khách đăng ký tham gia Tour tham quan trên bờ (Shore Excursion)
- * Quản lý thông tin phân nhóm, xe đưa đón và trạng thái chuyến đi (KAN-176)
+ * Quản lý thông tin phân nhóm, xe đưa đón và trạng thái chuyến đi (KAN-176, KAN-374, KAN-375)
  */
 @Entity
 @Table(name = "excursion_passengers", indexes = {
@@ -56,13 +59,38 @@ public class ExcursionPassenger extends BaseEntity {
     private ExcursionPassengerStatus status = ExcursionPassengerStatus.REGISTERED;
 
     @Column(name = "checked_in_at")
-    private java.time.Instant checkedInAt;
+    private Instant checkedInAt;
 
     @Column(name = "returned_safe_at")
-    private java.time.Instant returnedSafeAt;
+    private Instant returnedSafeAt;
 
     @Column(name = "special_requirements", length = 500)
     private String specialRequirements;
+
+    @Column(name = "charged_amount", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal chargedAmount = BigDecimal.ZERO;
+
+    @Column(name = "refund_amount", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal refundAmount = BigDecimal.ZERO;
+
+    @Column(name = "penalty_fee", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal penaltyFee = BigDecimal.ZERO;
+
+    @Column(name = "transaction_id", length = 100)
+    private String transactionId;
+
+    @Column(name = "is_included")
+    @Builder.Default
+    private Boolean isIncluded = false;
+
+    @Column(name = "cancelled_at")
+    private Instant cancelledAt;
+
+    @Column(name = "cancellation_reason", length = 500)
+    private String cancellationReason;
 
     @Column(name = "active", nullable = false)
     @Builder.Default
