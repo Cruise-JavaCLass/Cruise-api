@@ -6,12 +6,14 @@ import com.cruise.pos.entity.GuestFolioLedger;
 import com.cruise.pos.enums.FolioStatus;
 import com.cruise.pos.exception.BusinessRuleException;
 import com.cruise.pos.exception.DuplicateResourceException;
+import com.cruise.pos.exception.FolioNotActiveException;
 import com.cruise.pos.exception.InsufficientFolioBalanceException;
 import com.cruise.pos.exception.ResourceNotFoundException;
 import com.cruise.pos.repository.CabinFolioAccountRepository;
 import com.cruise.pos.repository.GuestFolioLedgerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -80,10 +82,14 @@ public class PosFolioService {
                 .status(FolioStatus.ACTIVE)
                 .build();
 
-        CabinFolioAccount saved = folioRepository.save(account);
-        log.info("Created new cabin folio account: cabin={}, guest={}, limit=${}",
-                saved.getCabinNumber(), saved.getPrimaryGuestName(), saved.getCreditLimit());
-        return toResponse(saved);
+        try {
+            CabinFolioAccount saved = folioRepository.saveAndFlush(account);
+            log.info("Created new cabin folio account: cabin={}, guest={}, limit=${}",
+                    saved.getCabinNumber(), saved.getPrimaryGuestName(), saved.getCreditLimit());
+            return toResponse(saved);
+        } catch (DataIntegrityViolationException e) {
+            throw new DuplicateResourceException("Tài khoản Folio cho cabin " + request.getCabinNumber() + " đã tồn tại");
+        }
     }
 
     @Transactional
@@ -183,8 +189,8 @@ public class PosFolioService {
         } else {
             if (!folio.canDebit(request.getAmount())) {
                 throw new InsufficientFolioBalanceException(String.format(
-                        "Tài khoản cabin %s không đủ hạn mức tín dụng hoặc tài khoản bị khóa. Hạn mức còn lại: $%.2f, yêu cầu thanh toán: $%.2f, trạng thái: %s",
-                        cabinNumber, folio.getAvailableLimit(), request.getAmount(), folio.getStatus()
+                    "Tài khoản cabin %s không đủ hạn mức tín dụng hoặc tài khoản bị khóa. Hạn mức còn lại: $%.2f, yêu cầu thanh toán: $%.2f, trạng thái: %s",
+                    cabinNumber, folio.getAvailableLimit(), request.getAmount(), folio.getStatus()
                 ));
             }
             folio.debit(request.getAmount());
@@ -203,7 +209,12 @@ public class PosFolioService {
                 .postedAt(Instant.now())
                 .build();
 
-        GuestFolioLedger savedLedger = guestFolioLedgerRepository.save(ledger);
+        GuestFolioLedger savedLedger;
+        try {
+            savedLedger = guestFolioLedgerRepository.saveAndFlush(ledger);
+        } catch (DataIntegrityViolationException e) {
+            throw new DuplicateResourceException("Giao dịch " + request.getTransactionId() + " đã được ghi sổ trước đó");
+        }
         log.info("Posted expense to cabin {}: tx={}, area={}, amount=${}, isReversal={}",
                 cabinNumber, savedLedger.getTransactionId(), savedLedger.getServiceArea(), savedLedger.getAmount(), isReversal);
 
@@ -253,7 +264,7 @@ public class PosFolioService {
                     .amount(entry.getAmount())
                     .isReversal(entry.getIsReversal())
                     .postedAt(entry.getPostedAt())
-                    .runningBalance(running.max(BigDecimal.ZERO))
+                    .runningBalance(running)
                     .build();
             itemDtos.add(item);
         }

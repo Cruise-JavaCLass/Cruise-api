@@ -31,6 +31,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -92,7 +93,7 @@ class PosFolioServiceTest {
                 .build();
 
         when(folioRepository.findByCabinNumber("CABIN-8888")).thenReturn(Optional.empty());
-        when(folioRepository.save(any(CabinFolioAccount.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(folioRepository.saveAndFlush(any(CabinFolioAccount.class))).thenAnswer(inv -> inv.getArgument(0));
 
         FolioAccountResponse resp = folioService.createFolio(req);
         assertThat(resp.getCabinNumber()).isEqualTo("CABIN-8888");
@@ -187,7 +188,7 @@ class PosFolioServiceTest {
 
         when(folioRepository.findByCabinNumberWithLock("CABIN-7012")).thenReturn(Optional.of(folio));
         when(guestFolioLedgerRepository.existsByTransactionId("TX-EXP-101")).thenReturn(false);
-        when(guestFolioLedgerRepository.save(any(GuestFolioLedger.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(guestFolioLedgerRepository.saveAndFlush(any(GuestFolioLedger.class))).thenAnswer(inv -> inv.getArgument(0));
         when(folioRepository.save(any(CabinFolioAccount.class))).thenAnswer(inv -> inv.getArgument(0));
 
         FolioLedgerItemDto item = folioService.postExpense("CABIN-7012", req);
@@ -245,7 +246,7 @@ class PosFolioServiceTest {
 
         when(folioRepository.findByCabinNumberWithLock("CABIN-7012")).thenReturn(Optional.of(folio));
         when(guestFolioLedgerRepository.existsByTransactionId("TX-REV-101")).thenReturn(false);
-        when(guestFolioLedgerRepository.save(any(GuestFolioLedger.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(guestFolioLedgerRepository.saveAndFlush(any(GuestFolioLedger.class))).thenAnswer(inv -> inv.getArgument(0));
 
         FolioLedgerItemDto item = folioService.postExpense("CABIN-7012", req);
         assertThat(item.getIsReversal()).isTrue();
