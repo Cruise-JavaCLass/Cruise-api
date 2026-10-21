@@ -11,6 +11,7 @@ import com.cruise.activity.repository.EmbarkationCheckInLogRepository;
 import com.cruise.activity.repository.PassengerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,15 +39,31 @@ public class EmbarkationService {
             throw new IllegalArgumentException("Từ khóa tìm kiếm không được để trống");
         }
         String cleanKeyword = keyword.trim();
-        List<Passenger> results = passengerRepository.searchForEmbarkationLookup(cleanKeyword);
-        if (results.isEmpty()) {
-            throw new ResourceNotFoundException("Không tìm thấy thông tin hành khách với từ khóa: " + cleanKeyword);
+
+        // 1. Prioritize exact match on identifiers (passportNumber, bookingCode, qrCode, rfidTag)
+        List<Passenger> exactMatches = passengerRepository.findExactIdentifierForEmbarkation(cleanKeyword);
+        if (exactMatches.size() > 1) {
+            throw new DuplicateRegistrationException("Tìm thấy nhiều hơn một hành khách phù hợp với định danh: " + cleanKeyword);
         }
-        return toProfileDto(results.get(0));
+        if (exactMatches.size() == 1) {
+            return toProfileDto(exactMatches.get(0));
+        }
+
+        // 2. Fallback to partial fullName matching with escaped LIKE wildcards
+        String escapedKeyword = escapeLikeWildcards(cleanKeyword);
+        List<Passenger> nameMatches = passengerRepository.findByFullNameLikeIgnoreCaseForEmbarkation(escapedKeyword);
+        if (nameMatches.size() > 1) {
+            throw new DuplicateRegistrationException("Tìm thấy nhiều hơn một hành khách phù hợp với họ tên: " + cleanKeyword);
+        }
+        if (nameMatches.size() == 1) {
+            return toProfileDto(nameMatches.get(0));
+        }
+
+        throw new ResourceNotFoundException("Không tìm thấy thông tin hành khách với từ khóa: " + cleanKeyword);
     }
 
     public EmbarkationCheckInResponse processCheckIn(Long passengerId, EmbarkationCheckInRequest request) {
-        Passenger passenger = passengerRepository.findById(passengerId)
+        Passenger passenger = passengerRepository.findByIdForUpdate(passengerId)
                 .filter(Passenger::getActive)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hành khách với ID: " + passengerId));
 
@@ -65,15 +82,15 @@ public class EmbarkationService {
 
         if (request != null && request.getRfidTag() != null && !request.getRfidTag().trim().isBlank()) {
             String tag = request.getRfidTag().trim();
-            // Check if RFID tag is already assigned to another passenger
-            Optional<Passenger> existing = passengerRepository.findByRfidTagAndActiveTrue(tag);
+            // Check if RFID tag is already assigned to another passenger (active or inactive)
+            Optional<Passenger> existing = passengerRepository.findByRfidTag(tag);
             if (existing.isPresent() && !existing.get().getId().equals(passenger.getId())) {
                 throw new DuplicateRegistrationException("Mã thẻ RFID " + tag + " đã được gán cho hành khách " + existing.get().getFullName());
             }
             passenger.setRfidTag(tag);
         }
 
-        Passenger saved = passengerRepository.save(passenger);
+        Passenger saved = savePassengerAndFlush(passenger, passenger.getRfidTag());
 
         // Record audit trail log (AC6)
         EmbarkationCheckInLog logEntry = EmbarkationCheckInLog.builder()
@@ -103,14 +120,14 @@ public class EmbarkationService {
     }
 
     public BindRfidResponse bindRfid(Long passengerId, BindRfidRequest request) {
-        Passenger passenger = passengerRepository.findById(passengerId)
+        Passenger passenger = passengerRepository.findByIdForUpdate(passengerId)
                 .filter(Passenger::getActive)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hành khách với ID: " + passengerId));
 
         String rfidTag = request.getRfidTag().trim();
 
         // AC2: Atomic RFID tag binding. Reject 409 Conflict if RFID is already bound to another passenger.
-        Optional<Passenger> existing = passengerRepository.findByRfidTagAndActiveTrue(rfidTag);
+        Optional<Passenger> existing = passengerRepository.findByRfidTag(rfidTag);
         if (existing.isPresent() && !existing.get().getId().equals(passenger.getId())) {
             throw new DuplicateRegistrationException("Mã thẻ RFID " + rfidTag + " đã được gán cho hành khách khác: " + existing.get().getFullName());
         }
@@ -125,7 +142,7 @@ public class EmbarkationService {
             passenger.setFolioStatus("ACTIVE");
         }
 
-        Passenger saved = passengerRepository.save(passenger);
+        Passenger saved = savePassengerAndFlush(passenger, rfidTag);
 
         log.info("Bound RFID tag to passenger: id={}, tag={}, folioStatus={}",
                 saved.getId(), rfidTag, saved.getFolioStatus());
@@ -140,40 +157,80 @@ public class EmbarkationService {
                 .build();
     }
 
+    private Passenger savePassengerAndFlush(Passenger passenger, String rfidTag) {
+        try {
+            return passengerRepository.saveAndFlush(passenger);
+        } catch (DataIntegrityViolationException ex) {
+            if (isRfidUniqueViolation(ex)) {
+                throw new DuplicateRegistrationException("Mã thẻ RFID " + (rfidTag != null ? rfidTag : "") + " đã được gán cho hành khách khác");
+            }
+            throw ex;
+        }
+    }
+
+    private boolean isRfidUniqueViolation(DataIntegrityViolationException ex) {
+        Throwable current = ex;
+        while (current != null) {
+            if (current instanceof org.hibernate.exception.ConstraintViolationException cve) {
+                String name = cve.getConstraintName();
+                if (name != null && name.toLowerCase(Locale.ROOT).contains("rfid")) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        Throwable rootCause = ex.getMostSpecificCause();
+        String message = rootCause != null && rootCause.getMessage() != null
+                ? rootCause.getMessage().toLowerCase(Locale.ROOT)
+                : "";
+        String exMessage = ex.getMessage() != null ? ex.getMessage().toLowerCase(Locale.ROOT) : "";
+        String combined = message + " " + exMessage;
+        return combined.contains("rfid") && (combined.contains("unique") || combined.contains("duplicate") || combined.contains("trùng"));
+    }
+
+    private String escapeLikeWildcards(String term) {
+        if (term == null) {
+            return "";
+        }
+        return term.replace("\\", "\\\\")
+                   .replace("%", "\\%")
+                   .replace("_", "\\_");
+    }
+
     @Transactional(readOnly = true)
     public EmbarkationSummaryDto getEmbarkationSummary(Long tourId) {
         List<Passenger> passengers = passengerRepository.findByTourIdAndActiveTrue(tourId);
-        long expectedTotal = passengers.size();
+
+        int totalExpected = passengers.size();
         long boardedCount = passengers.stream()
                 .filter(p -> p.getCheckInStatus() == CheckInStatus.BOARDED)
                 .count();
-        long remainingCount = expectedTotal - boardedCount;
-        double progressPercent = expectedTotal > 0 ? ((double) boardedCount / expectedTotal) * 100.0 : 0.0;
+        long remainingCount = Math.max(0, totalExpected - boardedCount);
 
-        Map<String, Long> categoryBreakdown = new HashMap<>();
-        long vipTotal = 0;
-        long vipBoarded = 0;
+        double progressPercent = totalExpected > 0
+                ? Math.round(((double) boardedCount / totalExpected) * 1000.0) / 10.0
+                : 0.0;
 
+        long vipTotal = passengers.stream().filter(p -> Boolean.TRUE.equals(p.getIsVip())).count();
+        long vipBoarded = passengers.stream()
+                .filter(p -> Boolean.TRUE.equals(p.getIsVip()) && p.getCheckInStatus() == CheckInStatus.BOARDED)
+                .count();
+
+        Map<String, Long> categoryBreakdown = new LinkedHashMap<>();
         for (Passenger p : passengers) {
-            String cat = p.getCabinCategory() != null ? p.getCabinCategory() : "Standard Stateroom";
-            categoryBreakdown.put(cat, categoryBreakdown.getOrDefault(cat, 0L) + 1L);
-            if (Boolean.TRUE.equals(p.getIsVip())) {
-                vipTotal++;
-                if (p.getCheckInStatus() == CheckInStatus.BOARDED) {
-                    vipBoarded++;
-                }
-            }
+            String category = p.getCabinCategory() != null ? p.getCabinCategory() : "Standard Stateroom";
+            categoryBreakdown.put(category, categoryBreakdown.getOrDefault(category, 0L) + 1);
         }
 
         return EmbarkationSummaryDto.builder()
                 .tourId(tourId)
-                .expectedTotal(expectedTotal)
+                .expectedTotal(totalExpected)
                 .boardedCount(boardedCount)
                 .remainingCount(remainingCount)
-                .boardingProgressPercent(Math.round(progressPercent * 10.0) / 10.0)
-                .categoryBreakdown(categoryBreakdown)
+                .boardingProgressPercent(progressPercent)
                 .vipTotal(vipTotal)
                 .vipBoarded(vipBoarded)
+                .categoryBreakdown(categoryBreakdown)
                 .build();
     }
 
@@ -182,7 +239,8 @@ public class EmbarkationService {
         List<Passenger> passengers = passengerRepository.findByTourIdAndActiveTrue(tourId);
 
         StringBuilder sb = new StringBuilder();
-        sb.append('\ufeff'); // UTF-8 BOM
+        // UTF-8 BOM for Microsoft Excel compatibility
+        sb.append("\ufeff");
         sb.append("ID,BookingCode,FullName,PassportNumber,Nationality,CabinNumber,CabinCategory,VIP,HealthDeclaration,RFIDTag,CheckInStatus,BoardedAt,FolioStatus\n");
 
         for (Passenger p : passengers) {
@@ -205,35 +263,37 @@ public class EmbarkationService {
     }
 
     private String escapeCsv(String val) {
-        if (val == null) return "";
+        if (val == null) {
+            return "";
+        }
         if (val.contains(",") || val.contains("\"") || val.contains("\n") || val.contains("\r")) {
             return "\"" + val.replace("\"", "\"\"") + "\"";
         }
         return val;
     }
 
-    public PassengerEmbarkationProfileDto toProfileDto(Passenger p) {
+    public PassengerEmbarkationProfileDto toProfileDto(Passenger passenger) {
         return PassengerEmbarkationProfileDto.builder()
-                .id(p.getId())
-                .tourId(p.getTourId())
-                .bookingCode(p.getBookingCode())
-                .fullName(p.getFullName())
-                .passportNumber(p.getPassportNumber())
-                .nationality(p.getNationality())
-                .emergencyContact(p.getEmergencyContact())
-                .email(p.getEmail())
-                .phoneNumber(p.getPhoneNumber())
-                .cabinNumber(p.getCabinNumber())
-                .cabinCategory(p.getCabinCategory() != null ? p.getCabinCategory() : "Standard Stateroom")
-                .isVip(p.getIsVip())
-                .healthDeclarationCompleted(p.getHealthDeclarationCompleted())
-                .rfidTag(p.getRfidTag())
-                .qrCode(p.getQrCode())
-                .tourPackage(p.getTourPackage())
-                .bleZone(p.getBleZone())
-                .folioStatus(p.getFolioStatus())
-                .checkInStatus(p.getCheckInStatus())
-                .boardedAt(p.getBoardedAt())
+                .id(passenger.getId())
+                .tourId(passenger.getTourId())
+                .bookingCode(passenger.getBookingCode())
+                .fullName(passenger.getFullName())
+                .passportNumber(passenger.getPassportNumber())
+                .nationality(passenger.getNationality())
+                .emergencyContact(passenger.getEmergencyContact())
+                .email(passenger.getEmail())
+                .phoneNumber(passenger.getPhoneNumber())
+                .cabinNumber(passenger.getCabinNumber())
+                .cabinCategory(passenger.getCabinCategory() != null ? passenger.getCabinCategory() : "Standard Stateroom")
+                .isVip(passenger.getIsVip())
+                .healthDeclarationCompleted(passenger.getHealthDeclarationCompleted())
+                .rfidTag(passenger.getRfidTag())
+                .qrCode(passenger.getQrCode())
+                .tourPackage(passenger.getTourPackage())
+                .bleZone(passenger.getBleZone())
+                .checkInStatus(passenger.getCheckInStatus())
+                .boardedAt(passenger.getBoardedAt())
+                .folioStatus(passenger.getFolioStatus())
                 .build();
     }
 }

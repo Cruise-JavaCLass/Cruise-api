@@ -18,6 +18,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Instant;
 import java.util.List;
@@ -69,9 +70,9 @@ class EmbarkationServiceTest {
     class LookupTests {
 
         @Test
-        @DisplayName("Should successfully return embarkation profile when keyword matches passport or booking code")
-        void lookupPassenger_Success() {
-            when(passengerRepository.searchForEmbarkationLookup("B1234567"))
+        @DisplayName("Should successfully return embarkation profile when keyword matches exact identifier")
+        void lookupPassenger_SuccessExactIdentifier() {
+            when(passengerRepository.findExactIdentifierForEmbarkation("B1234567"))
                     .thenReturn(List.of(testPassenger));
 
             PassengerEmbarkationProfileDto result = embarkationService.lookupPassenger("B1234567");
@@ -85,9 +86,53 @@ class EmbarkationServiceTest {
         }
 
         @Test
+        @DisplayName("Should fallback to partial fullName matching and escape LIKE wildcards")
+        void lookupPassenger_SuccessFullNameFallback() {
+            when(passengerRepository.findExactIdentifierForEmbarkation("Nguyen%_\\"))
+                    .thenReturn(List.of());
+            when(passengerRepository.findByFullNameLikeIgnoreCaseForEmbarkation("Nguyen\\%\\_\\\\"))
+                    .thenReturn(List.of(testPassenger));
+
+            PassengerEmbarkationProfileDto result = embarkationService.lookupPassenger("Nguyen%_\\");
+
+            assertThat(result).isNotNull();
+            assertThat(result.getFullName()).isEqualTo("Nguyen Van A");
+        }
+
+        @Test
+        @DisplayName("Should throw DuplicateRegistrationException when multiple passengers match exact identifier")
+        void lookupPassenger_DuplicateExactIdentifier() {
+            Passenger second = Passenger.builder().fullName("Duplicate Guest").build();
+            second.setId(2L);
+            when(passengerRepository.findExactIdentifierForEmbarkation("DUPLICATE_CODE"))
+                    .thenReturn(List.of(testPassenger, second));
+
+            assertThatThrownBy(() -> embarkationService.lookupPassenger("DUPLICATE_CODE"))
+                    .isInstanceOf(DuplicateRegistrationException.class)
+                    .hasMessageContaining("nhiều hơn một hành khách");
+        }
+
+        @Test
+        @DisplayName("Should throw DuplicateRegistrationException when multiple passengers match fullName")
+        void lookupPassenger_DuplicateFullName() {
+            Passenger second = Passenger.builder().fullName("Nguyen Van A 2").build();
+            second.setId(2L);
+            when(passengerRepository.findExactIdentifierForEmbarkation("Nguyen"))
+                    .thenReturn(List.of());
+            when(passengerRepository.findByFullNameLikeIgnoreCaseForEmbarkation("Nguyen"))
+                    .thenReturn(List.of(testPassenger, second));
+
+            assertThatThrownBy(() -> embarkationService.lookupPassenger("Nguyen"))
+                    .isInstanceOf(DuplicateRegistrationException.class)
+                    .hasMessageContaining("nhiều hơn một hành khách");
+        }
+
+        @Test
         @DisplayName("Should throw ResourceNotFoundException when no passenger matches keyword")
         void lookupPassenger_NotFound() {
-            when(passengerRepository.searchForEmbarkationLookup("UNKNOWN"))
+            when(passengerRepository.findExactIdentifierForEmbarkation("UNKNOWN"))
+                    .thenReturn(List.of());
+            when(passengerRepository.findByFullNameLikeIgnoreCaseForEmbarkation("UNKNOWN"))
                     .thenReturn(List.of());
 
             assertThatThrownBy(() -> embarkationService.lookupPassenger("UNKNOWN"))
@@ -110,10 +155,10 @@ class EmbarkationServiceTest {
     class CheckInTests {
 
         @Test
-        @DisplayName("Should transition state to BOARDED, activate Folio, and log audit entry")
+        @DisplayName("Should transition state to BOARDED, activate Folio, and log audit entry using pessimistic lock")
         void processCheckIn_Success() {
-            when(passengerRepository.findById(1L)).thenReturn(Optional.of(testPassenger));
-            when(passengerRepository.save(any(Passenger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+            when(passengerRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testPassenger));
+            when(passengerRepository.saveAndFlush(any(Passenger.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
             EmbarkationCheckInRequest req = EmbarkationCheckInRequest.builder()
                     .staffId("STAFF-TERMINAL-01")
@@ -123,7 +168,7 @@ class EmbarkationServiceTest {
                     .verificationMethod("FACIAL_RECOGNITION")
                     .build();
 
-            when(passengerRepository.findByRfidTagAndActiveTrue("RFID-NEW-88")).thenReturn(Optional.empty());
+            when(passengerRepository.findByRfidTag("RFID-NEW-88")).thenReturn(Optional.empty());
 
             EmbarkationCheckInResponse response = embarkationService.processCheckIn(1L, req);
 
@@ -144,8 +189,8 @@ class EmbarkationServiceTest {
         @Test
         @DisplayName("Should process check-in without request payload (null request and empty RFID tag)")
         void processCheckIn_NullRequest() {
-            when(passengerRepository.findById(1L)).thenReturn(Optional.of(testPassenger));
-            when(passengerRepository.save(any(Passenger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+            when(passengerRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testPassenger));
+            when(passengerRepository.saveAndFlush(any(Passenger.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
             EmbarkationCheckInResponse response = embarkationService.processCheckIn(1L, null);
 
@@ -160,7 +205,7 @@ class EmbarkationServiceTest {
         void processCheckIn_DuplicateBoarded() {
             testPassenger.setCheckInStatus(CheckInStatus.BOARDED);
             testPassenger.setBoardedAt(Instant.now());
-            when(passengerRepository.findById(1L)).thenReturn(Optional.of(testPassenger));
+            when(passengerRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testPassenger));
 
             assertThatThrownBy(() -> embarkationService.processCheckIn(1L, EmbarkationCheckInRequest.builder().build()))
                     .isInstanceOf(DuplicateCheckInException.class)
@@ -178,11 +223,11 @@ class EmbarkationServiceTest {
         @Test
         @DisplayName("Should throw DuplicateRegistrationException if check-in requests an RFID tag already assigned to another passenger")
         void processCheckIn_DuplicateRfidConflict() {
-            when(passengerRepository.findById(1L)).thenReturn(Optional.of(testPassenger));
+            when(passengerRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testPassenger));
 
             Passenger other = Passenger.builder().fullName("Tran Thi B").build();
             other.setId(2L);
-            when(passengerRepository.findByRfidTagAndActiveTrue("RFID-TAKEN")).thenReturn(Optional.of(other));
+            when(passengerRepository.findByRfidTag("RFID-TAKEN")).thenReturn(Optional.of(other));
 
             EmbarkationCheckInRequest req = EmbarkationCheckInRequest.builder()
                     .rfidTag("RFID-TAKEN")
@@ -196,9 +241,9 @@ class EmbarkationServiceTest {
         @Test
         @DisplayName("Should allow keeping same RFID tag if assigned to self during check-in")
         void processCheckIn_SameRfidTagToSelf() {
-            when(passengerRepository.findById(1L)).thenReturn(Optional.of(testPassenger));
-            when(passengerRepository.save(any(Passenger.class))).thenAnswer(invocation -> invocation.getArgument(0));
-            when(passengerRepository.findByRfidTagAndActiveTrue("RFID-INITIAL-01")).thenReturn(Optional.of(testPassenger));
+            when(passengerRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testPassenger));
+            when(passengerRepository.saveAndFlush(any(Passenger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+            when(passengerRepository.findByRfidTag("RFID-INITIAL-01")).thenReturn(Optional.of(testPassenger));
 
             EmbarkationCheckInRequest req = EmbarkationCheckInRequest.builder()
                     .rfidTag("RFID-INITIAL-01")
@@ -208,6 +253,39 @@ class EmbarkationServiceTest {
             assertThat(response).isNotNull();
             assertThat(response.getCheckInStatus()).isEqualTo(CheckInStatus.BOARDED);
         }
+
+        @Test
+        @DisplayName("Should catch DataIntegrityViolationException on saveAndFlush during check-in and translate RFID duplicate")
+        void processCheckIn_RfidUniqueConstraintViolation() {
+            when(passengerRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testPassenger));
+            when(passengerRepository.findByRfidTag("RFID-CONCURRENT")).thenReturn(Optional.empty());
+            when(passengerRepository.saveAndFlush(any(Passenger.class)))
+                    .thenThrow(new DataIntegrityViolationException("duplicate key value violates unique constraint idx_passenger_rfid_tag"));
+
+            EmbarkationCheckInRequest req = EmbarkationCheckInRequest.builder()
+                    .rfidTag("RFID-CONCURRENT")
+                    .build();
+
+            assertThatThrownBy(() -> embarkationService.processCheckIn(1L, req))
+                    .isInstanceOf(DuplicateRegistrationException.class)
+                    .hasMessageContaining("Mã thẻ RFID RFID-CONCURRENT đã được gán cho hành khách khác");
+        }
+
+        @Test
+        @DisplayName("Should propagate unrelated DataIntegrityViolationException during check-in")
+        void processCheckIn_UnrelatedDataIntegrityViolation() {
+            when(passengerRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testPassenger));
+            when(passengerRepository.findByRfidTag("RFID-OK")).thenReturn(Optional.empty());
+            when(passengerRepository.saveAndFlush(any(Passenger.class)))
+                    .thenThrow(new DataIntegrityViolationException("null value in column tour_id violates not-null constraint"));
+
+            EmbarkationCheckInRequest req = EmbarkationCheckInRequest.builder()
+                    .rfidTag("RFID-OK")
+                    .build();
+
+            assertThatThrownBy(() -> embarkationService.processCheckIn(1L, req))
+                    .isInstanceOf(DataIntegrityViolationException.class);
+        }
     }
 
     @Nested
@@ -215,11 +293,11 @@ class EmbarkationServiceTest {
     class RfidBindingTests {
 
         @Test
-        @DisplayName("Should atomically bind RFID tag and activate cashless folio account")
+        @DisplayName("Should atomically bind RFID tag and activate cashless folio account using pessimistic lock")
         void bindRfid_Success() {
-            when(passengerRepository.findById(1L)).thenReturn(Optional.of(testPassenger));
-            when(passengerRepository.findByRfidTagAndActiveTrue("RFID-CARD-100")).thenReturn(Optional.empty());
-            when(passengerRepository.save(any(Passenger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+            when(passengerRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testPassenger));
+            when(passengerRepository.findByRfidTag("RFID-CARD-100")).thenReturn(Optional.empty());
+            when(passengerRepository.saveAndFlush(any(Passenger.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
             BindRfidRequest req = BindRfidRequest.builder()
                     .rfidTag("RFID-CARD-100")
@@ -239,9 +317,9 @@ class EmbarkationServiceTest {
         @DisplayName("Should bind RFID and activate folio if folioStatus is INACTIVE even without activateFolio flag")
         void bindRfid_InactiveFolioAutoActivation() {
             testPassenger.setFolioStatus("INACTIVE");
-            when(passengerRepository.findById(1L)).thenReturn(Optional.of(testPassenger));
-            when(passengerRepository.findByRfidTagAndActiveTrue("RFID-NEW-002")).thenReturn(Optional.empty());
-            when(passengerRepository.save(any(Passenger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+            when(passengerRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testPassenger));
+            when(passengerRepository.findByRfidTag("RFID-NEW-002")).thenReturn(Optional.empty());
+            when(passengerRepository.saveAndFlush(any(Passenger.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
             BindRfidRequest req = BindRfidRequest.builder()
                     .rfidTag("RFID-NEW-002")
@@ -255,11 +333,11 @@ class EmbarkationServiceTest {
         @Test
         @DisplayName("Should reject with 409 Conflict when RFID tag is already bound to another passenger (AC2)")
         void bindRfid_Conflict() {
-            when(passengerRepository.findById(1L)).thenReturn(Optional.of(testPassenger));
+            when(passengerRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testPassenger));
 
             Passenger existing = Passenger.builder().fullName("Le Van C").build();
             existing.setId(3L);
-            when(passengerRepository.findByRfidTagAndActiveTrue("RFID-DUPLICATE")).thenReturn(Optional.of(existing));
+            when(passengerRepository.findByRfidTag("RFID-DUPLICATE")).thenReturn(Optional.of(existing));
 
             BindRfidRequest req = BindRfidRequest.builder()
                     .rfidTag("RFID-DUPLICATE")
@@ -269,17 +347,50 @@ class EmbarkationServiceTest {
                     .isInstanceOf(DuplicateRegistrationException.class)
                     .hasMessageContaining("đã được gán cho hành khách khác: Le Van C");
 
-            verify(passengerRepository, never()).save(any());
+            verify(passengerRepository, never()).saveAndFlush(any());
         }
 
         @Test
         @DisplayName("Should throw ResourceNotFoundException when passenger not found during bindRfid")
         void bindRfid_NotFound() {
-            when(passengerRepository.findById(999L)).thenReturn(Optional.empty());
+            when(passengerRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
 
             BindRfidRequest req = BindRfidRequest.builder().rfidTag("TAG").build();
             assertThatThrownBy(() -> embarkationService.bindRfid(999L, req))
                     .isInstanceOf(ResourceNotFoundException.class);
+        }
+
+        @Test
+        @DisplayName("Should catch DataIntegrityViolationException on saveAndFlush during bindRfid and translate RFID duplicate")
+        void bindRfid_RfidUniqueConstraintViolation() {
+            when(passengerRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testPassenger));
+            when(passengerRepository.findByRfidTag("RFID-RACE")).thenReturn(Optional.empty());
+            when(passengerRepository.saveAndFlush(any(Passenger.class)))
+                    .thenThrow(new DataIntegrityViolationException("duplicate key value violates unique constraint rfid_tag"));
+
+            BindRfidRequest req = BindRfidRequest.builder()
+                    .rfidTag("RFID-RACE")
+                    .build();
+
+            assertThatThrownBy(() -> embarkationService.bindRfid(1L, req))
+                    .isInstanceOf(DuplicateRegistrationException.class)
+                    .hasMessageContaining("Mã thẻ RFID RFID-RACE đã được gán cho hành khách khác");
+        }
+
+        @Test
+        @DisplayName("Should propagate unrelated DataIntegrityViolationException during bindRfid")
+        void bindRfid_UnrelatedDataIntegrityViolation() {
+            when(passengerRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testPassenger));
+            when(passengerRepository.findByRfidTag("RFID-OK")).thenReturn(Optional.empty());
+            when(passengerRepository.saveAndFlush(any(Passenger.class)))
+                    .thenThrow(new DataIntegrityViolationException("foreign key violation"));
+
+            BindRfidRequest req = BindRfidRequest.builder()
+                    .rfidTag("RFID-OK")
+                    .build();
+
+            assertThatThrownBy(() -> embarkationService.bindRfid(1L, req))
+                    .isInstanceOf(DataIntegrityViolationException.class);
         }
     }
 

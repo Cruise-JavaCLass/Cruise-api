@@ -55,11 +55,11 @@ public class Passenger extends BaseEntity {
     @Column(name = "cabin_category", length = 50)
     private String cabinCategory;
 
-    @Column(name = "is_vip", nullable = false)
+    @Column(name = "is_vip", nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
     @Builder.Default
     private Boolean isVip = false;
 
-    @Column(name = "health_declaration_completed", nullable = false)
+    @Column(name = "health_declaration_completed", nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
     @Builder.Default
     private Boolean healthDeclarationCompleted = false;
 
