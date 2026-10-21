@@ -20,7 +20,7 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.*;
 
@@ -215,8 +215,9 @@ public class ShoreExcursionBookingService {
         LocalDateTime gatheringDateTime = LocalDateTime.of(excursion.getExcursionDate(), excursion.getGatheringTime());
         LocalDateTime nowDateTime = LocalDateTime.now();
 
-        ZonedDateTime nowZoned = ZonedDateTime.now(ZoneOffset.UTC);
-        ZonedDateTime gatheringZoned = gatheringDateTime.atZone(ZoneOffset.UTC);
+        ZoneId systemZone = ZoneId.systemDefault();
+        ZonedDateTime nowZoned = nowDateTime.atZone(systemZone);
+        ZonedDateTime gatheringZoned = gatheringDateTime.atZone(systemZone);
 
         BigDecimal chargedAmount = booking.getChargedAmount() != null ? booking.getChargedAmount() : BigDecimal.ZERO;
         BigDecimal refundAmount = BigDecimal.ZERO;
