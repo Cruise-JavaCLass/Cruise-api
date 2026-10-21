@@ -41,5 +41,6 @@ public class SubmitFeedbackRequest {
     @Size(max = 1000, message = "Nội dung nhận xét tối đa 1000 ký tự")
     private String comments;
 
+    @Size(max = 100, message = "Idempotency key tối đa 100 ký tự")
     private String idempotencyKey;
 }

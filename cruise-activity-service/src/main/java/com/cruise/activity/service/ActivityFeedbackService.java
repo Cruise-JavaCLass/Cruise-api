@@ -29,7 +29,6 @@ public class ActivityFeedbackService {
     private final OnboardActivityRepository activityRepository;
     private final PassengerRepository passengerRepository;
 
-    @Transactional
     public ActivityFeedbackResponse submitFeedback(Long activityId, SubmitFeedbackRequest request) {
         // Idempotency check 1: By explicit idempotencyKey
         if (request.getIdempotencyKey() != null && !request.getIdempotencyKey().isBlank()) {
@@ -83,12 +82,12 @@ public class ActivityFeedbackService {
                 .build();
 
         try {
-            ActivityFeedback saved = feedbackRepository.save(feedback);
+            ActivityFeedback saved = feedbackRepository.saveAndFlush(feedback);
             log.info("Feedback saved: id={}, activityId={}, passengerId={}, rating={}, escalated={}",
                     saved.getId(), activityId, request.getPassengerId(), request.getRating(), isEscalated);
             return mapToResponse(saved);
         } catch (DataIntegrityViolationException e) {
-            // Concurrent submission race condition handling
+            // Concurrent submission race condition handling outside failed transaction
             return feedbackRepository.findByActivityIdAndPassengerId(activityId, request.getPassengerId())
                     .map(this::mapToResponse)
                     .orElseThrow(() -> new BusinessRuleException("Lỗi lưu trữ đánh giá trùng lặp"));

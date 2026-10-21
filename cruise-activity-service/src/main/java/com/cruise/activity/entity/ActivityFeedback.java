@@ -14,7 +14,8 @@ import lombok.*;
         @Index(name = "idx_af_rating", columnList = "rating"),
         @Index(name = "idx_af_escalated", columnList = "escalated")
 }, uniqueConstraints = {
-        @UniqueConstraint(name = "uk_af_activity_passenger", columnNames = {"activity_id", "passenger_id"})
+        @UniqueConstraint(name = "uk_af_activity_passenger", columnNames = {"activity_id", "passenger_id"}),
+        @UniqueConstraint(name = "uk_af_idempotency_key", columnNames = {"idempotency_key"})
 })
 @Getter
 @Setter
