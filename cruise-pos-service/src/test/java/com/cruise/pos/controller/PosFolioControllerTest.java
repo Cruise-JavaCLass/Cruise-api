@@ -29,6 +29,9 @@ class PosFolioControllerTest {
     @MockitoBean
     private PosFolioService folioService;
 
+    @MockitoBean
+    private com.cruise.pos.service.FolioSettlementService folioSettlementService;
+
     @Test
     @DisplayName("GET /api/pos/folios/{cabinNumber} returns folio account")
     void testGetFolio() throws Exception {

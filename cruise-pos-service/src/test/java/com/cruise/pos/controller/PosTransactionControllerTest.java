@@ -53,6 +53,9 @@ class PosTransactionControllerTest {
     @MockitoBean
     private PosFolioService folioService;
 
+    @MockitoBean
+    private com.cruise.pos.service.FolioSettlementService folioSettlementService;
+
     @Test
     @DisplayName("POST /api/pos/transactions creates charge transaction successfully (201 Created)")
     void testCreateTransactionSuccess() throws Exception {

@@ -32,6 +32,8 @@ public interface PosTransactionRepository extends JpaRepository<PosTransaction, 
 
     List<PosTransaction> findByCabinNumber(String cabinNumber);
 
+    List<PosTransaction> findByCabinNumberOrderByCreatedAtAsc(String cabinNumber);
+
     List<PosTransaction> findByOriginalTransactionId(Long originalTransactionId);
 
     @Query("SELECT t FROM PosTransaction t WHERE " +

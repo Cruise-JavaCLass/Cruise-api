@@ -3,6 +3,7 @@ package com.cruise.pos.service;
 import com.cruise.pos.dto.FolioAccountResponse;
 import com.cruise.pos.entity.CabinFolioAccount;
 import com.cruise.pos.enums.FolioStatus;
+import com.cruise.pos.exception.FolioNotActiveException;
 import com.cruise.pos.exception.InsufficientFolioBalanceException;
 import com.cruise.pos.exception.ResourceNotFoundException;
 import com.cruise.pos.repository.CabinFolioAccountRepository;
@@ -66,6 +67,15 @@ public class PosFolioService {
     public void chargeFolio(String cabinNumber, BigDecimal amount) {
         CabinFolioAccount folio = folioRepository.findByCabinNumberWithLock(cabinNumber)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tài khoản Folio cho cabin: " + cabinNumber));
+
+        if (folio.getStatus() == FolioStatus.LOCKED) {
+            throw new FolioNotActiveException(
+                    "FOLIO_LOCKED: Folio cabin " + cabinNumber + " đang bị khoá");
+        }
+        if (folio.getStatus() != FolioStatus.ACTIVE) {
+            throw new FolioNotActiveException(
+                    "FOLIO_NOT_ACTIVE: Folio cabin " + cabinNumber + " đã tất toán, không thể ghi nợ thêm");
+        }
 
         if (!folio.canDebit(amount)) {
             throw new InsufficientFolioBalanceException(String.format(

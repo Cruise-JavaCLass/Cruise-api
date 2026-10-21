@@ -19,7 +19,7 @@ import lombok.*;
 @Builder
 public class PosAuditLog extends BaseEntity {
 
-    @Column(name = "transaction_id", nullable = false)
+    @Column(name = "transaction_id")
     private Long transactionId;
 
     @Column(name = "action", nullable = false, length = 64)
