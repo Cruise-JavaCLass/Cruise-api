@@ -1,12 +1,11 @@
 package com.cruise.activity.service;
 
-import com.cruise.activity.dto.EmbarkationCheckInRequest;
-import com.cruise.activity.dto.EmbarkationCheckInResponse;
-import com.cruise.activity.dto.PassengerEmbarkationProfileDto;
+import com.cruise.activity.dto.*;
 import com.cruise.activity.entity.EmbarkationCheckInLog;
 import com.cruise.activity.entity.Passenger;
 import com.cruise.activity.enums.CheckInStatus;
 import com.cruise.activity.exception.DuplicateCheckInException;
+import com.cruise.activity.exception.DuplicateRegistrationException;
 import com.cruise.activity.exception.ResourceNotFoundException;
 import com.cruise.activity.repository.EmbarkationCheckInLogRepository;
 import com.cruise.activity.repository.PassengerRepository;
@@ -19,6 +18,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @Transactional
@@ -64,7 +64,13 @@ public class EmbarkationService {
         passenger.setFolioStatus("ACTIVE");
 
         if (request != null && request.getRfidTag() != null && !request.getRfidTag().trim().isBlank()) {
-            passenger.setRfidTag(request.getRfidTag().trim());
+            String tag = request.getRfidTag().trim();
+            // Check if RFID tag is already assigned to another passenger
+            Optional<Passenger> existing = passengerRepository.findByRfidTagAndActiveTrue(tag);
+            if (existing.isPresent() && !existing.get().getId().equals(passenger.getId())) {
+                throw new DuplicateRegistrationException("Mã thẻ RFID " + tag + " đã được gán cho hành khách " + existing.get().getFullName());
+            }
+            passenger.setRfidTag(tag);
         }
 
         Passenger saved = passengerRepository.save(passenger);
@@ -93,6 +99,44 @@ public class EmbarkationService {
                 .cabinNumber(saved.getCabinNumber())
                 .folioStatus(saved.getFolioStatus())
                 .message("Làm thủ tục lên tàu thành công")
+                .build();
+    }
+
+    public BindRfidResponse bindRfid(Long passengerId, BindRfidRequest request) {
+        Passenger passenger = passengerRepository.findById(passengerId)
+                .filter(Passenger::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hành khách với ID: " + passengerId));
+
+        String rfidTag = request.getRfidTag().trim();
+
+        // AC2: Atomic RFID tag binding. Reject 409 Conflict if RFID is already bound to another passenger.
+        Optional<Passenger> existing = passengerRepository.findByRfidTagAndActiveTrue(rfidTag);
+        if (existing.isPresent() && !existing.get().getId().equals(passenger.getId())) {
+            throw new DuplicateRegistrationException("Mã thẻ RFID " + rfidTag + " đã được gán cho hành khách khác: " + existing.get().getFullName());
+        }
+
+        passenger.setRfidTag(rfidTag);
+        if (request.getQrCode() != null && !request.getQrCode().trim().isBlank()) {
+            passenger.setQrCode(request.getQrCode().trim());
+        }
+
+        // AC3: Automatic Cashless Folio Activation
+        if (Boolean.TRUE.equals(request.getActivateFolio()) || "INACTIVE".equals(passenger.getFolioStatus())) {
+            passenger.setFolioStatus("ACTIVE");
+        }
+
+        Passenger saved = passengerRepository.save(passenger);
+
+        log.info("Bound RFID tag to passenger: id={}, tag={}, folioStatus={}",
+                saved.getId(), rfidTag, saved.getFolioStatus());
+
+        return BindRfidResponse.builder()
+                .passengerId(saved.getId())
+                .rfidTag(saved.getRfidTag())
+                .qrCode(saved.getQrCode())
+                .cabinNumber(saved.getCabinNumber())
+                .folioStatus(saved.getFolioStatus())
+                .message("Gán thẻ RFID và kích hoạt tài khoản chi tiêu Folio thành công")
                 .build();
     }
 
