@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Repository quản lý dữ liệu hành khách tour bờ (KAN-176)
+ * Repository quản lý dữ liệu hành khách tour bờ (KAN-176, KAN-374)
  */
 @Repository
 public interface ExcursionPassengerRepository extends JpaRepository<ExcursionPassenger, Long> {
@@ -34,23 +34,17 @@ public interface ExcursionPassengerRepository extends JpaRepository<ExcursionPas
 
     List<ExcursionPassenger> findByExcursionIdAndBusNumberAndActiveTrue(Long excursionId, String busNumber);
 
+    long countByExcursionIdAndBusNumberAndActiveTrue(Long excursionId, String busNumber);
+
     List<ExcursionPassenger> findByExcursionIdAndStatusAndActiveTrue(Long excursionId, ExcursionPassengerStatus status);
 
-    /**
-     * Finds active excursion bookings with the given cabin number.
-     *
-     * @param cabinNumber cabin number to match
-     * @return matching active bookings, or an empty list if none match
-     */
     List<ExcursionPassenger> findByCabinNumberAndActiveTrue(String cabinNumber);
 
     List<ExcursionPassenger> findByExcursionIdAndCabinNumberAndActiveTrue(Long excursionId, String cabinNumber);
 
-    /**
-     * Finds active excursion bookings by passenger name, ignoring case.
-     *
-     * @param passengerName passenger name to match
-     * @return matching active bookings, or an empty list if none match
-     */
     List<ExcursionPassenger> findByPassengerNameIgnoreCaseAndActiveTrue(String passengerName);
+
+    List<ExcursionPassenger> findByPassengerIdAndActiveTrue(Long passengerId);
+
+    Optional<ExcursionPassenger> findByExcursionIdAndPassengerIdAndActiveTrue(Long excursionId, Long passengerId);
 }

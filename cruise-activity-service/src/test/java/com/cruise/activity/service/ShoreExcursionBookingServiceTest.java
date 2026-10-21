@@ -1,0 +1,615 @@
+package com.cruise.activity.service;
+
+import com.cruise.activity.dto.*;
+import com.cruise.activity.entity.*;
+import com.cruise.activity.enums.ExcursionBookingStatus;
+import com.cruise.activity.enums.ExcursionPassengerStatus;
+import com.cruise.activity.enums.ExcursionStatus;
+import com.cruise.activity.enums.VehicleStatus;
+import com.cruise.activity.exception.BusinessRuleException;
+import com.cruise.activity.exception.DuplicateRegistrationException;
+import com.cruise.activity.exception.PaymentRequiredException;
+import com.cruise.activity.exception.ResourceNotFoundException;
+import com.cruise.activity.repository.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.*;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class ShoreExcursionBookingServiceTest {
+
+    @Mock
+    private ShoreExcursionRepository excursionRepository;
+    @Mock
+    private ExcursionPassengerRepository passengerRepository;
+    @Mock
+    private ExcursionVehicleRepository vehicleRepository;
+    @Mock
+    private PassengerRepository cruisePassengerRepository;
+    @Mock
+    private ExcursionBookingLogRepository bookingLogRepository;
+
+    @InjectMocks
+    private ShoreExcursionBookingService bookingService;
+
+    private ShoreExcursion excursion;
+    private Passenger passenger;
+    private ExcursionVehicle vehicle1;
+    private ExcursionVehicle vehicle2;
+
+    @BeforeEach
+    void setUp() {
+        excursion = ShoreExcursion.builder()
+                .tourId(10L)
+                .portId(20L)
+                .dayNumber(2)
+                .title("Hạ Long Bay Cruise & Kayaking")
+                .portName("Cảng Quốc Tế Hạ Long")
+                .meetingPoint("Cầu cảng số 2")
+                .excursionDate(LocalDate.now().plusDays(2))
+                .gatheringTime(LocalTime.of(8, 0))
+                .departureTime(LocalTime.of(8, 30))
+                .returnToShipTime(LocalTime.of(16, 0))
+                .maxCapacity(50)
+                .currentParticipants(10)
+                .price(new BigDecimal("120.00"))
+                .currency("USD")
+                .isIncluded(false)
+                .status(ExcursionStatus.OPEN_FOR_BOOKING)
+                .active(true)
+                .build();
+        excursion.setId(100L);
+
+        passenger = Passenger.builder()
+                .tourId(10L)
+                .fullName("Trần Gia Huy")
+                .cabinNumber("Suite-801")
+                .email("huytran@cruise.com")
+                .phoneNumber("0987654321")
+                .rfidTag("RFID-801-01")
+                .tourPackage("STANDARD")
+                .active(true)
+                .build();
+        passenger.setId(200L);
+
+        vehicle1 = ExcursionVehicle.builder()
+                .excursionId(100L)
+                .vehicleCode("BUS-01")
+                .licensePlate("14B-8888")
+                .capacity(30)
+                .assignedPassengers(10)
+                .status(VehicleStatus.READY)
+                .active(true)
+                .build();
+        vehicle1.setId(1L);
+
+        vehicle2 = ExcursionVehicle.builder()
+                .excursionId(100L)
+                .vehicleCode("BUS-02")
+                .licensePlate("14B-9999")
+                .capacity(30)
+                .assignedPassengers(0)
+                .status(VehicleStatus.READY)
+                .active(true)
+                .build();
+        vehicle2.setId(2L);
+    }
+
+    @Test
+    @DisplayName("Đặt tour thành công với vé điện tử EXC-{id}-{timestamp} và ghi nợ Folio")
+    void bookExcursion_Success_ChargesFolio() {
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(cruisePassengerRepository.findById(200L)).thenReturn(Optional.of(passenger));
+        when(passengerRepository.findByExcursionIdAndPassengerIdAndActiveTrue(100L, 200L)).thenReturn(Optional.empty());
+        when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle1, vehicle2));
+        when(passengerRepository.countByExcursionIdAndActiveTrue(100L)).thenReturn(10L);
+
+        when(passengerRepository.save(any(ExcursionPassenger.class))).thenAnswer(invocation -> {
+            ExcursionPassenger ep = invocation.getArgument(0);
+            ep.setId(501L);
+            return ep;
+        });
+
+        ExcursionBookingRequest request = ExcursionBookingRequest.builder()
+                .passengerId(200L)
+                .cabinNumber("Suite-801")
+                .build();
+
+        ExcursionBookingResponse resp = bookingService.bookExcursion(100L, request);
+
+        assertThat(resp).isNotNull();
+        assertThat(resp.getBookingId()).isEqualTo(501L);
+        assertThat(resp.getTicketCode()).startsWith("EXC-100-");
+        assertThat(resp.getChargedAmount()).isEqualByComparingTo("120.00");
+        assertThat(resp.getTransactionId()).startsWith("FOLIO-EXC-");
+        assertThat(resp.getIsIncluded()).isFalse();
+
+        verify(bookingLogRepository, times(1)).save(any(ExcursionBookingLog.class));
+        verify(excursionRepository, times(1)).save(excursion);
+    }
+
+    @Test
+    @DisplayName("Đặt tour thành công với gói VIP/Included: Giá vé 0 USD")
+    void bookExcursion_Success_PackageIncluded_FreeTicket() {
+        passenger.setTourPackage("VIP_ALL_INCLUSIVE");
+
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(cruisePassengerRepository.findById(200L)).thenReturn(Optional.of(passenger));
+        when(passengerRepository.findByExcursionIdAndPassengerIdAndActiveTrue(100L, 200L)).thenReturn(Optional.empty());
+        when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle1));
+        when(passengerRepository.countByExcursionIdAndActiveTrue(100L)).thenReturn(5L);
+
+        when(passengerRepository.save(any(ExcursionPassenger.class))).thenAnswer(invocation -> {
+            ExcursionPassenger ep = invocation.getArgument(0);
+            ep.setId(502L);
+            return ep;
+        });
+
+        ExcursionBookingRequest request = ExcursionBookingRequest.builder().passengerId(200L).build();
+        ExcursionBookingResponse resp = bookingService.bookExcursion(100L, request);
+
+        assertThat(resp.getChargedAmount()).isEqualByComparingTo("0.00");
+        assertThat(resp.getIsIncluded()).isTrue();
+        assertThat(resp.getTransactionId()).isNull();
+    }
+
+    @Test
+    @DisplayName("Từ chối đặt tour khi tổng sức chứa các xe hoạt động đã đầy")
+    void bookExcursion_ThrowsWhenVehicleCapacityExceeded() {
+        vehicle1.setCapacity(10);
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(cruisePassengerRepository.findById(200L)).thenReturn(Optional.of(passenger));
+        when(passengerRepository.findByExcursionIdAndPassengerIdAndActiveTrue(100L, 200L)).thenReturn(Optional.empty());
+        when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle1));
+        when(passengerRepository.countByExcursionIdAndActiveTrue(100L)).thenReturn(10L);
+
+        ExcursionBookingRequest request = ExcursionBookingRequest.builder().passengerId(200L).build();
+
+        assertThatThrownBy(() -> bookingService.bookExcursion(100L, request))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("tổng sức chứa của các xe đang hoạt động đã đầy");
+    }
+
+    @Test
+    @DisplayName("Từ chối đặt chỗ khi tài khoản Folio bị khóa chi tiêu")
+    void bookExcursion_ThrowsWhenFolioLocked() {
+        passenger.setCabinNumber("LOCKED-102");
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(cruisePassengerRepository.findById(200L)).thenReturn(Optional.of(passenger));
+
+        ExcursionBookingRequest request = ExcursionBookingRequest.builder().passengerId(200L).build();
+
+        assertThatThrownBy(() -> bookingService.bookExcursion(100L, request))
+                .isInstanceOf(PaymentRequiredException.class)
+                .hasMessageContaining("đang bị khóa");
+    }
+
+    @Test
+    @DisplayName("Từ chối đặt trùng lặp cùng 1 tour bờ")
+    void bookExcursion_ThrowsOnDuplicateBooking() {
+        ExcursionPassenger existing = ExcursionPassenger.builder().ticketCode("EXC-100-999").build();
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(cruisePassengerRepository.findById(200L)).thenReturn(Optional.of(passenger));
+        when(passengerRepository.findByExcursionIdAndPassengerIdAndActiveTrue(100L, 200L)).thenReturn(Optional.of(existing));
+
+        ExcursionBookingRequest request = ExcursionBookingRequest.builder().passengerId(200L).build();
+
+        assertThatThrownBy(() -> bookingService.bookExcursion(100L, request))
+                .isInstanceOf(DuplicateRegistrationException.class)
+                .hasMessageContaining("đã đăng ký tour bờ này trước đó");
+    }
+
+    @Test
+    @DisplayName("Hủy tour trước 24h: Hoàn tiền 100%, 0 phạt")
+    void cancelBooking_FreeCancellation_Before24Hours() {
+        excursion.setExcursionDate(LocalDate.now().plusDays(3));
+        ExcursionPassenger booking = ExcursionPassenger.builder()
+                .excursionId(100L)
+                .passengerId(200L)
+                .chargedAmount(new BigDecimal("100.00"))
+                .active(true)
+                .build();
+        booking.setId(901L);
+
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(901L, 100L)).thenReturn(Optional.of(booking));
+
+        ExcursionCancellationResponse res = bookingService.cancelBooking(100L, 901L, "Thay đổi kế hoạch");
+
+        assertThat(res.getStatus()).isEqualTo("CANCELLED");
+        assertThat(res.getRefundAmount()).isEqualByComparingTo("100.00");
+        assertThat(res.getPenaltyFee()).isEqualByComparingTo("0.00");
+        verify(bookingLogRepository, times(1)).save(any(ExcursionBookingLog.class));
+    }
+
+    @Test
+    @DisplayName("Hủy tour từ 12-24h: Phạt 50%, hoàn 50%")
+    void cancelBooking_50PercentPenalty_Between12And24Hours() {
+        // Gathering time cách thời điểm hiện tại 18h trong múi giờ cảng
+        ZoneId portZone = ZoneId.of("Asia/Ho_Chi_Minh");
+        ZonedDateTime targetZoned = ZonedDateTime.now(portZone).plusHours(18);
+        excursion.setExcursionDate(targetZoned.toLocalDate());
+        excursion.setGatheringTime(targetZoned.toLocalTime());
+
+        ExcursionPassenger booking = ExcursionPassenger.builder()
+                .excursionId(100L)
+                .passengerId(200L)
+                .chargedAmount(new BigDecimal("100.00"))
+                .active(true)
+                .build();
+        booking.setId(902L);
+
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(902L, 100L)).thenReturn(Optional.of(booking));
+
+        ExcursionCancellationResponse res = bookingService.cancelBooking(100L, 902L, "Kế hoạch gấp");
+
+        assertThat(res.getPenaltyFee()).isEqualByComparingTo("50.00");
+        assertThat(res.getRefundAmount()).isEqualByComparingTo("50.00");
+    }
+
+    @Test
+    @DisplayName("Hủy tour dưới 12h: Phạt 100%, không hoàn tiền")
+    void cancelBooking_100PercentPenalty_Under12Hours() {
+        ZoneId portZone = ZoneId.of("Asia/Ho_Chi_Minh");
+        ZonedDateTime targetZoned = ZonedDateTime.now(portZone).plusHours(4);
+        excursion.setExcursionDate(targetZoned.toLocalDate());
+        excursion.setGatheringTime(targetZoned.toLocalTime());
+
+        ExcursionPassenger booking = ExcursionPassenger.builder()
+                .excursionId(100L)
+                .passengerId(200L)
+                .chargedAmount(new BigDecimal("100.00"))
+                .active(true)
+                .build();
+        booking.setId(903L);
+
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(903L, 100L)).thenReturn(Optional.of(booking));
+
+        ExcursionCancellationResponse res = bookingService.cancelBooking(100L, 903L, "Muộn giờ");
+
+        assertThat(res.getPenaltyFee()).isEqualByComparingTo("100.00");
+        assertThat(res.getRefundAmount()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    @DisplayName("Hủy tour do thời tiết xấu (Weather): Hoàn 100% dù dưới 12h")
+    void cancelBooking_WeatherForceMajeure_FullRefund() {
+        excursion.setStatus(ExcursionStatus.CANCELLED);
+        ZoneId portZone = ZoneId.of("Asia/Ho_Chi_Minh");
+        ZonedDateTime targetZoned = ZonedDateTime.now(portZone).plusHours(2);
+        excursion.setExcursionDate(targetZoned.toLocalDate());
+        excursion.setGatheringTime(targetZoned.toLocalTime());
+
+        ExcursionPassenger booking = ExcursionPassenger.builder()
+                .excursionId(100L)
+                .passengerId(200L)
+                .chargedAmount(new BigDecimal("150.00"))
+                .active(true)
+                .build();
+        booking.setId(904L);
+
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(904L, 100L)).thenReturn(Optional.of(booking));
+
+        ExcursionCancellationResponse res = bookingService.cancelBooking(100L, 904L, "Hủy cảng do bão thời tiết xấu (weather)");
+
+        assertThat(res.getRefundAmount()).isEqualByComparingTo("150.00");
+        assertThat(res.getPenaltyFee()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    @DisplayName("Chuyển xe thành công và cập nhật tải trọng xe")
+    void reassignBus_Success() {
+        ExcursionPassenger booking = ExcursionPassenger.builder()
+                .excursionId(100L)
+                .passengerId(200L)
+                .ticketCode("EXC-100-01")
+                .busNumber("BUS-01")
+                .groupName("Nhóm 1")
+                .active(true)
+                .build();
+        booking.setId(905L);
+
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(905L, 100L)).thenReturn(Optional.of(booking));
+        when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle1, vehicle2));
+        when(passengerRepository.countByExcursionIdAndBusNumberAndActiveTrue(100L, "BUS-02")).thenReturn(5L);
+
+        ReassignBusResponse res = bookingService.reassignBus(100L, 905L, new ReassignBusRequest("BUS-02", "Nhóm 2"));
+
+        assertThat(res.getOldBusNumber()).isEqualTo("BUS-01");
+        assertThat(res.getNewBusNumber()).isEqualTo("BUS-02");
+        assertThat(booking.getBusNumber()).isEqualTo("BUS-02");
+        verify(bookingLogRepository, times(1)).save(any(ExcursionBookingLog.class));
+    }
+
+    @Test
+    @DisplayName("Tra cứu danh sách tour cá nhân đã đặt (getMyBookings)")
+    void getMyBookings_Success() {
+        ExcursionPassenger booking = ExcursionPassenger.builder()
+                .excursionId(100L)
+                .passengerId(200L)
+                .passengerName("Trần Gia Huy")
+                .cabinNumber("Suite-801")
+                .ticketCode("EXC-100-111")
+                .busNumber("BUS-01")
+                .groupName("Nhóm 1")
+                .chargedAmount(new BigDecimal("120.00"))
+                .isIncluded(false)
+                .status(ExcursionPassengerStatus.REGISTERED)
+                .active(true)
+                .build();
+        booking.setId(906L);
+
+        when(passengerRepository.findByPassengerIdAndActiveTrue(200L)).thenReturn(List.of(booking));
+        when(excursionRepository.findById(100L)).thenReturn(Optional.of(excursion));
+
+        List<PassengerExcursionBookingDto> list = bookingService.getMyBookings(200L);
+
+        assertThat(list).hasSize(1);
+        assertThat(list.get(0).getTicketCode()).isEqualTo("EXC-100-111");
+        assertThat(list.get(0).getExcursionTitle()).isEqualTo(excursion.getTitle());
+    }
+
+    @Test
+    @DisplayName("ExcursionBookingStatus enum coverage")
+    void testExcursionBookingStatusValues() {
+        for (ExcursionBookingStatus status : ExcursionBookingStatus.values()) {
+            assertThat(ExcursionBookingStatus.valueOf(status.name())).isEqualTo(status);
+        }
+    }
+
+    @Test
+    @DisplayName("getMyBookings skips inactive excursion")
+    void getMyBookings_SkipsInactiveExcursion() {
+        ExcursionPassenger booking = ExcursionPassenger.builder()
+                .excursionId(100L)
+                .passengerId(200L)
+                .ticketCode("EXC-100-111")
+                .active(true)
+                .build();
+        booking.setId(906L);
+
+        excursion.setActive(false);
+        when(passengerRepository.findByPassengerIdAndActiveTrue(200L)).thenReturn(List.of(booking));
+        when(excursionRepository.findById(100L)).thenReturn(Optional.of(excursion));
+
+        List<PassengerExcursionBookingDto> list = bookingService.getMyBookings(200L);
+        assertThat(list).isEmpty();
+    }
+
+    @Test
+    @DisplayName("bookExcursion throws PaymentRequiredException when folio is locked")
+    void bookExcursion_ThrowsPaymentRequired_WhenFolioLocked() {
+        Passenger lockedPassenger = Passenger.builder()
+                .fullName("Locked Guest")
+                .cabinNumber("CABIN-LOCKED-01")
+                .email("locked@cruise.com")
+                .active(true)
+                .build();
+        lockedPassenger.setId(200L);
+
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(cruisePassengerRepository.findById(200L)).thenReturn(Optional.of(lockedPassenger));
+
+        ExcursionBookingRequest req = ExcursionBookingRequest.builder()
+                .passengerId(200L)
+                .build();
+
+        assertThatThrownBy(() -> bookingService.bookExcursion(100L, req))
+                .isInstanceOf(PaymentRequiredException.class);
+    }
+
+    @Test
+    @DisplayName("bookExcursion throws BusinessRuleException when excursion is CANCELLED or COMPLETED")
+    void bookExcursion_ThrowsBusinessRule_WhenExcursionCancelledOrCompleted() {
+        excursion.setStatus(ExcursionStatus.CANCELLED);
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+
+        ExcursionBookingRequest req = ExcursionBookingRequest.builder().passengerId(200L).build();
+        assertThatThrownBy(() -> bookingService.bookExcursion(100L, req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("không mở đăng ký");
+
+        excursion.setStatus(ExcursionStatus.COMPLETED);
+        assertThatThrownBy(() -> bookingService.bookExcursion(100L, req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("không mở đăng ký");
+    }
+
+    @Test
+    @DisplayName("bookExcursion throws BusinessRuleException when maxCapacity reached")
+    void bookExcursion_ThrowsBusinessRule_WhenMaxCapacityReached() {
+        excursion.setMaxCapacity(10);
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(cruisePassengerRepository.findById(200L)).thenReturn(Optional.of(passenger));
+        when(passengerRepository.findByExcursionIdAndPassengerIdAndActiveTrue(100L, 200L)).thenReturn(Optional.empty());
+        when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle1, vehicle2)); // vehicle cap = 55
+        when(passengerRepository.countByExcursionIdAndActiveTrue(100L)).thenReturn(10L);
+
+        ExcursionBookingRequest req = ExcursionBookingRequest.builder().passengerId(200L).build();
+        assertThatThrownBy(() -> bookingService.bookExcursion(100L, req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Tour bờ đã đạt sức chứa tối đa");
+    }
+
+    @Test
+    @DisplayName("bookExcursion with explicit busNumber and groupName")
+    void bookExcursion_WithExplicitBusAndGroupName() {
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(cruisePassengerRepository.findById(200L)).thenReturn(Optional.of(passenger));
+        when(passengerRepository.findByExcursionIdAndPassengerIdAndActiveTrue(100L, 200L)).thenReturn(Optional.empty());
+        when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle1, vehicle2));
+        when(passengerRepository.countByExcursionIdAndActiveTrue(100L)).thenReturn(5L);
+
+        when(passengerRepository.save(any(ExcursionPassenger.class))).thenAnswer(i -> {
+            ExcursionPassenger ep = i.getArgument(0);
+            ep.setId(505L);
+            return ep;
+        });
+
+        ExcursionBookingRequest req = ExcursionBookingRequest.builder()
+                .passengerId(200L)
+                .busNumber("BUS-02")
+                .groupName("VIP Explorers")
+                .passengerName("Custom Name")
+                .emergencyPhone("+84999888777")
+                .specialRequirements("Vegetarian meal")
+                .build();
+
+        ExcursionBookingResponse resp = bookingService.bookExcursion(100L, req);
+        assertThat(resp).isNotNull();
+        assertThat(resp.getBusNumber()).isEqualTo("BUS-02");
+        assertThat(resp.getGroupName()).isEqualTo("VIP Explorers");
+    }
+
+    @Test
+    @DisplayName("bookExcursion clusters linked cabin into peer bus")
+    void bookExcursion_ClustersLinkedCabin() {
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(cruisePassengerRepository.findById(200L)).thenReturn(Optional.of(passenger));
+        when(passengerRepository.findByExcursionIdAndPassengerIdAndActiveTrue(100L, 200L)).thenReturn(Optional.empty());
+        when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle1, vehicle2));
+        when(passengerRepository.countByExcursionIdAndActiveTrue(100L)).thenReturn(5L);
+
+        ExcursionPassenger peerInLinkedCabin = ExcursionPassenger.builder()
+                .busNumber("BUS-02")
+                .cabinNumber("Suite-802")
+                .build();
+        when(passengerRepository.findByExcursionIdAndCabinNumberAndActiveTrue(100L, "Suite-801"))
+                .thenReturn(Collections.emptyList());
+        when(passengerRepository.findByExcursionIdAndCabinNumberAndActiveTrue(100L, "Suite-802"))
+                .thenReturn(List.of(peerInLinkedCabin));
+        when(passengerRepository.countByExcursionIdAndBusNumberAndActiveTrue(100L, "BUS-02"))
+                .thenReturn(10L); // vehicle2 capacity is 30, so it has room
+
+        when(passengerRepository.save(any(ExcursionPassenger.class))).thenAnswer(i -> {
+            ExcursionPassenger ep = i.getArgument(0);
+            ep.setId(506L);
+            return ep;
+        });
+
+        ExcursionBookingRequest req = ExcursionBookingRequest.builder()
+                .passengerId(200L)
+                .linkedCabins(List.of("Suite-802"))
+                .build();
+
+        ExcursionBookingResponse resp = bookingService.bookExcursion(100L, req);
+        assertThat(resp.getBusNumber()).isEqualTo("BUS-02");
+    }
+
+    @Test
+    @DisplayName("bookExcursion falls back to default when vehicles empty")
+    void bookExcursion_FallsBackWhenVehiclesEmpty() {
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(cruisePassengerRepository.findById(200L)).thenReturn(Optional.of(passenger));
+        when(passengerRepository.findByExcursionIdAndPassengerIdAndActiveTrue(100L, 200L)).thenReturn(Optional.empty());
+        when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(Collections.emptyList());
+        when(passengerRepository.countByExcursionIdAndActiveTrue(100L)).thenReturn(0L);
+
+        when(passengerRepository.save(any(ExcursionPassenger.class))).thenAnswer(i -> {
+            ExcursionPassenger ep = i.getArgument(0);
+            ep.setId(507L);
+            return ep;
+        });
+
+        ExcursionBookingRequest req = ExcursionBookingRequest.builder().passengerId(200L).build();
+        ExcursionBookingResponse resp = bookingService.bookExcursion(100L, req);
+        assertThat(resp.getBusNumber()).isEqualTo("XE-01");
+    }
+
+    @Test
+    @DisplayName("cancelBooking with non-existent excursion or booking throws ResourceNotFoundException")
+    void cancelBooking_ThrowsNotFound() {
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> bookingService.cancelBooking(100L, 999L, "test"))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(999L, 100L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> bookingService.cancelBooking(100L, 999L, "test"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("reassignBus throws ResourceNotFoundException when booking does not exist")
+    void reassignBus_ThrowsNotFound_WhenBookingMissing() {
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(999L, 100L)).thenReturn(Optional.empty());
+
+        ReassignBusRequest req = ReassignBusRequest.builder().newBusNumber("BUS-02").build();
+        assertThatThrownBy(() -> bookingService.reassignBus(100L, 999L, req))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("reassignBus throws BusinessRuleException when target vehicle is full")
+    void reassignBus_ThrowsBusinessRule_WhenTargetVehicleFull() {
+        ExcursionPassenger booking = ExcursionPassenger.builder()
+                .excursionId(100L)
+                .busNumber("BUS-01")
+                .active(true)
+                .build();
+        booking.setId(901L);
+
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(901L, 100L)).thenReturn(Optional.of(booking));
+        when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle2)); // cap = 30
+        when(passengerRepository.countByExcursionIdAndBusNumberAndActiveTrue(100L, "BUS-02")).thenReturn(30L);
+
+        ReassignBusRequest req = ReassignBusRequest.builder().newBusNumber("BUS-02").build();
+        assertThatThrownBy(() -> bookingService.reassignBus(100L, 901L, req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("đã đủ sức chứa");
+    }
+
+    @Test
+    @DisplayName("reassignBus with newGroupName updates both bus and groupName")
+    void reassignBus_WithNewGroupName() {
+        ExcursionPassenger booking = ExcursionPassenger.builder()
+                .excursionId(100L)
+                .busNumber("BUS-01")
+                .groupName("Group 1")
+                .active(true)
+                .build();
+        booking.setId(901L);
+
+        vehicle1.setAssignedPassengers(5);
+        vehicle2.setAssignedPassengers(10);
+
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(901L, 100L)).thenReturn(Optional.of(booking));
+        when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle1, vehicle2));
+        when(passengerRepository.countByExcursionIdAndBusNumberAndActiveTrue(100L, "BUS-02")).thenReturn(10L);
+        when(passengerRepository.save(any(ExcursionPassenger.class))).thenAnswer(i -> i.getArgument(0));
+
+        ReassignBusRequest req = ReassignBusRequest.builder()
+                .newBusNumber("BUS-02")
+                .newGroupName("VIP Bus 2")
+                .build();
+
+        ReassignBusResponse resp = bookingService.reassignBus(100L, 901L, req);
+        assertThat(resp.getNewBusNumber()).isEqualTo("BUS-02");
+        assertThat(resp.getGroupName()).isEqualTo("VIP Bus 2");
+        assertThat(booking.getGroupName()).isEqualTo("VIP Bus 2");
+    }
+}
