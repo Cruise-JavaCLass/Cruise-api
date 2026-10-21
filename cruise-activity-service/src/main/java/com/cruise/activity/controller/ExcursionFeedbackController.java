@@ -2,6 +2,7 @@ package com.cruise.activity.controller;
 
 import com.cruise.activity.dto.ExcursionReviewRequest;
 import com.cruise.activity.dto.ExcursionReviewResponse;
+import com.cruise.activity.exception.AccessDeniedException;
 import com.cruise.activity.service.ExcursionReviewService;
 import com.cruise.common.dto.ApiResponse;
 import jakarta.validation.Valid;
@@ -37,14 +38,28 @@ public class ExcursionFeedbackController {
     @GetMapping({"/api/v1/shore-excursions/{id}/reviews", "/api/excursions/{id}/reviews"})
     public ApiResponse<Page<ExcursionReviewResponse>> getReviews(
             @PathVariable("id") Long id,
+            @RequestHeader(value = "X-Caller-Role", required = false) String callerRole,
             Pageable pageable
     ) {
+        verifyStaffAuthorization(callerRole);
         return ApiResponse.ok("Lấy danh sách đánh giá thành công", reviewService.getReviewsByExcursion(id, pageable));
     }
 
     @GetMapping({"/api/v1/shore-excursions/reviews/flagged", "/api/excursions/reviews/flagged"})
-    public ApiResponse<List<ExcursionReviewResponse>> getFlaggedReviews() {
+    public ApiResponse<List<ExcursionReviewResponse>> getFlaggedReviews(
+            @RequestHeader(value = "X-Caller-Role", required = false) String callerRole
+    ) {
+        verifyStaffAuthorization(callerRole);
         return ApiResponse.ok("Lấy danh sách đánh giá cảnh báo an toàn & tiêu cực thành công",
                 reviewService.getFlaggedReviews());
+    }
+
+    private void verifyStaffAuthorization(String callerRole) {
+        if (callerRole != null && !callerRole.isBlank()) {
+            String upper = callerRole.toUpperCase();
+            if (upper.contains("PASSENGER") || upper.contains("GUEST") || upper.contains("CUSTOMER")) {
+                throw new AccessDeniedException("Yêu cầu quyền nhân viên để truy cập danh sách đánh giá tour bờ");
+            }
+        }
     }
 }

@@ -46,8 +46,15 @@ public class ExcursionReviewService {
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             var existingOpt = reviewRepository.findByIdempotencyKey(idempotencyKey);
             if (existingOpt.isPresent()) {
-                log.info("Idempotent hit for excursion review: key={}", idempotencyKey);
-                return mapToResponse(existingOpt.get());
+                ExcursionReview existing = existingOpt.get();
+                if (Objects.equals(existing.getExcursionId(), excursionId) &&
+                        Objects.equals(existing.getPassengerId(), request.passengerId())) {
+                    log.info("Idempotent hit for excursion review: key={}", idempotencyKey);
+                    return mapToResponse(existing);
+                } else {
+                    log.warn("Idempotency key collision with different excursion/passenger: key={}", idempotencyKey);
+                    throw new DuplicateRegistrationException("Idempotency key đã được sử dụng cho một yêu cầu khác");
+                }
             }
         }
 
@@ -82,11 +89,11 @@ public class ExcursionReviewService {
                     excursionId, request.passengerId(), request.ratingOverall(), isNegativeOrSafetyConcern);
             return mapToResponse(saved);
         } catch (DataIntegrityViolationException ex) {
-            log.warn("Concurrent duplicate submission detected for excursionId={}, passengerId={}",
+            log.warn("Concurrent duplicate submission or constraint violation detected for excursionId={}, passengerId={}",
                     excursionId, request.passengerId());
             return reviewRepository.findByExcursionIdAndPassengerId(excursionId, request.passengerId())
                     .map(this::mapToResponse)
-                    .orElseThrow(() -> new DuplicateRegistrationException("Hành khách đã gửi đánh giá cho tour này"));
+                    .orElseThrow(() -> new DuplicateRegistrationException("Lỗi lưu trữ đánh giá trùng lặp hoặc xung đột khóa"));
         }
     }
 
@@ -108,7 +115,7 @@ public class ExcursionReviewService {
     private void validateAttendanceGuard(Long excursionId, Long passengerId) {
         List<ExcursionPassenger> bookings = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
         boolean hasAttended = bookings.stream()
-                .filter(p -> Objects.equals(p.getPassengerId(), passengerId) || Objects.equals(p.getId(), passengerId))
+                .filter(p -> Objects.equals(p.getPassengerId(), passengerId))
                 .anyMatch(p -> ATTENDED_STATUSES.contains(p.getStatus()));
 
         if (!hasAttended) {

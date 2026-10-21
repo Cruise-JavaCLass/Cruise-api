@@ -32,26 +32,34 @@ public class FleetOccupancyAggregator {
 
     @Transactional(readOnly = true)
     public FleetOccupancyAnalyticsResponse aggregateFleetOccupancy(Long portIdFilter, String providerFilter) {
-        List<ShoreExcursion> excursions = excursionRepository.findAll();
-        List<ExcursionVehicle> allVehicles = vehicleRepository.findAll();
+        List<ShoreExcursion> excursions = excursionRepository.findAll().stream()
+                .filter(exc -> {
+                    if (portIdFilter != null && !Objects.equals(exc.getPortId(), portIdFilter)) {
+                        return false;
+                    }
+                    if (providerFilter != null && !providerFilter.isBlank()) {
+                        String local = exc.getLocalProvider();
+                        return local != null && local.toLowerCase().contains(providerFilter.toLowerCase().trim());
+                    }
+                    return true;
+                })
+                .toList();
 
-        Map<Long, List<ExcursionVehicle>> vehiclesByExcursion = allVehicles.stream()
-                .filter(v -> Boolean.TRUE.equals(v.getActive()))
+        List<Long> excursionIds = excursions.stream().map(ShoreExcursion::getId).toList();
+        List<ExcursionVehicle> vehicles = excursionIds.isEmpty()
+                ? Collections.emptyList()
+                : vehicleRepository.findAll().stream()
+                .filter(v -> Boolean.TRUE.equals(v.getActive()) && excursionIds.contains(v.getExcursionId()))
+                .toList();
+
+        Map<Long, List<ExcursionVehicle>> vehiclesByExcursion = vehicles.stream()
                 .collect(Collectors.groupingBy(ExcursionVehicle::getExcursionId));
 
         List<FleetOccupancyDto> excursionDtos = new ArrayList<>();
 
         for (ShoreExcursion exc : excursions) {
-            if (portIdFilter != null && !Objects.equals(exc.getPortId(), portIdFilter)) {
-                continue;
-            }
-            if (providerFilter != null && !providerFilter.isBlank() &&
-                    (exc.getLocalProvider() == null || !exc.getLocalProvider().toLowerCase().contains(providerFilter.toLowerCase().trim()))) {
-                continue;
-            }
-
-            List<ExcursionVehicle> vehicles = vehiclesByExcursion.getOrDefault(exc.getId(), Collections.emptyList());
-            List<BusDetailDto> busDtos = vehicles.stream()
+            List<ExcursionVehicle> excVehicles = vehiclesByExcursion.getOrDefault(exc.getId(), Collections.emptyList());
+            List<BusDetailDto> busDtos = excVehicles.stream()
                     .map(v -> {
                         int cap = v.getCapacity() != null ? v.getCapacity() : 0;
                         int assigned = v.getAssignedPassengers() != null ? v.getAssignedPassengers() : 0;

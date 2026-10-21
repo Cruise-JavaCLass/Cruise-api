@@ -4,14 +4,18 @@ import com.cruise.activity.dto.ExcursionReviewRequest;
 import com.cruise.activity.dto.ExcursionReviewResponse;
 import com.cruise.activity.dto.FleetOccupancyAnalyticsResponse;
 import com.cruise.activity.dto.ExcursionOpsKpiResponse;
+import com.cruise.activity.dto.ProviderScorecardDto;
+import com.cruise.activity.entity.ExcursionGuide;
 import com.cruise.activity.entity.ExcursionPassenger;
 import com.cruise.activity.entity.ExcursionReview;
 import com.cruise.activity.entity.ExcursionVehicle;
 import com.cruise.activity.entity.ShoreExcursion;
 import com.cruise.activity.enums.ExcursionPassengerStatus;
+import com.cruise.activity.enums.GuideRole;
 import com.cruise.activity.enums.VehicleStatus;
 import com.cruise.activity.exception.AccessDeniedException;
 import com.cruise.activity.exception.DuplicateRegistrationException;
+import com.cruise.activity.exception.ResourceNotFoundException;
 import com.cruise.activity.repository.ExcursionGuideRepository;
 import com.cruise.activity.repository.ExcursionPassengerRepository;
 import com.cruise.activity.repository.ExcursionReviewRepository;
@@ -25,6 +29,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
@@ -186,7 +191,7 @@ class ExcursionReviewAndAnalyticsTest {
     }
 
     @Test
-    @DisplayName("Idempotency: Gửi lại cùng idempotencyKey trả về kết quả cũ")
+    @DisplayName("Idempotency: Gửi lại cùng idempotencyKey trả về kết quả cũ nếu trùng excursion & passenger")
     void submitReview_IdempotentKey_ReturnsExisting() {
         ExcursionReview existing = ExcursionReview.builder()
                 .excursionId(1L)
@@ -207,7 +212,62 @@ class ExcursionReviewAndAnalyticsTest {
     }
 
     @Test
-    @DisplayName("AC3: Fleet Occupancy Aggregator tính toán chuẩn tỷ lệ lấp đầy ghế xe")
+    @DisplayName("Idempotency Collision: Trùng idempotencyKey nhưng khác passenger/excursion ném ngoại lệ DuplicateRegistrationException")
+    void submitReview_IdempotentKeyCollision_ThrowsConflict() {
+        ExcursionReview existing = ExcursionReview.builder()
+                .excursionId(2L)
+                .passengerId(999L)
+                .ratingOverall(5)
+                .idempotencyKey("KEY-123")
+                .isFlagged(false)
+                .build();
+
+        when(reviewRepository.findByIdempotencyKey("KEY-123")).thenReturn(Optional.of(existing));
+
+        ExcursionReviewRequest req = new ExcursionReviewRequest(201L, 5, 5, 5, 5, "Good");
+        assertThatThrownBy(() -> reviewService.submitReview(1L, req, "KEY-123"))
+                .isInstanceOf(DuplicateRegistrationException.class)
+                .hasMessageContaining("Idempotency key");
+    }
+
+    @Test
+    @DisplayName("DataIntegrityViolation Fallback: Bắt ngoại lệ và tìm review có sẵn")
+    void submitReview_DataIntegrityViolation_Fallback() {
+        ExcursionReviewRequest req = new ExcursionReviewRequest(201L, 5, 5, 5, 5, "Good");
+        when(excursionRepository.findById(1L)).thenReturn(Optional.of(mockExcursion));
+        when(passengerRepository.findByExcursionIdAndActiveTrue(1L)).thenReturn(List.of(attendedPassenger));
+        when(reviewRepository.existsByExcursionIdAndPassengerId(1L, 201L)).thenReturn(false);
+        when(reviewRepository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        ExcursionReview existing = ExcursionReview.builder()
+                .excursionId(1L)
+                .passengerId(201L)
+                .ratingOverall(5)
+                .build();
+        existing.setId(10L);
+        when(reviewRepository.findByExcursionIdAndPassengerId(1L, 201L)).thenReturn(Optional.of(existing));
+
+        ExcursionReviewResponse res = reviewService.submitReview(1L, req, null);
+        assertThat(res.id()).isEqualTo(10L);
+    }
+
+    @Test
+    @DisplayName("getReviewsByExcursion và getFlaggedReviews")
+    void getReviews_Success() {
+        when(excursionRepository.existsById(1L)).thenReturn(true);
+        ExcursionReview r = ExcursionReview.builder().excursionId(1L).passengerId(201L).ratingOverall(5).build();
+        when(reviewRepository.findByExcursionId(eq(1L), any())).thenReturn(new PageImpl<>(List.of(r)));
+        when(reviewRepository.findByIsFlaggedTrue()).thenReturn(List.of(r));
+
+        Page<ExcursionReviewResponse> page = reviewService.getReviewsByExcursion(1L, PageRequest.of(0, 10));
+        assertThat(page.getTotalElements()).isEqualTo(1);
+
+        List<ExcursionReviewResponse> flagged = reviewService.getFlaggedReviews();
+        assertThat(flagged).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("AC3: Fleet Occupancy Aggregator tính toán chuẩn tỷ lệ lấp đầy ghế xe với bộ lọc")
     void aggregateFleetOccupancy_ShouldCalculateCorrectly() {
         ExcursionVehicle v1 = ExcursionVehicle.builder()
                 .excursionId(1L)
@@ -238,7 +298,7 @@ class ExcursionReviewAndAnalyticsTest {
         when(excursionRepository.findAll()).thenReturn(List.of(mockExcursion));
         when(vehicleRepository.findAll()).thenReturn(List.of(v1, v2));
 
-        FleetOccupancyAnalyticsResponse response = fleetAggregator.aggregateFleetOccupancy(null, null);
+        FleetOccupancyAnalyticsResponse response = fleetAggregator.aggregateFleetOccupancy(100L, "Halong");
 
         assertThat(response.totalFleetCount()).isEqualTo(2);
         assertThat(response.totalFleetCapacity()).isEqualTo(80);
@@ -262,9 +322,18 @@ class ExcursionReviewAndAnalyticsTest {
                 .build();
         r1.setId(1L);
 
+        ExcursionGuide guide = ExcursionGuide.builder()
+                .excursionId(1L)
+                .fullName("Guide One")
+                .guideCode("G1")
+                .role(GuideRole.LEAD)
+                .rating(4.8)
+                .build();
+        guide.setId(10L);
+
         when(excursionRepository.findAll()).thenReturn(List.of(mockExcursion));
         when(reviewRepository.findAll()).thenReturn(List.of(r1));
-        when(guideRepository.findAll()).thenReturn(Collections.emptyList());
+        when(guideRepository.findAll()).thenReturn(List.of(guide));
 
         ExcursionOpsKpiResponse kpi = opsAnalyticsService.getOpsKpiMetrics();
 
@@ -274,5 +343,9 @@ class ExcursionReviewAndAnalyticsTest {
         assertThat(kpi.providerScorecards()).hasSize(1);
         assertThat(kpi.providerScorecards().get(0).providerName()).isEqualTo("Halong Heritage Tours");
         assertThat(kpi.providerScorecards().get(0).performanceTier()).isEqualTo("EXCELLENT");
+        assertThat(kpi.guideRatings()).hasSize(1);
+
+        List<ProviderScorecardDto> scorecards = opsAnalyticsService.getProviderScorecards();
+        assertThat(scorecards).hasSize(1);
     }
 }
