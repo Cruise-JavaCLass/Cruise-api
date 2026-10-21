@@ -8,6 +8,7 @@ import com.cruise.pos.enums.DisputeReason;
 import com.cruise.pos.enums.DisputeStatus;
 import com.cruise.pos.exception.BusinessRuleException;
 import com.cruise.pos.exception.ResourceNotFoundException;
+import com.cruise.pos.security.AuthPrincipal;
 import com.cruise.pos.service.PassengerFolioService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
@@ -18,6 +19,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -52,6 +55,7 @@ class PassengerFolioControllerTest {
     @Test
     @DisplayName("GET /api/passengers/{id}/folio should return 200 and summary response")
     void testGetFolioSummary() throws Exception {
+        SecurityContextHolder.clearContext();
         PassengerFolioSummaryResponse summary = PassengerFolioSummaryResponse.builder()
                 .passengerId(101L)
                 .cabinNumber("CABIN-7012")
@@ -77,8 +81,50 @@ class PassengerFolioControllerTest {
     }
 
     @Test
+    @DisplayName("Ownership check: authenticated passenger allowed when ID matches, forbidden when different")
+    void testOwnershipCheck() throws Exception {
+        AuthPrincipal matchingPrincipal = new AuthPrincipal("101", "ROLE_PASSENGER", "CABIN-7012");
+        TestingAuthenticationToken authMatch = new TestingAuthenticationToken(matchingPrincipal, null, "ROLE_PASSENGER");
+        authMatch.setAuthenticated(true);
+        SecurityContextHolder.getContext().setAuthentication(authMatch);
+
+        when(passengerFolioService.getFolioSummary(101L)).thenReturn(PassengerFolioSummaryResponse.builder().build());
+        mockMvc.perform(get("/api/passengers/101/folio"))
+                .andExpect(status().isOk());
+
+        AuthPrincipal differentPrincipal = new AuthPrincipal("999", "ROLE_PASSENGER", "CABIN-9999");
+        TestingAuthenticationToken authDiff = new TestingAuthenticationToken(differentPrincipal, null, "ROLE_PASSENGER");
+        authDiff.setAuthenticated(true);
+        SecurityContextHolder.getContext().setAuthentication(authDiff);
+
+        mockMvc.perform(get("/api/passengers/101/folio"))
+                .andExpect(status().isForbidden());
+
+        // Staff / Admin can access any passenger
+        AuthPrincipal staffPrincipal = new AuthPrincipal("admin_user", "ROLE_STAFF", "CABIN-0000");
+        TestingAuthenticationToken authStaff = new TestingAuthenticationToken(staffPrincipal, null, "ROLE_STAFF");
+        authStaff.setAuthenticated(true);
+        SecurityContextHolder.getContext().setAuthentication(authStaff);
+
+        mockMvc.perform(get("/api/passengers/101/folio"))
+                .andExpect(status().isOk());
+
+        // Non-numeric passenger username passes without error
+        AuthPrincipal guestPrincipal = new AuthPrincipal("non_numeric_guest", "ROLE_GUEST", "CABIN-1111");
+        TestingAuthenticationToken authGuest = new TestingAuthenticationToken(guestPrincipal, null, "ROLE_GUEST");
+        authGuest.setAuthenticated(true);
+        SecurityContextHolder.getContext().setAuthentication(authGuest);
+
+        mockMvc.perform(get("/api/passengers/101/folio"))
+                .andExpect(status().isOk());
+
+        SecurityContextHolder.clearContext();
+    }
+
+    @Test
     @DisplayName("GET /api/passengers/{id}/folio/transactions should return 200 with default pagination when params omitted")
     void testGetTransactionsDefaultPagination() throws Exception {
+        SecurityContextHolder.clearContext();
         FolioTransactionDto dto = FolioTransactionDto.builder()
                 .id(1L)
                 .transactionUuid("TX-123")
@@ -107,6 +153,7 @@ class PassengerFolioControllerTest {
     @Test
     @DisplayName("GET /api/passengers/{id}/folio/transactions should return 400 when page < 0 or size invalid")
     void testGetTransactionsInvalidPagination() throws Exception {
+        SecurityContextHolder.clearContext();
         mockMvc.perform(get("/api/passengers/101/folio/transactions?page=-1&size=10"))
                 .andExpect(status().isBadRequest());
 
@@ -120,6 +167,7 @@ class PassengerFolioControllerTest {
     @Test
     @DisplayName("POST /api/passengers/{id}/folio/transactions/{txId}/dispute should return 201 Created")
     void testDisputeTransaction() throws Exception {
+        SecurityContextHolder.clearContext();
         CreateFolioDisputeRequest request = CreateFolioDisputeRequest.builder()
                 .reason(DisputeReason.INCORRECT_AMOUNT)
                 .disputeAmount(BigDecimal.valueOf(25.00))
@@ -153,6 +201,7 @@ class PassengerFolioControllerTest {
     @Test
     @DisplayName("POST dispute without reason or with blank note should return 400 Bad Request")
     void testDisputeValidationFailure() throws Exception {
+        SecurityContextHolder.clearContext();
         CreateFolioDisputeRequest invalidRequest = CreateFolioDisputeRequest.builder()
                 .reason(null)
                 .disputeAmount(BigDecimal.valueOf(10.00))
@@ -168,6 +217,7 @@ class PassengerFolioControllerTest {
     @Test
     @DisplayName("Service throwing ResourceNotFoundException should be mapped to 404")
     void testResourceNotFoundMappedTo404() throws Exception {
+        SecurityContextHolder.clearContext();
         when(passengerFolioService.getFolioSummary(999L))
                 .thenThrow(new ResourceNotFoundException("Folio không tồn tại"));
 
@@ -178,6 +228,7 @@ class PassengerFolioControllerTest {
     @Test
     @DisplayName("Service throwing BusinessRuleException should be mapped to 400")
     void testBusinessRuleMappedTo400() throws Exception {
+        SecurityContextHolder.clearContext();
         CreateFolioDisputeRequest request = CreateFolioDisputeRequest.builder()
                 .reason(DisputeReason.INCORRECT_AMOUNT)
                 .disputeAmount(BigDecimal.valueOf(25.00))

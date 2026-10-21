@@ -111,8 +111,20 @@ class PassengerFolioServiceTest {
     @Test
     @DisplayName("Should return accurate folio summary with 5 standard categories and spending thresholds")
     void testGetFolioSummarySuccess() {
+        PosTransaction txNotes = PosTransaction.builder()
+                .transactionUuid("TX-NOTES-1")
+                .cabinNumber("CABIN-7012")
+                .passengerId(101L)
+                .stationId("RETAIL-01")
+                .cashierId("POS-002")
+                .guestName("Nguyễn Văn An")
+                .totalAmount(BigDecimal.valueOf(70.00))
+                .notes("Retail Souvenir Gift")
+                .items(List.of())
+                .build();
+
         when(cabinFolioAccountRepository.findByPassengerId(101L)).thenReturn(Optional.of(sampleAccount));
-        when(posTransactionRepository.findByCabinNumber("CABIN-7012")).thenReturn(List.of(sampleTx));
+        when(posTransactionRepository.findByCabinNumber("CABIN-7012")).thenReturn(List.of(sampleTx, txNotes));
 
         PassengerFolioSummaryResponse summary = passengerFolioService.getFolioSummary(101L);
 
@@ -137,6 +149,8 @@ class PassengerFolioServiceTest {
                 .isEqualByComparingTo(BigDecimal.valueOf(30.00));
         assertThat(summary.getSpendingByCategory().get(PassengerFolioService.CAT_SPA_AND_WELLNESS))
                 .isEqualByComparingTo(BigDecimal.valueOf(120.00));
+        assertThat(summary.getSpendingByCategory().get(PassengerFolioService.CAT_RETAIL_SHOPPING))
+                .isEqualByComparingTo(BigDecimal.valueOf(70.00));
         assertThat(summary.getSpendingByCategory().get(PassengerFolioService.CAT_SHORE_EXCURSIONS))
                 .isEqualByComparingTo(BigDecimal.ZERO);
     }
@@ -161,12 +175,20 @@ class PassengerFolioServiceTest {
     @Test
     @DisplayName("Should list transactions and distinguish complimentary packages ($0.00)")
     void testGetTransactionsWithComplimentary() {
+        PosTransaction freeTx = PosTransaction.builder()
+                .transactionUuid("TX-FREE-01")
+                .cabinNumber("CABIN-7012")
+                .totalAmount(BigDecimal.ZERO)
+                .items(List.of())
+                .build();
+        freeTx.setCreatedAt(Instant.now().minusSeconds(60));
+
         when(cabinFolioAccountRepository.findByPassengerId(101L)).thenReturn(Optional.of(sampleAccount));
-        when(posTransactionRepository.findByCabinNumber("CABIN-7012")).thenReturn(List.of(sampleTx));
+        when(posTransactionRepository.findByCabinNumber("CABIN-7012")).thenReturn(List.of(sampleTx, freeTx));
 
         Page<FolioTransactionDto> page = passengerFolioService.getTransactions(101L, "ALL", PageRequest.of(0, 10));
 
-        assertThat(page.getTotalElements()).isEqualTo(1);
+        assertThat(page.getTotalElements()).isEqualTo(2);
         FolioTransactionDto txDto = page.getContent().get(0);
         assertThat(txDto.getTransactionUuid()).isEqualTo("TX-UUID-999");
         assertThat(txDto.getLocationCounter()).isEqualTo("BAR-DECK-9");
@@ -177,6 +199,9 @@ class PassengerFolioServiceTest {
         assertThat(txDto.getItems()).hasSize(3);
         assertThat(txDto.getItems().get(2).isComplimentary()).isTrue();
         assertThat(txDto.getItems().get(2).getTotalPrice()).isEqualByComparingTo(BigDecimal.ZERO);
+
+        FolioTransactionDto freeDto = page.getContent().get(1);
+        assertThat(freeDto.isComplimentary()).isTrue();
     }
 
     @Test
@@ -271,6 +296,25 @@ class PassengerFolioServiceTest {
     }
 
     @Test
+    @DisplayName("Should throw exception if transaction total amount is null")
+    void testDisputeNullTotalAmountThrowsException() {
+        when(cabinFolioAccountRepository.findByPassengerId(101L)).thenReturn(Optional.of(sampleAccount));
+        sampleTx.setId(555L);
+        sampleTx.setTotalAmount(null);
+        when(posTransactionRepository.findById(555L)).thenReturn(Optional.of(sampleTx));
+
+        CreateFolioDisputeRequest req = CreateFolioDisputeRequest.builder()
+                .reason(DisputeReason.INCORRECT_AMOUNT)
+                .disputeAmount(BigDecimal.valueOf(50.00))
+                .disputeNote("Giao dịch không có tổng tiền")
+                .build();
+
+        assertThatThrownBy(() -> passengerFolioService.disputeTransaction(101L, 555L, req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("không có tổng tiền hợp lệ");
+    }
+
+    @Test
     @DisplayName("Should throw exception if transaction belongs to another cabin")
     void testDisputeOtherCabinThrowsException() {
         when(cabinFolioAccountRepository.findByPassengerId(101L)).thenReturn(Optional.of(sampleAccount));
@@ -332,5 +376,18 @@ class PassengerFolioServiceTest {
 
         assertThatThrownBy(() -> passengerFolioService.disputeTransaction(101L, 888L, req))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("Should correctly map category for fees and fallbacks")
+    void testCategoryMappingEdgeCases() {
+        assertThat(PassengerFolioService.mapToStandardCategory(null))
+                .isEqualTo(PassengerFolioService.CAT_FOOD_AND_BEVERAGE);
+        assertThat(PassengerFolioService.mapToStandardCategory("   "))
+                .isEqualTo(PassengerFolioService.CAT_FOOD_AND_BEVERAGE);
+        assertThat(PassengerFolioService.mapToStandardCategory("Service Gratuity Fee"))
+                .isEqualTo(PassengerFolioService.CAT_SERVICE_FEES);
+        assertThat(PassengerFolioService.mapToStandardCategory("Unknown Category XYZ"))
+                .isEqualTo(PassengerFolioService.CAT_FOOD_AND_BEVERAGE);
     }
 }
