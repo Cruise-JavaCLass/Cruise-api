@@ -81,7 +81,7 @@ class ActivityFeedbackServiceTest {
         when(activityRepository.findById(activityId)).thenReturn(Optional.of(completedActivity));
         when(passengerRepository.existsById(passengerId)).thenReturn(true);
         when(feedbackRepository.findByActivityIdAndPassengerId(activityId, passengerId)).thenReturn(Optional.empty());
-        when(feedbackRepository.save(any(ActivityFeedback.class))).thenAnswer(invocation -> {
+        when(feedbackRepository.saveAndFlush(any(ActivityFeedback.class))).thenAnswer(invocation -> {
             ActivityFeedback fb = invocation.getArgument(0);
             fb.setId(101L);
             fb.setCreatedAt(Instant.now());
@@ -108,7 +108,7 @@ class ActivityFeedbackServiceTest {
         when(activityRepository.findById(activityId)).thenReturn(Optional.of(completedActivity));
         when(passengerRepository.existsById(passengerId)).thenReturn(true);
         when(feedbackRepository.findByActivityIdAndPassengerId(activityId, passengerId)).thenReturn(Optional.empty());
-        when(feedbackRepository.save(any(ActivityFeedback.class))).thenAnswer(invocation -> {
+        when(feedbackRepository.saveAndFlush(any(ActivityFeedback.class))).thenAnswer(invocation -> {
             ActivityFeedback fb = invocation.getArgument(0);
             fb.setId(102L);
             fb.setCreatedAt(Instant.now());
@@ -162,6 +162,36 @@ class ActivityFeedbackServiceTest {
 
         assertThat(response.getId()).isEqualTo(999L);
         verify(feedbackRepository, never()).save(any());
+        verify(feedbackRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("submitFeedback: Bắt DataIntegrityViolationException khi race-condition và trả về bản ghi trùng")
+    void testSubmitFeedback_DataIntegrityViolationFallback() {
+        SubmitFeedbackRequest request = SubmitFeedbackRequest.builder()
+                .passengerId(passengerId)
+                .rating(5)
+                .build();
+
+        ActivityFeedback existing = ActivityFeedback.builder()
+                .activityId(activityId)
+                .passengerId(passengerId)
+                .rating(5)
+                .build();
+        existing.setId(555L);
+        existing.setCreatedAt(Instant.now());
+
+        when(activityRepository.findById(activityId)).thenReturn(Optional.of(completedActivity));
+        when(passengerRepository.existsById(passengerId)).thenReturn(true);
+        when(feedbackRepository.findByActivityIdAndPassengerId(activityId, passengerId))
+                .thenReturn(Optional.empty()) // ban đầu chưa thấy
+                .thenReturn(Optional.of(existing)); // sau exception tìm thấy
+        when(feedbackRepository.saveAndFlush(any(ActivityFeedback.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("Duplicate key uk_af_activity_passenger"));
+
+        ActivityFeedbackResponse response = feedbackService.submitFeedback(activityId, request);
+
+        assertThat(response.getId()).isEqualTo(555L);
     }
 
     @Test

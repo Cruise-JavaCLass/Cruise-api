@@ -105,22 +105,26 @@ class PassengerNotificationServiceTest {
     @Test
     @DisplayName("getNotificationSummary: Tính đúng số lượng chưa đọc tổng và theo loại")
     void testGetNotificationSummary() {
+        com.cruise.activity.dto.CategoryUnreadCountProjection p1 = new com.cruise.activity.dto.CategoryUnreadCountProjection() {
+            @Override public NotificationCategory getCategory() { return NotificationCategory.CRITICAL; }
+            @Override public long getUnreadCount() { return 2L; }
+        };
+        com.cruise.activity.dto.CategoryUnreadCountProjection p2 = new com.cruise.activity.dto.CategoryUnreadCountProjection() {
+            @Override public NotificationCategory getCategory() { return NotificationCategory.OPERATIONAL; }
+            @Override public long getUnreadCount() { return 3L; }
+        };
+
         when(passengerRepository.existsById(passengerId)).thenReturn(true);
-        when(notificationRepository.countByPassengerIdAndIsReadFalse(passengerId)).thenReturn(5L);
-        when(notificationRepository.countByPassengerIdAndCategoryAndIsReadFalse(passengerId, NotificationCategory.CRITICAL))
-                .thenReturn(2L);
-        when(notificationRepository.countByPassengerIdAndCategoryAndIsReadFalse(passengerId, NotificationCategory.OPERATIONAL))
-                .thenReturn(1L);
-        when(notificationRepository.countByPassengerIdAndCategoryAndIsReadFalse(passengerId, NotificationCategory.REMINDER))
-                .thenReturn(1L);
-        when(notificationRepository.countByPassengerIdAndCategoryAndIsReadFalse(passengerId, NotificationCategory.PROMOTIONAL))
-                .thenReturn(1L);
+        when(notificationRepository.countUnreadGroupedByCategory(passengerId)).thenReturn(List.of(p1, p2));
 
         NotificationSummaryDto summary = notificationService.getNotificationSummary(passengerId);
 
         assertThat(summary.getTotalUnread()).isEqualTo(5L);
         assertThat(summary.getCriticalUnread()).isEqualTo(2L);
         assertThat(summary.getUnreadByCategory()).containsEntry("CRITICAL", 2L);
+        assertThat(summary.getUnreadByCategory()).containsEntry("OPERATIONAL", 3L);
+        assertThat(summary.getUnreadByCategory()).containsEntry("REMINDER", 0L);
+        assertThat(summary.getUnreadByCategory()).containsEntry("PROMOTIONAL", 0L);
     }
 
     @Test
@@ -134,6 +138,19 @@ class PassengerNotificationServiceTest {
 
         assertThat(result.getIsRead()).isTrue();
         assertThat(result.getReadAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("markAsRead: Ném ResourceNotFoundException khi không tìm thấy thông báo")
+    void testMarkAsRead_NotFound() {
+        when(passengerRepository.existsById(passengerId)).thenReturn(true);
+        when(notificationRepository.findByIdAndPassengerId(999L, passengerId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> notificationService.markAsRead(passengerId, 999L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Notification not found");
+
+        verify(notificationRepository, never()).save(any());
     }
 
     @Test
