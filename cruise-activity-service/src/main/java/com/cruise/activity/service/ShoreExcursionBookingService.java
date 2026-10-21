@@ -20,6 +20,8 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.*;
 
 @Slf4j
@@ -213,6 +215,9 @@ public class ShoreExcursionBookingService {
         LocalDateTime gatheringDateTime = LocalDateTime.of(excursion.getExcursionDate(), excursion.getGatheringTime());
         LocalDateTime nowDateTime = LocalDateTime.now();
 
+        ZonedDateTime nowZoned = ZonedDateTime.now(ZoneOffset.UTC);
+        ZonedDateTime gatheringZoned = gatheringDateTime.atZone(ZoneOffset.UTC);
+
         BigDecimal chargedAmount = booking.getChargedAmount() != null ? booking.getChargedAmount() : BigDecimal.ZERO;
         BigDecimal refundAmount = BigDecimal.ZERO;
         BigDecimal penaltyFee = BigDecimal.ZERO;
@@ -226,7 +231,7 @@ public class ShoreExcursionBookingService {
             refundAmount = chargedAmount;
             penaltyFee = BigDecimal.ZERO;
         } else {
-            long hoursUntilGathering = Duration.between(nowDateTime, gatheringDateTime).toHours();
+            long hoursUntilGathering = Duration.between(nowZoned, gatheringZoned).toHours();
             if (hoursUntilGathering >= 24) {
                 // Trước 24h: Hoàn 100%, 0 phạt
                 refundAmount = chargedAmount;

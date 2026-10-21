@@ -49,7 +49,7 @@ public class ExcursionBookingController {
     /**
      * Tra cứu danh sách tour bờ đã đặt của hành khách (KAN-374 / GET /api/activities/excursions/{id}/bookings/my)
      */
-    @GetMapping({"/{id}/bookings/my", "/bookings/my"})
+    @GetMapping("/my")
     public ApiResponse<List<PassengerExcursionBookingDto>> getMyBookings(
             @RequestParam(defaultValue = "1") Long passengerId
     ) {
