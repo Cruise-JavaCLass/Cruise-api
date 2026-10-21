@@ -412,4 +412,198 @@ class ShoreExcursionBookingServiceTest {
         assertThatThrownBy(() -> bookingService.bookExcursion(100L, req))
                 .isInstanceOf(PaymentRequiredException.class);
     }
+
+    @Test
+    @DisplayName("bookExcursion throws BusinessRuleException when excursion is CANCELLED or COMPLETED")
+    void bookExcursion_ThrowsBusinessRule_WhenExcursionCancelledOrCompleted() {
+        excursion.setStatus(ExcursionStatus.CANCELLED);
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+
+        ExcursionBookingRequest req = ExcursionBookingRequest.builder().passengerId(200L).build();
+        assertThatThrownBy(() -> bookingService.bookExcursion(100L, req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("không mở đăng ký");
+
+        excursion.setStatus(ExcursionStatus.COMPLETED);
+        assertThatThrownBy(() -> bookingService.bookExcursion(100L, req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("không mở đăng ký");
+    }
+
+    @Test
+    @DisplayName("bookExcursion throws BusinessRuleException when maxCapacity reached")
+    void bookExcursion_ThrowsBusinessRule_WhenMaxCapacityReached() {
+        excursion.setMaxCapacity(10);
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(cruisePassengerRepository.findById(200L)).thenReturn(Optional.of(passenger));
+        when(passengerRepository.findByExcursionIdAndPassengerIdAndActiveTrue(100L, 200L)).thenReturn(Optional.empty());
+        when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle1, vehicle2)); // vehicle cap = 55
+        when(passengerRepository.countByExcursionIdAndActiveTrue(100L)).thenReturn(10L);
+
+        ExcursionBookingRequest req = ExcursionBookingRequest.builder().passengerId(200L).build();
+        assertThatThrownBy(() -> bookingService.bookExcursion(100L, req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Tour bờ đã đạt sức chứa tối đa");
+    }
+
+    @Test
+    @DisplayName("bookExcursion with explicit busNumber and groupName")
+    void bookExcursion_WithExplicitBusAndGroupName() {
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(cruisePassengerRepository.findById(200L)).thenReturn(Optional.of(passenger));
+        when(passengerRepository.findByExcursionIdAndPassengerIdAndActiveTrue(100L, 200L)).thenReturn(Optional.empty());
+        when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle1, vehicle2));
+        when(passengerRepository.countByExcursionIdAndActiveTrue(100L)).thenReturn(5L);
+
+        when(passengerRepository.save(any(ExcursionPassenger.class))).thenAnswer(i -> {
+            ExcursionPassenger ep = i.getArgument(0);
+            ep.setId(505L);
+            return ep;
+        });
+
+        ExcursionBookingRequest req = ExcursionBookingRequest.builder()
+                .passengerId(200L)
+                .busNumber("BUS-02")
+                .groupName("VIP Explorers")
+                .passengerName("Custom Name")
+                .emergencyPhone("+84999888777")
+                .specialRequirements("Vegetarian meal")
+                .build();
+
+        ExcursionBookingResponse resp = bookingService.bookExcursion(100L, req);
+        assertThat(resp).isNotNull();
+        assertThat(resp.getBusNumber()).isEqualTo("BUS-02");
+        assertThat(resp.getGroupName()).isEqualTo("VIP Explorers");
+    }
+
+    @Test
+    @DisplayName("bookExcursion clusters linked cabin into peer bus")
+    void bookExcursion_ClustersLinkedCabin() {
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(cruisePassengerRepository.findById(200L)).thenReturn(Optional.of(passenger));
+        when(passengerRepository.findByExcursionIdAndPassengerIdAndActiveTrue(100L, 200L)).thenReturn(Optional.empty());
+        when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle1, vehicle2));
+        when(passengerRepository.countByExcursionIdAndActiveTrue(100L)).thenReturn(5L);
+
+        ExcursionPassenger peerInLinkedCabin = ExcursionPassenger.builder()
+                .busNumber("BUS-02")
+                .cabinNumber("Suite-802")
+                .build();
+        when(passengerRepository.findByExcursionIdAndCabinNumberAndActiveTrue(100L, "Suite-801"))
+                .thenReturn(Collections.emptyList());
+        when(passengerRepository.findByExcursionIdAndCabinNumberAndActiveTrue(100L, "Suite-802"))
+                .thenReturn(List.of(peerInLinkedCabin));
+        when(passengerRepository.countByExcursionIdAndBusNumberAndActiveTrue(100L, "BUS-02"))
+                .thenReturn(10L); // vehicle2 capacity is 30, so it has room
+
+        when(passengerRepository.save(any(ExcursionPassenger.class))).thenAnswer(i -> {
+            ExcursionPassenger ep = i.getArgument(0);
+            ep.setId(506L);
+            return ep;
+        });
+
+        ExcursionBookingRequest req = ExcursionBookingRequest.builder()
+                .passengerId(200L)
+                .linkedCabins(List.of("Suite-802"))
+                .build();
+
+        ExcursionBookingResponse resp = bookingService.bookExcursion(100L, req);
+        assertThat(resp.getBusNumber()).isEqualTo("BUS-02");
+    }
+
+    @Test
+    @DisplayName("bookExcursion falls back to default when vehicles empty")
+    void bookExcursion_FallsBackWhenVehiclesEmpty() {
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(cruisePassengerRepository.findById(200L)).thenReturn(Optional.of(passenger));
+        when(passengerRepository.findByExcursionIdAndPassengerIdAndActiveTrue(100L, 200L)).thenReturn(Optional.empty());
+        when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(Collections.emptyList());
+        when(passengerRepository.countByExcursionIdAndActiveTrue(100L)).thenReturn(0L);
+
+        when(passengerRepository.save(any(ExcursionPassenger.class))).thenAnswer(i -> {
+            ExcursionPassenger ep = i.getArgument(0);
+            ep.setId(507L);
+            return ep;
+        });
+
+        ExcursionBookingRequest req = ExcursionBookingRequest.builder().passengerId(200L).build();
+        ExcursionBookingResponse resp = bookingService.bookExcursion(100L, req);
+        assertThat(resp.getBusNumber()).isEqualTo("XE-01");
+    }
+
+    @Test
+    @DisplayName("cancelBooking with non-existent excursion or booking throws ResourceNotFoundException")
+    void cancelBooking_ThrowsNotFound() {
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> bookingService.cancelBooking(100L, 999L, "test"))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(999L, 100L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> bookingService.cancelBooking(100L, 999L, "test"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("reassignBus throws ResourceNotFoundException when booking does not exist")
+    void reassignBus_ThrowsNotFound_WhenBookingMissing() {
+        when(excursionRepository.findById(100L)).thenReturn(Optional.of(excursion));
+        when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(999L, 100L)).thenReturn(Optional.empty());
+
+        ReassignBusRequest req = ReassignBusRequest.builder().newBusNumber("BUS-02").build();
+        assertThatThrownBy(() -> bookingService.reassignBus(100L, 999L, req))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("reassignBus throws BusinessRuleException when target vehicle is full")
+    void reassignBus_ThrowsBusinessRule_WhenTargetVehicleFull() {
+        ExcursionPassenger booking = ExcursionPassenger.builder()
+                .excursionId(100L)
+                .busNumber("BUS-01")
+                .active(true)
+                .build();
+        booking.setId(901L);
+
+        when(excursionRepository.findById(100L)).thenReturn(Optional.of(excursion));
+        when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(901L, 100L)).thenReturn(Optional.of(booking));
+        when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle2)); // cap = 30
+        when(passengerRepository.countByExcursionIdAndBusNumberAndActiveTrue(100L, "BUS-02")).thenReturn(30L);
+
+        ReassignBusRequest req = ReassignBusRequest.builder().newBusNumber("BUS-02").build();
+        assertThatThrownBy(() -> bookingService.reassignBus(100L, 901L, req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("đã đủ sức chứa");
+    }
+
+    @Test
+    @DisplayName("reassignBus with newGroupName updates both bus and groupName")
+    void reassignBus_WithNewGroupName() {
+        ExcursionPassenger booking = ExcursionPassenger.builder()
+                .excursionId(100L)
+                .busNumber("BUS-01")
+                .groupName("Group 1")
+                .active(true)
+                .build();
+        booking.setId(901L);
+
+        vehicle1.setAssignedPassengers(5);
+        vehicle2.setAssignedPassengers(10);
+
+        when(excursionRepository.findById(100L)).thenReturn(Optional.of(excursion));
+        when(passengerRepository.findByIdAndExcursionIdAndActiveTrue(901L, 100L)).thenReturn(Optional.of(booking));
+        when(vehicleRepository.findByExcursionIdAndActiveTrue(100L)).thenReturn(List.of(vehicle1, vehicle2));
+        when(passengerRepository.countByExcursionIdAndBusNumberAndActiveTrue(100L, "BUS-02")).thenReturn(10L);
+        when(passengerRepository.save(any(ExcursionPassenger.class))).thenAnswer(i -> i.getArgument(0));
+
+        ReassignBusRequest req = ReassignBusRequest.builder()
+                .newBusNumber("BUS-02")
+                .newGroupName("VIP Bus 2")
+                .build();
+
+        ReassignBusResponse resp = bookingService.reassignBus(100L, 901L, req);
+        assertThat(resp.getNewBusNumber()).isEqualTo("BUS-02");
+        assertThat(resp.getGroupName()).isEqualTo("VIP Bus 2");
+        assertThat(booking.getGroupName()).isEqualTo("VIP Bus 2");
+    }
 }
