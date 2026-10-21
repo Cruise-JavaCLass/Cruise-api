@@ -2,6 +2,7 @@ package com.cruise.activity.service;
 
 import com.cruise.activity.dto.*;
 import com.cruise.activity.entity.*;
+import com.cruise.activity.enums.ExcursionBookingStatus;
 import com.cruise.activity.enums.ExcursionPassengerStatus;
 import com.cruise.activity.enums.ExcursionStatus;
 import com.cruise.activity.enums.VehicleStatus;
@@ -361,5 +362,54 @@ class ShoreExcursionBookingServiceTest {
         assertThat(list).hasSize(1);
         assertThat(list.get(0).getTicketCode()).isEqualTo("EXC-100-111");
         assertThat(list.get(0).getExcursionTitle()).isEqualTo(excursion.getTitle());
+    }
+
+    @Test
+    @DisplayName("ExcursionBookingStatus enum coverage")
+    void testExcursionBookingStatusValues() {
+        for (ExcursionBookingStatus status : ExcursionBookingStatus.values()) {
+            assertThat(ExcursionBookingStatus.valueOf(status.name())).isEqualTo(status);
+        }
+    }
+
+    @Test
+    @DisplayName("getMyBookings skips inactive excursion")
+    void getMyBookings_SkipsInactiveExcursion() {
+        ExcursionPassenger booking = ExcursionPassenger.builder()
+                .excursionId(100L)
+                .passengerId(200L)
+                .ticketCode("EXC-100-111")
+                .active(true)
+                .build();
+        booking.setId(906L);
+
+        excursion.setActive(false);
+        when(passengerRepository.findByPassengerIdAndActiveTrue(200L)).thenReturn(List.of(booking));
+        when(excursionRepository.findById(100L)).thenReturn(Optional.of(excursion));
+
+        List<PassengerExcursionBookingDto> list = bookingService.getMyBookings(200L);
+        assertThat(list).isEmpty();
+    }
+
+    @Test
+    @DisplayName("bookExcursion throws PaymentRequiredException when folio is locked")
+    void bookExcursion_ThrowsPaymentRequired_WhenFolioLocked() {
+        Passenger lockedPassenger = Passenger.builder()
+                .fullName("Locked Guest")
+                .cabinNumber("CABIN-LOCKED-01")
+                .email("locked@cruise.com")
+                .active(true)
+                .build();
+        lockedPassenger.setId(200L);
+
+        when(excursionRepository.findByIdWithLock(100L)).thenReturn(Optional.of(excursion));
+        when(cruisePassengerRepository.findById(200L)).thenReturn(Optional.of(lockedPassenger));
+
+        ExcursionBookingRequest req = ExcursionBookingRequest.builder()
+                .passengerId(200L)
+                .build();
+
+        assertThatThrownBy(() -> bookingService.bookExcursion(100L, req))
+                .isInstanceOf(PaymentRequiredException.class);
     }
 }

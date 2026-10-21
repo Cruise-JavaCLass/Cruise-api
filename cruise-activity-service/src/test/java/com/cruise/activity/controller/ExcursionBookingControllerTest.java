@@ -143,4 +143,14 @@ class ExcursionBookingControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.newBusNumber").value("BUS-02"));
     }
+
+    @Test
+    @DisplayName("GET /api/activities/excursions/{id}/manifest -> 200 OK")
+    void testGetExcursionManifest() throws Exception {
+        when(excursionService.getPassengerListsByGroup(1L)).thenReturn(new ExcursionManifestSummaryResponse());
+
+        mockMvc.perform(get("/api/activities/excursions/1/manifest"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
 }
