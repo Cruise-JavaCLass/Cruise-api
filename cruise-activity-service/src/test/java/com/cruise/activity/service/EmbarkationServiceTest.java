@@ -100,6 +100,8 @@ class EmbarkationServiceTest {
         void lookupPassenger_BlankKeyword() {
             assertThatThrownBy(() -> embarkationService.lookupPassenger("   "))
                     .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> embarkationService.lookupPassenger(null))
+                    .isInstanceOf(IllegalArgumentException.class);
         }
     }
 
@@ -140,6 +142,20 @@ class EmbarkationServiceTest {
         }
 
         @Test
+        @DisplayName("Should process check-in without request payload (null request and empty RFID tag)")
+        void processCheckIn_NullRequest() {
+            when(passengerRepository.findById(1L)).thenReturn(Optional.of(testPassenger));
+            when(passengerRepository.save(any(Passenger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            EmbarkationCheckInResponse response = embarkationService.processCheckIn(1L, null);
+
+            assertThat(response).isNotNull();
+            assertThat(response.getCheckInStatus()).isEqualTo(CheckInStatus.BOARDED);
+            assertThat(response.getFolioStatus()).isEqualTo("ACTIVE");
+            verify(embarkationCheckInLogRepository).save(any(EmbarkationCheckInLog.class));
+        }
+
+        @Test
         @DisplayName("Should throw DuplicateCheckInException when passenger is already BOARDED (AC4)")
         void processCheckIn_DuplicateBoarded() {
             testPassenger.setCheckInStatus(CheckInStatus.BOARDED);
@@ -149,6 +165,12 @@ class EmbarkationServiceTest {
             assertThatThrownBy(() -> embarkationService.processCheckIn(1L, EmbarkationCheckInRequest.builder().build()))
                     .isInstanceOf(DuplicateCheckInException.class)
                     .hasMessageContaining("đã làm thủ tục lên tàu");
+
+            // Also test when boardedAt is null
+            testPassenger.setBoardedAt(null);
+            assertThatThrownBy(() -> embarkationService.processCheckIn(1L, EmbarkationCheckInRequest.builder().build()))
+                    .isInstanceOf(DuplicateCheckInException.class)
+                    .hasMessageContaining("không xác định");
 
             verify(embarkationCheckInLogRepository, never()).save(any());
         }
@@ -169,6 +191,22 @@ class EmbarkationServiceTest {
             assertThatThrownBy(() -> embarkationService.processCheckIn(1L, req))
                     .isInstanceOf(DuplicateRegistrationException.class)
                     .hasMessageContaining("đã được gán cho hành khách Tran Thi B");
+        }
+
+        @Test
+        @DisplayName("Should allow keeping same RFID tag if assigned to self during check-in")
+        void processCheckIn_SameRfidTagToSelf() {
+            when(passengerRepository.findById(1L)).thenReturn(Optional.of(testPassenger));
+            when(passengerRepository.save(any(Passenger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+            when(passengerRepository.findByRfidTagAndActiveTrue("RFID-INITIAL-01")).thenReturn(Optional.of(testPassenger));
+
+            EmbarkationCheckInRequest req = EmbarkationCheckInRequest.builder()
+                    .rfidTag("RFID-INITIAL-01")
+                    .build();
+
+            EmbarkationCheckInResponse response = embarkationService.processCheckIn(1L, req);
+            assertThat(response).isNotNull();
+            assertThat(response.getCheckInStatus()).isEqualTo(CheckInStatus.BOARDED);
         }
     }
 
@@ -193,6 +231,24 @@ class EmbarkationServiceTest {
 
             assertThat(response).isNotNull();
             assertThat(response.getRfidTag()).isEqualTo("RFID-CARD-100");
+            assertThat(response.getQrCode()).isEqualTo("QR-NEW-99");
+            assertThat(response.getFolioStatus()).isEqualTo("ACTIVE");
+        }
+
+        @Test
+        @DisplayName("Should bind RFID and activate folio if folioStatus is INACTIVE even without activateFolio flag")
+        void bindRfid_InactiveFolioAutoActivation() {
+            testPassenger.setFolioStatus("INACTIVE");
+            when(passengerRepository.findById(1L)).thenReturn(Optional.of(testPassenger));
+            when(passengerRepository.findByRfidTagAndActiveTrue("RFID-NEW-002")).thenReturn(Optional.empty());
+            when(passengerRepository.save(any(Passenger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            BindRfidRequest req = BindRfidRequest.builder()
+                    .rfidTag("RFID-NEW-002")
+                    .activateFolio(false)
+                    .build();
+
+            BindRfidResponse response = embarkationService.bindRfid(1L, req);
             assertThat(response.getFolioStatus()).isEqualTo("ACTIVE");
         }
 
@@ -214,6 +270,16 @@ class EmbarkationServiceTest {
                     .hasMessageContaining("đã được gán cho hành khách khác: Le Van C");
 
             verify(passengerRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("Should throw ResourceNotFoundException when passenger not found during bindRfid")
+        void bindRfid_NotFound() {
+            when(passengerRepository.findById(999L)).thenReturn(Optional.empty());
+
+            BindRfidRequest req = BindRfidRequest.builder().rfidTag("TAG").build();
+            assertThatThrownBy(() -> embarkationService.bindRfid(999L, req))
+                    .isInstanceOf(ResourceNotFoundException.class);
         }
     }
 
@@ -252,10 +318,37 @@ class EmbarkationServiceTest {
         }
 
         @Test
-        @DisplayName("Should export border control manifest CSV with UTF-8 BOM")
+        @DisplayName("Should handle empty passenger list in getEmbarkationSummary")
+        void getEmbarkationSummary_EmptyList() {
+            when(passengerRepository.findByTourIdAndActiveTrue(101L)).thenReturn(List.of());
+
+            EmbarkationSummaryDto summary = embarkationService.getEmbarkationSummary(101L);
+
+            assertThat(summary.getExpectedTotal()).isZero();
+            assertThat(summary.getBoardingProgressPercent()).isZero();
+        }
+
+        @Test
+        @DisplayName("Should export border control manifest CSV with UTF-8 BOM and escaped fields")
         void exportBorderControlManifestCsv_Success() {
+            Passenger guestWithSpecialChars = Passenger.builder()
+                    .tourId(101L)
+                    .bookingCode("BK,101")
+                    .fullName("Nguyen \"Quang\" A")
+                    .passportNumber("B123\n45")
+                    .nationality("Vietnam\r")
+                    .cabinNumber("Suite 101")
+                    .cabinCategory(null)
+                    .isVip(null)
+                    .healthDeclarationCompleted(null)
+                    .checkInStatus(null)
+                    .boardedAt(null)
+                    .folioStatus("INACTIVE")
+                    .build();
+            guestWithSpecialChars.setId(2L);
+
             when(passengerRepository.findByTourIdAndActiveTrue(101L))
-                    .thenReturn(List.of(testPassenger));
+                    .thenReturn(List.of(testPassenger, guestWithSpecialChars));
 
             byte[] csvBytes = embarkationService.exportBorderControlManifestCsv(101L);
 
@@ -263,8 +356,16 @@ class EmbarkationServiceTest {
             String csvContent = new String(csvBytes, java.nio.charset.StandardCharsets.UTF_8);
             assertThat(csvContent).startsWith("\ufeffID,BookingCode,FullName");
             assertThat(csvContent).contains("Nguyen Van A");
-            assertThat(csvContent).contains("B1234567");
-            assertThat(csvContent).contains("Suite-801");
+            assertThat(csvContent).contains("\"Nguyen \"\"Quang\"\" A\"");
+            assertThat(csvContent).contains("\"BK,101\"");
+        }
+
+        @Test
+        @DisplayName("Should map profile DTO with default cabin category when null")
+        void toProfileDto_DefaultCategory() {
+            testPassenger.setCabinCategory(null);
+            PassengerEmbarkationProfileDto dto = embarkationService.toProfileDto(testPassenger);
+            assertThat(dto.getCabinCategory()).isEqualTo("Standard Stateroom");
         }
     }
 }
