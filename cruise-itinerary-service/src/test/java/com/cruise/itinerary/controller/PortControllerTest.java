@@ -106,4 +106,73 @@ class PortControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
     }
+
+
+    @Test
+    @DisplayName("PUT /api/itinerary/ports/{id} thành công trả về 200 OK")
+    void updatePortSuccess() throws Exception {
+        PortResponse resp = PortResponse.builder()
+                .id(1L)
+                .name("Cảng Tuần Châu")
+                .code("VN-TCH")
+                .city("Hạ Long")
+                .country("Việt Nam")
+                .active(true)
+                .build();
+
+        when(portService.updatePort(eq(1L), any(PortRequest.class))).thenReturn(resp);
+
+        mockMvc.perform(put("/api/itinerary/ports/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Cảng Tuần Châu",
+                                  "code": "VN-TCH",
+                                  "city": "Hạ Long"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.code").value("VN-TCH"));
+    }
+
+    @Test
+    @DisplayName("GET /api/itinerary/ports/{id} thành công trả về 200 OK")
+    void getPortByIdSuccess() throws Exception {
+        PortResponse resp = PortResponse.builder()
+                .id(1L)
+                .name("Cảng Tuần Châu")
+                .code("VN-TCH")
+                .city("Hạ Long")
+                .country("Việt Nam")
+                .active(true)
+                .build();
+
+        when(portService.getPortById(eq(1L))).thenReturn(resp);
+
+        mockMvc.perform(get("/api/itinerary/ports/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.code").value("VN-TCH"));
+    }
+
+    @Test
+    @DisplayName("GET /api/itinerary/ports/active trả về danh sách cảng hoạt động")
+    void getActivePortsSuccess() throws Exception {
+        PortResponse resp = PortResponse.builder()
+                .id(1L)
+                .name("Cảng Tuần Châu")
+                .code("VN-TCH")
+                .city("Hạ Long")
+                .country("Việt Nam")
+                .active(true)
+                .build();
+
+        when(portService.getActivePorts()).thenReturn(List.of(resp));
+
+        mockMvc.perform(get("/api/itinerary/ports/active"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].code").value("VN-TCH"));
+    }
 }
