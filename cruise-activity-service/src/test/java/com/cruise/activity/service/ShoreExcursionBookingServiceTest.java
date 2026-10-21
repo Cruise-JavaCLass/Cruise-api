@@ -23,6 +23,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -240,10 +242,11 @@ class ShoreExcursionBookingServiceTest {
     @Test
     @DisplayName("Hủy tour từ 12-24h: Phạt 50%, hoàn 50%")
     void cancelBooking_50PercentPenalty_Between12And24Hours() {
-        // Gathering time cách thời điểm hiện tại 18h
-        LocalDateTime target = LocalDateTime.now().plusHours(18);
-        excursion.setExcursionDate(target.toLocalDate());
-        excursion.setGatheringTime(target.toLocalTime());
+        // Gathering time cách thời điểm hiện tại 18h trong múi giờ cảng
+        ZoneId portZone = ZoneId.of("Asia/Ho_Chi_Minh");
+        ZonedDateTime targetZoned = ZonedDateTime.now(portZone).plusHours(18);
+        excursion.setExcursionDate(targetZoned.toLocalDate());
+        excursion.setGatheringTime(targetZoned.toLocalTime());
 
         ExcursionPassenger booking = ExcursionPassenger.builder()
                 .excursionId(100L)
@@ -265,9 +268,10 @@ class ShoreExcursionBookingServiceTest {
     @Test
     @DisplayName("Hủy tour dưới 12h: Phạt 100%, không hoàn tiền")
     void cancelBooking_100PercentPenalty_Under12Hours() {
-        LocalDateTime target = LocalDateTime.now().plusHours(4);
-        excursion.setExcursionDate(target.toLocalDate());
-        excursion.setGatheringTime(target.toLocalTime());
+        ZoneId portZone = ZoneId.of("Asia/Ho_Chi_Minh");
+        ZonedDateTime targetZoned = ZonedDateTime.now(portZone).plusHours(4);
+        excursion.setExcursionDate(targetZoned.toLocalDate());
+        excursion.setGatheringTime(targetZoned.toLocalTime());
 
         ExcursionPassenger booking = ExcursionPassenger.builder()
                 .excursionId(100L)
@@ -290,9 +294,10 @@ class ShoreExcursionBookingServiceTest {
     @DisplayName("Hủy tour do thời tiết xấu (Weather): Hoàn 100% dù dưới 12h")
     void cancelBooking_WeatherForceMajeure_FullRefund() {
         excursion.setStatus(ExcursionStatus.CANCELLED);
-        LocalDateTime target = LocalDateTime.now().plusHours(2);
-        excursion.setExcursionDate(target.toLocalDate());
-        excursion.setGatheringTime(target.toLocalTime());
+        ZoneId portZone = ZoneId.of("Asia/Ho_Chi_Minh");
+        ZonedDateTime targetZoned = ZonedDateTime.now(portZone).plusHours(2);
+        excursion.setExcursionDate(targetZoned.toLocalDate());
+        excursion.setGatheringTime(targetZoned.toLocalTime());
 
         ExcursionPassenger booking = ExcursionPassenger.builder()
                 .excursionId(100L)
