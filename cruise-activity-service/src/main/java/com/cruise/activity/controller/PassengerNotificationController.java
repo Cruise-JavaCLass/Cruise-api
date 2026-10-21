@@ -4,6 +4,7 @@ import com.cruise.activity.dto.NotificationSummaryDto;
 import com.cruise.activity.dto.PassengerNotificationDto;
 import com.cruise.activity.dto.SendNotificationRequest;
 import com.cruise.activity.enums.NotificationCategory;
+import com.cruise.activity.exception.AccessDeniedException;
 import com.cruise.activity.service.PassengerNotificationService;
 import com.cruise.common.dto.ApiResponse;
 import jakarta.validation.Valid;
@@ -54,9 +55,20 @@ public class PassengerNotificationController {
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<PassengerNotificationDto> sendNotification(
             @PathVariable Long passengerId,
+            @RequestHeader(value = "X-Caller-Role", required = false) String callerRole,
             @Valid @RequestBody SendNotificationRequest request
     ) {
+        verifyStaffOrSystemAuthorization(callerRole);
         return ApiResponse.ok("Phát thông báo thành công",
                 notificationService.sendNotification(passengerId, request));
+    }
+
+    private void verifyStaffOrSystemAuthorization(String callerRole) {
+        if (callerRole != null && !callerRole.isBlank()) {
+            String upper = callerRole.toUpperCase();
+            if (upper.contains("PASSENGER") || upper.contains("GUEST") || upper.contains("CUSTOMER")) {
+                throw new AccessDeniedException("Chỉ nhân viên hoặc hệ thống mới có quyền phát thông báo cho hành khách");
+            }
+        }
     }
 }

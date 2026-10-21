@@ -45,15 +45,22 @@ public class PassengerNotificationService {
     public NotificationSummaryDto getNotificationSummary(Long passengerId) {
         validatePassengerExists(passengerId);
 
-        long totalUnread = notificationRepository.countByPassengerIdAndIsReadFalse(passengerId);
-        long criticalUnread = notificationRepository.countByPassengerIdAndCategoryAndIsReadFalse(
-                passengerId, NotificationCategory.CRITICAL);
+        List<com.cruise.activity.dto.CategoryUnreadCountProjection> groupedCounts =
+                notificationRepository.countUnreadGroupedByCategory(passengerId);
 
         Map<String, Long> unreadByCategory = new HashMap<>();
         for (NotificationCategory cat : NotificationCategory.values()) {
-            unreadByCategory.put(cat.name(),
-                    notificationRepository.countByPassengerIdAndCategoryAndIsReadFalse(passengerId, cat));
+            unreadByCategory.put(cat.name(), 0L);
         }
+
+        for (var item : groupedCounts) {
+            if (item.getCategory() != null) {
+                unreadByCategory.put(item.getCategory().name(), item.getUnreadCount());
+            }
+        }
+
+        long totalUnread = unreadByCategory.values().stream().mapToLong(Long::longValue).sum();
+        long criticalUnread = unreadByCategory.getOrDefault(NotificationCategory.CRITICAL.name(), 0L);
 
         return NotificationSummaryDto.builder()
                 .totalUnread(totalUnread)

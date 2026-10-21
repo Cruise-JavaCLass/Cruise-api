@@ -25,7 +25,13 @@ public interface PassengerNotificationRepository extends JpaRepository<Passenger
 
     Optional<PassengerNotification> findByIdAndPassengerId(Long id, Long passengerId);
 
-    @Modifying
+    @Query("SELECT n.category AS category, COUNT(n.id) AS unreadCount " +
+           "FROM PassengerNotification n " +
+           "WHERE n.passengerId = :passengerId AND n.isRead = false " +
+           "GROUP BY n.category")
+    List<com.cruise.activity.dto.CategoryUnreadCountProjection> countUnreadGroupedByCategory(@Param("passengerId") Long passengerId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE PassengerNotification n SET n.isRead = true, n.readAt = :readAt WHERE n.passengerId = :passengerId AND n.isRead = false")
     int markAllAsRead(@Param("passengerId") Long passengerId, @Param("readAt") Instant readAt);
 }
