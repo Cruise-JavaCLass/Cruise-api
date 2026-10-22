@@ -13,11 +13,15 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.zip.GZIPOutputStream;
 
 @Service
 @RequiredArgsConstructor
@@ -67,6 +71,73 @@ public class PosOfflineSyncService {
         pkg.setEtag(etag);
 
         return pkg;
+    }
+
+    /**
+     * Generates a GZIP compressed byte array of the full catalog snapshot package.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportGzipCatalogPackage(Long outletId) throws IOException {
+        PosOfflineCatalogPackageDto pkg = exportOfflinePackage(outletId);
+        byte[] jsonBytes = objectMapper.writeValueAsBytes(pkg);
+
+        ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+        try (GZIPOutputStream gzipStream = new GZIPOutputStream(byteStream)) {
+            gzipStream.write(jsonBytes);
+        }
+        return byteStream.toByteArray();
+    }
+
+    /**
+     * Calculates delta catalog updates since a given version or timestamp.
+     */
+    @Transactional(readOnly = true)
+    public PosDeltaCatalogChangefeedDto getDeltaChangefeed(Long outletId, String clientVersionHash, Instant since) {
+        PosOfflineCatalogPackageDto currentPackage = exportOfflinePackage(outletId);
+        String currentEtag = currentPackage.getEtag();
+
+        if (clientVersionHash != null && clientVersionHash.equals(currentEtag)) {
+            return PosDeltaCatalogChangefeedDto.builder()
+                    .fromVersionHash(clientVersionHash)
+                    .currentVersionHash(currentEtag)
+                    .syncTimestamp(Instant.now())
+                    .outletId(outletId)
+                    .requiresFullSnapshot(false)
+                    .updatedProducts(Collections.emptyList())
+                    .deletedProductIds(Collections.emptyList())
+                    .updatedCategories(Collections.emptyList())
+                    .updatedHappyHourRules(Collections.emptyList())
+                    .build();
+        }
+
+        Instant threshold = (since != null) ? since : Instant.now().minus(7, ChronoUnit.DAYS);
+        List<PosProduct> changedEntities = productRepository.findUpdatedProductsSince(outletId, threshold);
+
+        List<ProductDetailDto> updatedProducts = new ArrayList<>();
+        List<Long> deletedProductIds = new ArrayList<>();
+
+        for (PosProduct p : changedEntities) {
+            if (p.getStatus() == ProductStatus.ARCHIVED) {
+                deletedProductIds.add(p.getId());
+            } else {
+                updatedProducts.add(catalogService.getProductById(p.getId()));
+            }
+        }
+
+        List<CategoryDto> currentCategories = catalogService.getCategories(outletId);
+        List<HappyHourRuleDto> happyHourRules = pricingEngine.getRulesByOutlet(outletId);
+
+        return PosDeltaCatalogChangefeedDto.builder()
+                .fromVersionHash(clientVersionHash)
+                .currentVersionHash(currentEtag)
+                .syncTimestamp(Instant.now())
+                .outletId(outletId)
+                .requiresFullSnapshot(clientVersionHash == null || clientVersionHash.isBlank())
+                .updatedProducts(updatedProducts)
+                .deletedProductIds(deletedProductIds)
+                .updatedCategories(currentCategories)
+                .updatedHappyHourRules(happyHourRules)
+                .build();
     }
 
     /**
@@ -249,8 +320,6 @@ public class PosOfflineSyncService {
                     .is86ed(false)
                     .stockQuantity(item.getStockQuantity() != null ? item.getStockQuantity() : 100)
                     .imageUrl(item.getImageUrl())
-                    .happyHourEligible(item.getHappyHourEligible() != null ? item.getHappyHourEligible() : false)
-                    .happyHourDiscountPercent(item.getHappyHourDiscountPercent() != null ? item.getHappyHourDiscountPercent() : BigDecimal.ZERO)
                     .build();
         }
 

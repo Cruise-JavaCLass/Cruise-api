@@ -15,10 +15,15 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 
@@ -218,6 +223,33 @@ public class PosCatalogController {
         return ResponseEntity.ok()
                 .eTag(etag)
                 .body(ApiResponse.ok("Xuất gói catalog offline thành công", pkg));
+    }
+
+    /**
+     * Exports compressed GZIP master data catalog snapshot for bandwidth-constrained terminals.
+     */
+    @GetMapping("/catalog/offline-package/gzip")
+    public ResponseEntity<byte[]> getOfflinePackageGzip(
+            @RequestParam(required = false) Long outletId
+    ) throws IOException {
+        byte[] gzipContent = offlineSyncService.exportGzipCatalogPackage(outletId);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_ENCODING, "gzip")
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .body(gzipContent);
+    }
+
+    /**
+     * Returns delta catalog changes since client version hash or timestamp.
+     */
+    @GetMapping("/catalog/delta")
+    public ApiResponse<PosDeltaCatalogChangefeedDto> getDeltaCatalog(
+            @RequestParam(required = false) Long outletId,
+            @RequestParam(required = false) String versionHash,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant since
+    ) {
+        PosDeltaCatalogChangefeedDto delta = offlineSyncService.getDeltaChangefeed(outletId, versionHash, since);
+        return ApiResponse.ok("Lấy dữ liệu delta cập nhật thành công", delta);
     }
 
     /**
