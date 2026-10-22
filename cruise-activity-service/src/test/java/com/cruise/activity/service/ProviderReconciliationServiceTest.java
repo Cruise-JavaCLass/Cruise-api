@@ -114,7 +114,7 @@ class ProviderReconciliationServiceTest {
     }
 
     @Test
-    @DisplayName("Khởi tạo quyết toán khi đã tồn tại bản ghi và xử lý DataIntegrityViolationException")
+    @DisplayName("Khởi tạo quyết toán ném BusinessRuleException khi gặp xung đột DataIntegrityViolationException")
     void testInitializeSettlement_recalculateExistingAndConflictHandling() {
         when(excursionRepository.findById(1L)).thenReturn(Optional.of(mockExcursion));
         ProviderSettlement existing = ProviderSettlement.builder()
@@ -132,18 +132,16 @@ class ProviderReconciliationServiceTest {
                 .thenReturn(Optional.of(existing));
         when(excursionPassengerRepository.findByExcursionIdAndActiveTrue(1L)).thenReturn(List.of());
 
-        // First save throws DataIntegrityViolationException, retry loads and saves
         when(settlementRepository.save(any(ProviderSettlement.class)))
-                .thenThrow(new DataIntegrityViolationException("Duplicate key"))
-                .thenAnswer(inv -> inv.getArgument(0));
+                .thenThrow(new DataIntegrityViolationException("Duplicate key uk_ps_excursion_provider"));
 
         InitializeSettlementRequest req = new InitializeSettlementRequest(
                 1L, "custom-provider", null, null, "Updated note"
         );
 
-        SettlementDetailDto dto = reconciliationService.initializeOrRecalculateSettlement(req);
-        assertThat(dto).isNotNull();
-        assertThat(dto.notes()).isEqualTo("Updated note");
+        assertThatThrownBy(() -> reconciliationService.initializeOrRecalculateSettlement(req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Xung đột dữ liệu khi khởi tạo quyết toán");
     }
 
     @Test

@@ -98,14 +98,12 @@ public class ProviderReconciliationService {
         settlement.setActualPax(actualPax);
         settlement.setNoShowPax(noShowPax);
 
-        // Tính toán lại
+        // Tính toán và lưu quyết toán
         try {
             recalculateAndSave(settlement);
         } catch (DataIntegrityViolationException e) {
-            log.warn("Concurrent creation conflict for excursionId={}, providerId={}. Loading existing settlement.", excursion.getId(), providerId);
-            settlement = settlementRepository.findByExcursionIdAndProviderIdWithLock(excursion.getId(), providerId)
-                    .orElseThrow(() -> new BusinessRuleException("Xung đột dữ liệu khi khởi tạo quyết toán"));
-            recalculateAndSave(settlement);
+            log.warn("Data integrity conflict during settlement save for excursionId={}, providerId={}", excursion.getId(), providerId);
+            throw new BusinessRuleException("Xung đột dữ liệu khi khởi tạo quyết toán: bản ghi đã tồn tại");
         }
 
         log.info("Initialized/Recalculated settlement: id={}, excursionId={}, providerId={}, totalAmount={}",
