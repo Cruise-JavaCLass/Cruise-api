@@ -15,6 +15,7 @@ import com.cruise.activity.repository.ExcursionPassengerRepository;
 import com.cruise.activity.repository.ProviderSettlementAdjustmentRepository;
 import com.cruise.activity.repository.ProviderSettlementRepository;
 import com.cruise.activity.repository.ShoreExcursionRepository;
+import com.cruise.activity.exception.BusinessRuleException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -75,7 +76,7 @@ class ProviderReconciliationServiceTest {
     @DisplayName("Khởi tạo quyết toán tính toán đúng theo Headcount Pax & Min Guarantee")
     void testInitializeOrRecalculateSettlement_success() {
         when(excursionRepository.findById(1L)).thenReturn(Optional.of(mockExcursion));
-        when(settlementRepository.findByExcursionIdAndProviderId(eq(1L), anyString()))
+        when(settlementRepository.findByExcursionIdAndProviderIdWithLock(eq(1L), anyString()))
                 .thenReturn(Optional.empty());
 
         List<ExcursionPassenger> passengers = List.of(
@@ -162,7 +163,7 @@ class ProviderReconciliationServiceTest {
         );
 
         assertThatThrownBy(() -> reconciliationService.addAdjustment(20L, adjReq))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("Không thể thêm điều chỉnh vào quyết toán đã khóa");
     }
 
@@ -188,5 +189,25 @@ class ProviderReconciliationServiceTest {
         assertThat(step2.status()).isEqualTo(SettlementStatus.APPROVED);
         assertThat(step2.approvedBy()).isEqualTo("FINANCE_DIRECTOR");
         assertThat(step2.approvedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Cập nhật trạng thái giữ nguyên (target == current) không thực hiện mutation")
+    void testUpdateStatus_sameStatusNoOp() {
+        ProviderSettlement settlement = ProviderSettlement.builder()
+                .status(SettlementStatus.PENDING_VERIFICATION)
+                .notes("Original note")
+                .build();
+        settlement.setId(31L);
+
+        when(settlementRepository.findByIdWithLock(31L)).thenReturn(Optional.of(settlement));
+
+        SettlementDetailDto result = reconciliationService.updateStatus(
+                31L, new UpdateSettlementStatusRequest(SettlementStatus.PENDING_VERIFICATION, "MANAGER", "Should not append")
+        );
+
+        assertThat(result.status()).isEqualTo(SettlementStatus.PENDING_VERIFICATION);
+        assertThat(result.notes()).isEqualTo("Original note");
+        verify(settlementRepository, never()).save(any());
     }
 }

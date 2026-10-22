@@ -104,6 +104,10 @@ public class ProviderSettlement extends BaseEntity {
     @Column(name = "notes", length = 1000)
     private String notes;
 
+    @Version
+    @Column(name = "version")
+    private Long version;
+
     @OneToMany(mappedBy = "settlement", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<ProviderSettlementAdjustment> adjustments = new ArrayList<>();

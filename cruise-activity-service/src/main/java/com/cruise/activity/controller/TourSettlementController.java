@@ -46,7 +46,9 @@ public class TourSettlementController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        int boundedPage = Math.max(0, page);
+        int boundedSize = Math.max(1, Math.min(size, 100));
+        Pageable pageable = PageRequest.of(boundedPage, boundedSize, Sort.by(Sort.Direction.DESC, "createdAt"));
         return ApiResponse.ok("Tìm kiếm danh sách quyết toán thành công",
                 reconciliationService.searchSettlements(providerId, voyageId, status, pageable));
     }

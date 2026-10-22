@@ -24,6 +24,10 @@ public interface ProviderSettlementRepository extends JpaRepository<ProviderSett
     @Query("SELECT s FROM ProviderSettlement s WHERE s.id = :id")
     Optional<ProviderSettlement> findByIdWithLock(@Param("id") Long id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM ProviderSettlement s WHERE s.excursionId = :excursionId AND s.providerId = :providerId")
+    Optional<ProviderSettlement> findByExcursionIdAndProviderIdWithLock(@Param("excursionId") Long excursionId, @Param("providerId") String providerId);
+
     Optional<ProviderSettlement> findByExcursionIdAndProviderId(Long excursionId, String providerId);
 
     List<ProviderSettlement> findByVoyageId(Long voyageId);

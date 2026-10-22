@@ -13,7 +13,9 @@ import com.cruise.activity.repository.ExcursionPassengerRepository;
 import com.cruise.activity.repository.ProviderSettlementAdjustmentRepository;
 import com.cruise.activity.repository.ProviderSettlementRepository;
 import com.cruise.activity.repository.ShoreExcursionRepository;
-import jakarta.persistence.EntityNotFoundException;
+import com.cruise.activity.exception.BusinessRuleException;
+import com.cruise.activity.exception.ResourceNotFoundException;
+import org.springframework.dao.DataIntegrityViolationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -45,7 +47,7 @@ public class ProviderReconciliationService {
     public SettlementDetailDto initializeOrRecalculateSettlement(InitializeSettlementRequest request) {
         Objects.requireNonNull(request, "InitializeSettlementRequest must not be null");
         ShoreExcursion excursion = excursionRepository.findById(request.excursionId())
-                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy tour trên bờ với id: " + request.excursionId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tour trên bờ với id: " + request.excursionId()));
 
         String providerName = excursion.getLocalProvider() != null && !excursion.getLocalProvider().isBlank()
                 ? excursion.getLocalProvider() : "Chưa chỉ định";
@@ -53,7 +55,7 @@ public class ProviderReconciliationService {
                 ? request.providerId() : sanitizeProviderId(providerName);
 
         ProviderSettlement settlement = settlementRepository
-                .findByExcursionIdAndProviderId(excursion.getId(), providerId)
+                .findByExcursionIdAndProviderIdWithLock(excursion.getId(), providerId)
                 .orElseGet(() -> ProviderSettlement.builder()
                         .providerId(providerId)
                         .providerName(providerName)
@@ -97,7 +99,14 @@ public class ProviderReconciliationService {
         settlement.setNoShowPax(noShowPax);
 
         // Tính toán lại
-        recalculateAndSave(settlement);
+        try {
+            recalculateAndSave(settlement);
+        } catch (DataIntegrityViolationException e) {
+            log.warn("Concurrent creation conflict for excursionId={}, providerId={}. Loading existing settlement.", excursion.getId(), providerId);
+            settlement = settlementRepository.findByExcursionIdAndProviderIdWithLock(excursion.getId(), providerId)
+                    .orElseThrow(() -> new BusinessRuleException("Xung đột dữ liệu khi khởi tạo quyết toán"));
+            recalculateAndSave(settlement);
+        }
 
         log.info("Initialized/Recalculated settlement: id={}, excursionId={}, providerId={}, totalAmount={}",
                 settlement.getId(), settlement.getExcursionId(), settlement.getProviderId(), settlement.getTotalAmount());
@@ -109,7 +118,7 @@ public class ProviderReconciliationService {
     public SettlementDetailDto addAdjustment(Long settlementId, CreateSettlementAdjustmentRequest request) {
         Objects.requireNonNull(request, "CreateSettlementAdjustmentRequest must not be null");
         ProviderSettlement settlement = settlementRepository.findByIdWithLock(settlementId)
-                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy quyết toán với id: " + settlementId));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy quyết toán với id: " + settlementId));
 
         assertNotLocked(settlement, "Không thể thêm điều chỉnh vào quyết toán đã khóa (APPROVED/PAID/RECONCILED)");
 
@@ -137,9 +146,12 @@ public class ProviderReconciliationService {
     public SettlementDetailDto updateStatus(Long settlementId, UpdateSettlementStatusRequest request) {
         Objects.requireNonNull(request, "UpdateSettlementStatusRequest must not be null");
         ProviderSettlement settlement = settlementRepository.findByIdWithLock(settlementId)
-                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy quyết toán với id: " + settlementId));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy quyết toán với id: " + settlementId));
 
         SettlementStatus target = request.targetStatus();
+        if (settlement.getStatus() == target) {
+            return toDto(settlement);
+        }
         validateStatusTransition(settlement.getStatus(), target);
 
         settlement.setStatus(target);
@@ -161,7 +173,7 @@ public class ProviderReconciliationService {
     @Transactional(readOnly = true)
     public SettlementDetailDto getSettlementById(Long settlementId) {
         ProviderSettlement settlement = settlementRepository.findById(settlementId)
-                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy quyết toán với id: " + settlementId));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy quyết toán với id: " + settlementId));
         return toDto(settlement);
     }
 
@@ -264,7 +276,7 @@ public class ProviderReconciliationService {
         if (settlement.getStatus() == SettlementStatus.APPROVED
                 || settlement.getStatus() == SettlementStatus.PAID
                 || settlement.getStatus() == SettlementStatus.RECONCILED) {
-            throw new IllegalStateException(message);
+            throw new BusinessRuleException(message);
         }
     }
 
@@ -281,7 +293,7 @@ public class ProviderReconciliationService {
         };
 
         if (!valid) {
-            throw new IllegalStateException(String.format("Không thể chuyển trạng thái quyết toán từ %s sang %s", current, target));
+            throw new BusinessRuleException(String.format("Không thể chuyển trạng thái quyết toán từ %s sang %s", current, target));
         }
     }
 
