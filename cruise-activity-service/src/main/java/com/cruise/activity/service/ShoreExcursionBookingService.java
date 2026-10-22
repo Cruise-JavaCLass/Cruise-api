@@ -770,8 +770,13 @@ public class ShoreExcursionBookingService {
         }
 
         ExcursionPassenger candidate = waitlist.get(0);
-        promotePassengerToConfirmed(excursion, candidate);
-        log.info("Auto-promoted waitlist passenger: bookingId={}, excursionId={}", candidate.getId(), excursionId);
+        try {
+            promotePassengerToConfirmed(excursion, candidate);
+            log.info("Auto-promoted waitlist passenger: bookingId={}, excursionId={}", candidate.getId(), excursionId);
+        } catch (PaymentRequiredException | ResourceNotFoundException ex) {
+            log.warn("Could not auto-promote waitlist head bookingId={}, excursionId={}: {}",
+                    candidate.getId(), excursionId, ex.getMessage());
+        }
     }
 
     private WaitlistPromotionResultDto promotePassengerToConfirmed(ShoreExcursion excursion, ExcursionPassenger candidate) {
@@ -1031,7 +1036,6 @@ public class ShoreExcursionBookingService {
     /**
      * Kích hoạt phát cảnh báo thay đổi lịch trình cho toàn bộ hành khách đăng ký tour bờ (KAN-327)
      */
-    @Transactional
     public ExcursionScheduleAlertResponse triggerScheduleAlert(Long excursionId, ExcursionScheduleAlertRequest request) {
         findActiveExcursion(excursionId);
         List<ExcursionPassenger> passengers = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
