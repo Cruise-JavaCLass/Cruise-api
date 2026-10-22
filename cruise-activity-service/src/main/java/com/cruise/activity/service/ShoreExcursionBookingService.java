@@ -2,6 +2,7 @@ package com.cruise.activity.service;
 
 import com.cruise.activity.dto.*;
 import com.cruise.activity.entity.*;
+import com.cruise.activity.enums.ExcursionBookingStatus;
 import com.cruise.activity.enums.ExcursionPassengerStatus;
 import com.cruise.activity.enums.ExcursionStatus;
 import com.cruise.activity.enums.VehicleStatus;
@@ -12,6 +13,8 @@ import com.cruise.activity.exception.ResourceNotFoundException;
 import com.cruise.activity.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -129,6 +132,8 @@ public class ShoreExcursionBookingService {
                 .groupName(groupName)
                 .emergencyPhone(request.getEmergencyPhone() != null ? request.getEmergencyPhone().trim() : passenger.getPhoneNumber())
                 .specialRequirements(request.getSpecialRequirements())
+                .bookingStatus(ExcursionBookingStatus.CONFIRMED)
+                .waitlistPosition(null)
                 .status(ExcursionPassengerStatus.REGISTERED)
                 .chargedAmount(chargedAmount)
                 .refundAmount(BigDecimal.ZERO)
@@ -243,6 +248,7 @@ public class ShoreExcursionBookingService {
         }
 
         booking.setActive(false);
+        booking.setBookingStatus(ExcursionBookingStatus.CANCELLED);
         booking.setCancelledAt(now);
         booking.setCancellationReason(reason != null ? reason : "Hành khách hủy tour");
         booking.setRefundAmount(refundAmount);
@@ -493,5 +499,96 @@ public class ShoreExcursionBookingService {
         return excursionRepository.findById(excursionId)
                 .filter(ShoreExcursion::getActive)
                 .orElseThrow(() -> new ResourceNotFoundException("Tour trên bờ với ID " + excursionId + " không tồn tại"));
+    }
+
+    /**
+     * Tra cứu danh sách hành khách đăng ký tour bờ (Passenger Roster) có phân trang và bộ lọc (KAN-325)
+     */
+    @Transactional(readOnly = true)
+    public ExcursionRosterSummaryDto getExcursionRoster(
+            Long excursionId,
+            String search,
+            ExcursionBookingStatus bookingStatus,
+            Boolean specialAssistance,
+            Boolean includeCancelled,
+            Pageable pageable
+    ) {
+        ShoreExcursion excursion = excursionRepository.findById(excursionId)
+                .filter(ShoreExcursion::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Tour trên bờ với ID " + excursionId + " không tồn tại"));
+
+        String cleanSearch = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
+        Page<ExcursionPassenger> pageResult = passengerRepository.findRosterWithFilters(
+                excursionId, cleanSearch, bookingStatus, specialAssistance, Boolean.TRUE.equals(includeCancelled), pageable
+        );
+
+        long confirmedCount = passengerRepository.countByExcursionIdAndBookingStatusAndActiveTrue(
+                excursionId, ExcursionBookingStatus.CONFIRMED);
+        long waitlistCount = passengerRepository.countByExcursionIdAndBookingStatusAndActiveTrue(
+                excursionId, ExcursionBookingStatus.WAITLISTED);
+        long cancelledCount = passengerRepository.countByExcursionId(excursionId) -
+                passengerRepository.countByExcursionIdAndActiveTrue(excursionId);
+
+        List<ExcursionPassenger> allActive = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
+        long checkedInCount = allActive.stream()
+                .filter(p -> p.getStatus() == ExcursionPassengerStatus.CHECKED_IN
+                        || p.getStatus() == ExcursionPassengerStatus.ON_TOUR
+                        || p.getStatus() == ExcursionPassengerStatus.RETURNED_SAFE)
+                .count();
+
+        long specialAssistanceCount = allActive.stream()
+                .filter(p -> p.getSpecialRequirements() != null && !p.getSpecialRequirements().trim().isEmpty())
+                .count();
+
+        List<ExcursionPassengerRosterDto> items = pageResult.getContent().stream()
+                .map(this::mapToRosterDto)
+                .toList();
+
+        return ExcursionRosterSummaryDto.builder()
+                .excursionId(excursion.getId())
+                .excursionTitle(excursion.getTitle())
+                .maxCapacity(excursion.getMaxCapacity())
+                .confirmedCount(confirmedCount)
+                .waitlistCount(waitlistCount)
+                .cancelledCount(cancelledCount)
+                .checkedInCount(checkedInCount)
+                .specialAssistanceCount(specialAssistanceCount)
+                .items(items)
+                .page(pageResult.getNumber())
+                .size(pageResult.getSize())
+                .totalElements(pageResult.getTotalElements())
+                .totalPages(pageResult.getTotalPages())
+                .build();
+    }
+
+    private ExcursionPassengerRosterDto mapToRosterDto(ExcursionPassenger entity) {
+        boolean hasSpecialNeeds = entity.getSpecialRequirements() != null && !entity.getSpecialRequirements().trim().isEmpty();
+        return ExcursionPassengerRosterDto.builder()
+                .id(entity.getId())
+                .excursionId(entity.getExcursionId())
+                .passengerId(entity.getPassengerId())
+                .passengerName(entity.getPassengerName())
+                .cabinNumber(entity.getCabinNumber())
+                .ticketCode(entity.getTicketCode())
+                .rfidTag(entity.getRfidTag())
+                .busNumber(entity.getBusNumber())
+                .groupName(entity.getGroupName())
+                .emergencyPhone(entity.getEmergencyPhone())
+                .bookingStatus(entity.getBookingStatus())
+                .waitlistPosition(entity.getWaitlistPosition())
+                .status(entity.getStatus())
+                .specialRequirements(entity.getSpecialRequirements())
+                .needsSpecialAssistance(hasSpecialNeeds)
+                .chargedAmount(entity.getChargedAmount())
+                .refundAmount(entity.getRefundAmount())
+                .penaltyFee(entity.getPenaltyFee())
+                .isIncluded(entity.getIsIncluded())
+                .checkedInAt(entity.getCheckedInAt())
+                .cancelledAt(entity.getCancelledAt())
+                .cancellationReason(entity.getCancellationReason())
+                .medicalWaiver(entity.getMedicalWaiver())
+                .medicalWaiverReason(entity.getMedicalWaiverReason())
+                .createdAt(entity.getCreatedAt())
+                .build();
     }
 }
