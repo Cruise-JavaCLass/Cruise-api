@@ -83,6 +83,12 @@ public class MockPaymentGatewayService {
         return mapToResponse(order, qrCodeText);
     }
 
+    public PaymentGatewayStatus getOrderStatus(String reference) {
+        return paymentOrderRepository.findByPaymentReference(reference)
+                .map(PaymentOrder::getStatus)
+                .orElse(PaymentGatewayStatus.FAILED);
+    }
+
     private VietQrPaymentResponse mapToResponse(PaymentOrder order) {
         return mapToResponse(order, "VIETQR:" + order.getPaymentReference());
     }
