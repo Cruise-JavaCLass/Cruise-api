@@ -28,6 +28,7 @@ public class PosPassengerAuthService {
 
     private final PosCredentialRepository credentialRepository;
     private final CabinFolioAccountRepository folioRepository;
+    private final GuestCardVerificationEngine verificationEngine;
 
     public ParsedCredential parseRawCredential(String raw) {
         Objects.requireNonNull(raw, "rawCredential must not be null");
@@ -83,6 +84,9 @@ public class PosPassengerAuthService {
         PosCredential credential = credentialRepository.findByIdentifier(parsed.getIdentifier())
                 .orElseThrow(() -> new ResourceNotFoundException("Credential not found for identifier: " + maskIdentifier(parsed.getIdentifier())));
 
+        // AC2: Security validation and fraud prevention
+        verificationEngine.validateCredentialSecurity(credential, request);
+
         CabinFolioAccount folio = folioRepository.findByCabinNumber(credential.getCabinNumber())
                 .orElseGet(() -> folioRepository.findByPassengerId(credential.getPassengerId())
                         .orElse(null));
@@ -92,9 +96,8 @@ public class PosPassengerAuthService {
         BigDecimal availableLimit = folio != null ? folio.getAvailableLimit() : BigDecimal.ZERO;
         FolioStatus folioStatus = folio != null ? folio.getStatus() : FolioStatus.LOCKED;
 
-        boolean folioAllowsSpending = folio != null && folio.getStatus() == FolioStatus.ACTIVE && availableLimit.compareTo(BigDecimal.ZERO) > 0;
-        boolean credAllowsSpending = Boolean.TRUE.equals(credential.getSpendingAllowed()) && credential.getStatus() == CredentialStatus.ACTIVE;
-        boolean finalSpendingAllowed = folioAllowsSpending && credAllowsSpending;
+        boolean finalSpendingAllowed = verificationEngine.evaluateSpendingAllowance(credential, folio);
+        boolean alcoholRestricted = verificationEngine.isAlcoholRestricted(credential);
 
         return PassengerIdentificationResponse.builder()
                 .passengerId(credential.getPassengerId())
@@ -110,7 +113,7 @@ public class PosPassengerAuthService {
                 .availableLimit(availableLimit)
                 .individualSpendingLimit(credential.getIndividualSpendingLimit())
                 .spendingAllowed(finalSpendingAllowed)
-                .alcoholRestricted(Boolean.TRUE.equals(credential.getAlcoholRestricted()) || Boolean.TRUE.equals(credential.getIsMinor()))
+                .alcoholRestricted(alcoholRestricted)
                 .isMinor(Boolean.TRUE.equals(credential.getIsMinor()))
                 .build();
     }
