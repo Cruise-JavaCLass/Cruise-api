@@ -21,6 +21,7 @@ public class PackageEntitlementController {
 
     private final PackageEntitlementRuleEngine entitlementRuleEngine;
     private final GuestPackageEntitlementRepository entitlementRepository;
+    private final com.cruise.pos.service.PackageEntitlementLedgerService ledgerService;
 
     @PostMapping("/evaluate")
     public ApiResponse<EntitlementEvaluateResponse> evaluateCart(@Valid @RequestBody EntitlementEvaluateRequest request) {
@@ -29,10 +30,24 @@ public class PackageEntitlementController {
         return ApiResponse.ok(response);
     }
 
+    @PostMapping("/deduct")
+    public ApiResponse<Void> deductQuota(@Valid @RequestBody com.cruise.pos.dto.EntitlementDeductRequest request) {
+        log.info("Deducting package entitlements for passengerId: {}", request.getPassengerId());
+        ledgerService.deductEntitlementQuota(request);
+        return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/rollback")
+    public ApiResponse<Void> rollbackQuota(@Valid @RequestBody com.cruise.pos.dto.EntitlementRollbackRequest request) {
+        log.info("Rolling back package entitlements for passengerId: {}", request.getPassengerId());
+        ledgerService.rollbackEntitlementQuota(request);
+        return ApiResponse.ok(null);
+    }
+
     @GetMapping("/passengers/{passengerId}")
     public ApiResponse<List<GuestPackageEntitlement>> getPassengerEntitlements(@PathVariable("passengerId") Long passengerId) {
         log.info("Fetching active entitlements for passengerId: {}", passengerId);
-        List<GuestPackageEntitlement> list = entitlementRepository.findActiveEntitlementsOrderByPriority(passengerId);
+        List<GuestPackageEntitlement> list = ledgerService.resolvePackageCollision(passengerId);
         return ApiResponse.ok(list);
     }
 }
