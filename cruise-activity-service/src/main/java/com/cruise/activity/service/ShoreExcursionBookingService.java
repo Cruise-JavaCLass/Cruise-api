@@ -2,6 +2,7 @@ package com.cruise.activity.service;
 
 import com.cruise.activity.dto.*;
 import com.cruise.activity.entity.*;
+import com.cruise.activity.enums.ExcursionBookingStatus;
 import com.cruise.activity.enums.ExcursionPassengerStatus;
 import com.cruise.activity.enums.ExcursionStatus;
 import com.cruise.activity.enums.VehicleStatus;
@@ -10,8 +11,13 @@ import com.cruise.activity.exception.DuplicateRegistrationException;
 import com.cruise.activity.exception.PaymentRequiredException;
 import com.cruise.activity.exception.ResourceNotFoundException;
 import com.cruise.activity.repository.*;
+import com.cruise.activity.service.PassengerNotificationService;
+import com.cruise.activity.dto.SendNotificationRequest;
+import com.cruise.activity.enums.NotificationCategory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +40,7 @@ public class ShoreExcursionBookingService {
     private final ExcursionVehicleRepository vehicleRepository;
     private final PassengerRepository cruisePassengerRepository;
     private final ExcursionBookingLogRepository bookingLogRepository;
+    private final PassengerNotificationService notificationService;
 
     /**
      * Đặt tour tham quan trên bờ, kiểm tra sức chứa xe và ghi nợ Folio (KAN-374 / AC1, AC2, AC3, AC5)
@@ -94,9 +101,7 @@ public class ShoreExcursionBookingService {
                 : (assignedBus != null ? "Nhóm " + assignedBus : "Nhóm 1");
 
         // 6. Tính toán giá vé và gói quyền lợi Folio (AC3)
-        boolean isIncluded = Boolean.TRUE.equals(excursion.getIsIncluded())
-                || (passenger.getTourPackage() != null && passenger.getTourPackage().toLowerCase().contains("vip"))
-                || (passenger.getTourPackage() != null && passenger.getTourPackage().toLowerCase().contains("inclusive"));
+        boolean isIncluded = isExcursionIncluded(excursion, passenger);
 
         BigDecimal chargedAmount = BigDecimal.ZERO;
         String transactionId = null;
@@ -129,6 +134,8 @@ public class ShoreExcursionBookingService {
                 .groupName(groupName)
                 .emergencyPhone(request.getEmergencyPhone() != null ? request.getEmergencyPhone().trim() : passenger.getPhoneNumber())
                 .specialRequirements(request.getSpecialRequirements())
+                .bookingStatus(ExcursionBookingStatus.CONFIRMED)
+                .waitlistPosition(null)
                 .status(ExcursionPassengerStatus.REGISTERED)
                 .chargedAmount(chargedAmount)
                 .refundAmount(BigDecimal.ZERO)
@@ -242,30 +249,35 @@ public class ShoreExcursionBookingService {
             }
         }
 
+        boolean wasConfirmed = booking.getBookingStatus() == ExcursionBookingStatus.CONFIRMED;
+
         booking.setActive(false);
+        booking.setBookingStatus(ExcursionBookingStatus.CANCELLED);
         booking.setCancelledAt(now);
         booking.setCancellationReason(reason != null ? reason : "Hành khách hủy tour");
         booking.setRefundAmount(refundAmount);
         booking.setPenaltyFee(penaltyFee);
         passengerRepository.save(booking);
 
-        // Giảm số người tham gia trong ShoreExcursion
-        if (excursion.getCurrentParticipants() != null && excursion.getCurrentParticipants() > 0) {
-            excursion.setCurrentParticipants(excursion.getCurrentParticipants() - 1);
-            excursionRepository.save(excursion);
-        }
+        if (wasConfirmed) {
+            // Giảm số người tham gia trong ShoreExcursion
+            if (excursion.getCurrentParticipants() != null && excursion.getCurrentParticipants() > 0) {
+                excursion.setCurrentParticipants(excursion.getCurrentParticipants() - 1);
+                excursionRepository.save(excursion);
+            }
 
-        // Giảm assignedPassengers của xe nếu có
-        if (booking.getBusNumber() != null) {
-            vehicleRepository.findByExcursionIdAndActiveTrue(excursionId).stream()
-                    .filter(v -> booking.getBusNumber().equalsIgnoreCase(v.getVehicleCode()) || booking.getBusNumber().equalsIgnoreCase(v.getLicensePlate()))
-                    .findFirst()
-                    .ifPresent(v -> {
-                        if (v.getAssignedPassengers() != null && v.getAssignedPassengers() > 0) {
-                            v.setAssignedPassengers(v.getAssignedPassengers() - 1);
-                            vehicleRepository.save(v);
-                        }
-                    });
+            // Giảm assignedPassengers của xe nếu có
+            if (booking.getBusNumber() != null) {
+                vehicleRepository.findByExcursionIdAndActiveTrue(excursionId).stream()
+                        .filter(v -> booking.getBusNumber().equalsIgnoreCase(v.getVehicleCode()) || booking.getBusNumber().equalsIgnoreCase(v.getLicensePlate()))
+                        .findFirst()
+                        .ifPresent(v -> {
+                            if (v.getAssignedPassengers() != null && v.getAssignedPassengers() > 0) {
+                                v.setAssignedPassengers(v.getAssignedPassengers() - 1);
+                                vehicleRepository.save(v);
+                            }
+                        });
+            }
         }
 
         // Ghi nhật ký kiểm toán bất biến (AC6)
@@ -285,6 +297,11 @@ public class ShoreExcursionBookingService {
                 .details(String.format("Hủy tour bờ thành công. Hoàn tiền: %s USD, Phạt: %s USD, Lý do: %s",
                         refundAmount, penaltyFee, booking.getCancellationReason()))
                 .build());
+
+        // AC2: Tự động đôn khách đầu tiên trong Waitlist (Auto-promote) khi có chỗ trống (chỉ khi hủy vé CONFIRMED)
+        if (wasConfirmed) {
+            triggerAutoPromotionIfPossible(excursionId);
+        }
 
         log.info("Excursion booking cancelled: bookingId={}, refundAmount={}, penaltyFee={}",
                 bookingId, refundAmount, penaltyFee);
@@ -482,6 +499,17 @@ public class ShoreExcursionBookingService {
         return ZoneId.of("Asia/Ho_Chi_Minh");
     }
 
+    private boolean isExcursionIncluded(ShoreExcursion excursion, Passenger passenger) {
+        if (Boolean.TRUE.equals(excursion.getIsIncluded())) {
+            return true;
+        }
+        if (passenger == null || passenger.getTourPackage() == null) {
+            return false;
+        }
+        String pkg = passenger.getTourPackage().toLowerCase();
+        return pkg.contains("vip") || pkg.contains("inclusive");
+    }
+
     private boolean isFolioLocked(Passenger passenger) {
         if (passenger.getEmail() != null && (passenger.getEmail().toLowerCase().contains("locked") || passenger.getEmail().toLowerCase().contains("blocked"))) {
             return true;
@@ -494,4 +522,596 @@ public class ShoreExcursionBookingService {
                 .filter(ShoreExcursion::getActive)
                 .orElseThrow(() -> new ResourceNotFoundException("Tour trên bờ với ID " + excursionId + " không tồn tại"));
     }
+
+    /**
+     * Tra cứu danh sách hành khách đăng ký tour bờ (Passenger Roster) có phân trang và bộ lọc (KAN-325)
+     */
+    @Transactional(readOnly = true)
+    public ExcursionRosterSummaryDto getExcursionRoster(
+            Long excursionId,
+            String search,
+            ExcursionBookingStatus bookingStatus,
+            Boolean specialAssistance,
+            Boolean includeCancelled,
+            Pageable pageable
+    ) {
+        ShoreExcursion excursion = excursionRepository.findById(excursionId)
+                .filter(ShoreExcursion::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Tour trên bờ với ID " + excursionId + " không tồn tại"));
+
+        String cleanSearch = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
+        Pageable sanitizedPageable = org.springframework.data.domain.PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        Page<ExcursionPassenger> pageResult = passengerRepository.findRosterWithFilters(
+                excursionId, cleanSearch, bookingStatus, specialAssistance, Boolean.TRUE.equals(includeCancelled), sanitizedPageable
+        );
+
+        long confirmedCount = passengerRepository.countByExcursionIdAndBookingStatusAndActiveTrue(
+                excursionId, ExcursionBookingStatus.CONFIRMED);
+        long waitlistCount = passengerRepository.countByExcursionIdAndBookingStatusAndActiveTrue(
+                excursionId, ExcursionBookingStatus.WAITLISTED);
+        long cancelledCount = passengerRepository.countByExcursionId(excursionId) -
+                passengerRepository.countByExcursionIdAndActiveTrue(excursionId);
+
+        List<ExcursionPassenger> allActive = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
+        long checkedInCount = allActive.stream()
+                .filter(p -> p.getStatus() == ExcursionPassengerStatus.CHECKED_IN
+                        || p.getStatus() == ExcursionPassengerStatus.ON_TOUR
+                        || p.getStatus() == ExcursionPassengerStatus.RETURNED_SAFE)
+                .count();
+
+        long specialAssistanceCount = allActive.stream()
+                .filter(p -> p.getSpecialRequirements() != null && !p.getSpecialRequirements().trim().isEmpty())
+                .count();
+
+        List<ExcursionPassengerRosterDto> items = pageResult.getContent().stream()
+                .map(this::mapToRosterDto)
+                .toList();
+
+        return ExcursionRosterSummaryDto.builder()
+                .excursionId(excursion.getId())
+                .excursionTitle(excursion.getTitle())
+                .maxCapacity(excursion.getMaxCapacity())
+                .confirmedCount(confirmedCount)
+                .waitlistCount(waitlistCount)
+                .cancelledCount(cancelledCount)
+                .checkedInCount(checkedInCount)
+                .specialAssistanceCount(specialAssistanceCount)
+                .items(items)
+                .page(pageResult.getNumber())
+                .size(pageResult.getSize())
+                .totalElements(pageResult.getTotalElements())
+                .totalPages(pageResult.getTotalPages())
+                .build();
+    }
+
+    private ExcursionPassengerRosterDto mapToRosterDto(ExcursionPassenger entity) {
+        boolean hasSpecialNeeds = entity.getSpecialRequirements() != null && !entity.getSpecialRequirements().trim().isEmpty();
+        return ExcursionPassengerRosterDto.builder()
+                .id(entity.getId())
+                .excursionId(entity.getExcursionId())
+                .passengerId(entity.getPassengerId())
+                .passengerName(entity.getPassengerName())
+                .cabinNumber(entity.getCabinNumber())
+                .ticketCode(entity.getTicketCode())
+                .rfidTag(entity.getRfidTag())
+                .busNumber(entity.getBusNumber())
+                .groupName(entity.getGroupName())
+                .emergencyPhone(entity.getEmergencyPhone())
+                .bookingStatus(entity.getBookingStatus())
+                .waitlistPosition(entity.getWaitlistPosition())
+                .status(entity.getStatus())
+                .specialRequirements(entity.getSpecialRequirements())
+                .needsSpecialAssistance(hasSpecialNeeds)
+                .chargedAmount(entity.getChargedAmount())
+                .refundAmount(entity.getRefundAmount())
+                .penaltyFee(entity.getPenaltyFee())
+                .isIncluded(entity.getIsIncluded())
+                .checkedInAt(entity.getCheckedInAt())
+                .cancelledAt(entity.getCancelledAt())
+                .cancellationReason(entity.getCancellationReason())
+                .medicalWaiver(entity.getMedicalWaiver())
+                .medicalWaiverReason(entity.getMedicalWaiverReason())
+                .createdAt(entity.getCreatedAt())
+                .build();
+    }
+
+    /**
+     * Đưa hành khách vào hàng đợi danh sách chờ khi tour đạt maxCapacity (KAN-326 / AC2)
+     */
+    
+    /**
+     * Đăng ký vào danh sách chờ (Waitlist) khi tour đã đầy hoặc hành khách chủ động đăng ký chờ (KAN-326)
+     */
+    @Transactional
+    public ExcursionBookingResponse joinWaitlist(Long excursionId, ExcursionBookingRequest request) {
+        ShoreExcursion excursion = findActiveExcursion(excursionId);
+        Passenger passenger = cruisePassengerRepository.findById(request.getPassengerId())
+                .filter(Passenger::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Hành khách với ID " + request.getPassengerId() + " không tồn tại"));
+
+        return ingestWaitlistBooking(excursion, passenger, request);
+    }
+
+    public ExcursionBookingResponse ingestWaitlistBooking(ShoreExcursion excursion, Passenger passenger, ExcursionBookingRequest request) {
+        Long excursionId = excursion.getId();
+        Integer maxPos = passengerRepository.findMaxWaitlistPosition(excursionId);
+        int nextPos = (maxPos != null ? maxPos : 0) + 1;
+
+        Instant now = Instant.now();
+        String ticketCode = String.format("WAIT-%d-%d", excursionId, System.currentTimeMillis());
+        String cabinNumber = (request.getCabinNumber() != null && !request.getCabinNumber().isBlank())
+                ? request.getCabinNumber().trim()
+                : passenger.getCabinNumber();
+
+        String passengerName = (request.getPassengerName() != null && !request.getPassengerName().isBlank())
+                ? request.getPassengerName().trim()
+                : passenger.getFullName();
+
+        ExcursionPassenger waitlistEntry = ExcursionPassenger.builder()
+                .excursionId(excursionId)
+                .passengerId(passenger.getId())
+                .passengerName(passengerName)
+                .cabinNumber(cabinNumber)
+                .ticketCode(ticketCode)
+                .rfidTag(passenger.getRfidTag())
+                .busNumber(null)
+                .groupName("Waitlist")
+                .emergencyPhone(request.getEmergencyPhone() != null ? request.getEmergencyPhone().trim() : passenger.getPhoneNumber())
+                .specialRequirements(request.getSpecialRequirements())
+                .bookingStatus(ExcursionBookingStatus.WAITLISTED)
+                .waitlistPosition(nextPos)
+                .status(ExcursionPassengerStatus.REGISTERED)
+                .chargedAmount(BigDecimal.ZERO)
+                .refundAmount(BigDecimal.ZERO)
+                .penaltyFee(BigDecimal.ZERO)
+                .transactionId(null)
+                .isIncluded(false)
+                .active(true)
+                .build();
+
+        ExcursionPassenger saved = passengerRepository.save(waitlistEntry);
+
+        bookingLogRepository.save(ExcursionBookingLog.builder()
+                .bookingId(saved.getId())
+                .excursionId(excursionId)
+                .passengerId(passenger.getId())
+                .ticketCode(ticketCode)
+                .action("WAITLIST_INGESTED")
+                .chargedAmount(BigDecimal.ZERO)
+                .refundAmount(BigDecimal.ZERO)
+                .penaltyFee(BigDecimal.ZERO)
+                .auditTime(now)
+                .details(String.format("Xếp hàng chờ Waitlist vị trí #%d cho cabin %s", nextPos, cabinNumber))
+                .build());
+
+        log.info("Passenger added to excursion waitlist: excursionId={}, passengerId={}, position={}",
+                excursionId, passenger.getId(), nextPos);
+
+        return ExcursionBookingResponse.builder()
+                .bookingId(saved.getId())
+                .excursionId(excursionId)
+                .passengerId(passenger.getId())
+                .passengerName(passengerName)
+                .cabinNumber(cabinNumber)
+                .ticketCode(ticketCode)
+                .busNumber(null)
+                .groupName("Waitlist")
+                .chargedAmount(BigDecimal.ZERO)
+                .transactionId(null)
+                .isIncluded(false)
+                .status(ExcursionBookingStatus.WAITLISTED.name())
+                .bookedAt(now)
+                .build();
+    }
+
+    /**
+     * Tra cứu danh sách hàng đợi chờ (Waitlist Queue) theo thứ tự FIFO (KAN-326 / AC2)
+     */
+    @Transactional(readOnly = true)
+    public List<ExcursionWaitlistEntryDto> getWaitlistQueue(Long excursionId) {
+        findActiveExcursion(excursionId);
+        List<ExcursionPassenger> waitlist = passengerRepository
+                .findByExcursionIdAndBookingStatusAndActiveTrueOrderByWaitlistPositionAsc(excursionId, ExcursionBookingStatus.WAITLISTED);
+
+        return waitlist.stream()
+                .map(e -> ExcursionWaitlistEntryDto.builder()
+                        .position(e.getWaitlistPosition())
+                        .bookingId(e.getId())
+                        .excursionId(e.getExcursionId())
+                        .passengerId(e.getPassengerId())
+                        .passengerName(e.getPassengerName())
+                        .cabinNumber(e.getCabinNumber())
+                        .emergencyPhone(e.getEmergencyPhone())
+                        .specialRequirements(e.getSpecialRequirements())
+                        .bookedAt(e.getCreatedAt())
+                        .build())
+                .toList();
+    }
+
+    /**
+     * Thủ công đôn hành khách đầu tiên trong danh sách chờ lên CONFIRMED (KAN-326 / AC2)
+     */
+    @Transactional
+    public WaitlistPromotionResultDto promoteNextWaitlistPassenger(Long excursionId) {
+        ShoreExcursion excursion = excursionRepository.findByIdWithLock(excursionId)
+                .filter(ShoreExcursion::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Tour trên bờ với ID " + excursionId + " không tồn tại"));
+
+        List<ExcursionPassenger> waitlist = passengerRepository
+                .findByExcursionIdAndBookingStatusAndActiveTrueOrderByWaitlistPositionAsc(excursionId, ExcursionBookingStatus.WAITLISTED);
+
+        if (waitlist.isEmpty()) {
+            throw new BusinessRuleException("Hàng đợi danh sách chờ của tour này đang trống");
+        }
+
+        ExcursionPassenger candidate = waitlist.get(0);
+        return promotePassengerToConfirmed(excursion, candidate);
+    }
+
+    /**
+     * Kích hoạt tự động đôn người trong Waitlist khi có chỗ trống (Auto-promote / AC2)
+     */
+    public void triggerAutoPromotionIfPossible(Long excursionId) {
+        List<ExcursionPassenger> waitlist = passengerRepository
+                .findByExcursionIdAndBookingStatusAndActiveTrueOrderByWaitlistPositionAsc(excursionId, ExcursionBookingStatus.WAITLISTED);
+        if (waitlist.isEmpty()) {
+            return;
+        }
+
+        ShoreExcursion excursion = excursionRepository.findById(excursionId).orElse(null);
+        if (excursion == null || !Boolean.TRUE.equals(excursion.getActive())) {
+            return;
+        }
+
+        long confirmedCount = passengerRepository.countByExcursionIdAndBookingStatusAndActiveTrue(
+                excursionId, ExcursionBookingStatus.CONFIRMED);
+        if (excursion.getMaxCapacity() != null && confirmedCount >= excursion.getMaxCapacity()) {
+            return;
+        }
+
+        ExcursionPassenger candidate = waitlist.get(0);
+        try {
+            promotePassengerToConfirmed(excursion, candidate);
+            log.info("Auto-promoted waitlist passenger: bookingId={}, excursionId={}", candidate.getId(), excursionId);
+        } catch (PaymentRequiredException | ResourceNotFoundException ex) {
+            log.warn("Could not auto-promote waitlist head bookingId={}, excursionId={}: {}",
+                    candidate.getId(), excursionId, ex.getMessage());
+        }
+    }
+
+    private WaitlistPromotionResultDto promotePassengerToConfirmed(ShoreExcursion excursion, ExcursionPassenger candidate) {
+        Long excursionId = excursion.getId();
+        Instant now = Instant.now();
+
+        // 1. Phân bổ xe bus cho hành khách được đôn lên
+        List<ExcursionVehicle> vehicles = vehicleRepository.findByExcursionIdAndActiveTrue(excursionId);
+        List<ExcursionVehicle> operationalVehicles = vehicles.stream()
+                .filter(v -> v.getStatus() == VehicleStatus.READY || v.getStatus() == VehicleStatus.ACTIVE || v.getStatus() == VehicleStatus.ON_TRIP)
+                .toList();
+
+        ExcursionBookingRequest pseudoReq = new ExcursionBookingRequest();
+        pseudoReq.setPassengerId(candidate.getPassengerId());
+        pseudoReq.setPassengerName(candidate.getPassengerName());
+        pseudoReq.setCabinNumber(candidate.getCabinNumber());
+        pseudoReq.setEmergencyPhone(candidate.getEmergencyPhone());
+
+        String assignedBus = resolveAssignedBus(pseudoReq, operationalVehicles, excursionId, candidate.getCabinNumber());
+        String groupName = (assignedBus != null) ? "Nhóm " + assignedBus : "Nhóm 1";
+
+        // 2. Tính phí, kiểm tra Folio lock và quyền lợi Tour package
+        Passenger passenger = cruisePassengerRepository.findById(candidate.getPassengerId())
+                .filter(Passenger::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Hành khách với ID " + candidate.getPassengerId() + " không tồn tại"));
+
+        boolean isIncluded = isExcursionIncluded(excursion, passenger);
+        BigDecimal chargedAmount = BigDecimal.ZERO;
+        String transactionId = null;
+
+        if (!isIncluded && excursion.getPrice() != null && excursion.getPrice().compareTo(BigDecimal.ZERO) > 0) {
+            if (isFolioLocked(passenger)) {
+                throw new PaymentRequiredException("Tài khoản cabin folio của hành khách " + passenger.getFullName() +
+                        " (Cabin " + passenger.getCabinNumber() + ") đang bị khóa hoặc không đủ hạn mức thanh toán");
+            }
+            chargedAmount = excursion.getPrice();
+            transactionId = "FOLIO-PROMOTE-" + UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase();
+        }
+
+        String ticketCode = String.format("EXC-%d-%d", excursionId, System.currentTimeMillis());
+
+        candidate.setBookingStatus(ExcursionBookingStatus.CONFIRMED);
+        candidate.setWaitlistPosition(null);
+        candidate.setTicketCode(ticketCode);
+        candidate.setBusNumber(assignedBus);
+        candidate.setGroupName(groupName);
+        candidate.setChargedAmount(chargedAmount);
+        candidate.setTransactionId(transactionId);
+        candidate.setIsIncluded(isIncluded);
+        candidate.setStatus(ExcursionPassengerStatus.REGISTERED);
+        passengerRepository.save(candidate);
+
+        // 3. Tăng số người tham gia trong ShoreExcursion
+        excursion.setCurrentParticipants((excursion.getCurrentParticipants() != null ? excursion.getCurrentParticipants() : 0) + 1);
+        excursionRepository.save(excursion);
+
+        // 4. Cập nhật số khách trên xe
+        if (assignedBus != null) {
+            operationalVehicles.stream()
+                    .filter(v -> assignedBus.equalsIgnoreCase(v.getVehicleCode()) || assignedBus.equalsIgnoreCase(v.getLicensePlate()))
+                    .findFirst()
+                    .ifPresent(v -> {
+                        v.setAssignedPassengers((v.getAssignedPassengers() != null ? v.getAssignedPassengers() : 0) + 1);
+                        vehicleRepository.save(v);
+                    });
+        }
+
+        // 5. Ghi log kiểm toán
+        bookingLogRepository.save(ExcursionBookingLog.builder()
+                .bookingId(candidate.getId())
+                .excursionId(excursionId)
+                .passengerId(candidate.getPassengerId())
+                .ticketCode(ticketCode)
+                .action("WAITLIST_PROMOTED")
+                .chargedAmount(chargedAmount)
+                .refundAmount(BigDecimal.ZERO)
+                .penaltyFee(BigDecimal.ZERO)
+                .transactionId(transactionId)
+                .busNumber(assignedBus)
+                .groupName(groupName)
+                .auditTime(now)
+                .details(String.format("Đôn vé danh sách chờ lên CONFIRMED cho cabin %s, xe %s, vé %s",
+                        candidate.getCabinNumber(), assignedBus, ticketCode))
+                .build());
+
+        return WaitlistPromotionResultDto.builder()
+                .excursionId(excursionId)
+                .bookingId(candidate.getId())
+                .passengerId(candidate.getPassengerId())
+                .passengerName(candidate.getPassengerName())
+                .cabinNumber(candidate.getCabinNumber())
+                .ticketCode(ticketCode)
+                .assignedBus(assignedBus)
+                .status(ExcursionBookingStatus.CONFIRMED)
+                .chargedAmount(chargedAmount)
+                .transactionId(transactionId)
+                .promotedAt(now)
+                .message("Đã đôn hành khách lên vé chính thức và gửi thông báo xác nhận")
+                .build();
+    }
+
+    /**
+     * Hủy vé với quyền điều phối viên và áp dụng miễn phạt y tế (Medical Waiver Override - KAN-326 / AC4)
+     */
+    @Transactional
+    public ExcursionCancellationResponse cancelBookingWithMedicalWaiver(
+            Long excursionId,
+            Long bookingId,
+            MedicalWaiverCancellationRequest request
+    ) {
+        log.info("Processing medical waiver cancellation: excursionId={}, bookingId={}",
+                excursionId, bookingId);
+
+        ShoreExcursion excursion = excursionRepository.findByIdWithLock(excursionId)
+                .filter(ShoreExcursion::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Tour trên bờ với ID " + excursionId + " không tồn tại"));
+
+        ExcursionPassenger booking = passengerRepository.findByIdAndExcursionIdAndActiveTrue(bookingId, excursionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thông tin vé đặt ID " + bookingId + " trong tour"));
+
+        if (!Boolean.TRUE.equals(booking.getActive())) {
+            throw new BusinessRuleException("Vé này đã bị hủy trước đó");
+        }
+
+        Instant now = Instant.now();
+        BigDecimal chargedAmount = booking.getChargedAmount() != null ? booking.getChargedAmount() : BigDecimal.ZERO;
+        BigDecimal refundAmount = chargedAmount; // Miễn phạt y tế: Hoàn trả 100%
+        BigDecimal penaltyFee = BigDecimal.ZERO;
+
+        boolean wasConfirmed = booking.getBookingStatus() == ExcursionBookingStatus.CONFIRMED;
+
+        booking.setActive(false);
+        booking.setBookingStatus(ExcursionBookingStatus.CANCELLED);
+        booking.setCancelledAt(now);
+        booking.setCancellationReason("Miễn trừ y tế/khẩn cấp: " + request.getReason());
+        booking.setMedicalWaiver(true);
+        booking.setMedicalWaiverReason(request.getReason());
+        booking.setRefundAmount(refundAmount);
+        booking.setPenaltyFee(penaltyFee);
+        passengerRepository.save(booking);
+
+        if (wasConfirmed) {
+            if (excursion.getCurrentParticipants() != null && excursion.getCurrentParticipants() > 0) {
+                excursion.setCurrentParticipants(excursion.getCurrentParticipants() - 1);
+                excursionRepository.save(excursion);
+            }
+
+            if (booking.getBusNumber() != null) {
+                vehicleRepository.findByExcursionIdAndActiveTrue(excursionId).stream()
+                        .filter(v -> booking.getBusNumber().equalsIgnoreCase(v.getVehicleCode()) || booking.getBusNumber().equalsIgnoreCase(v.getLicensePlate()))
+                        .findFirst()
+                        .ifPresent(v -> {
+                            if (v.getAssignedPassengers() != null && v.getAssignedPassengers() > 0) {
+                                v.setAssignedPassengers(v.getAssignedPassengers() - 1);
+                                vehicleRepository.save(v);
+                            }
+                        });
+            }
+        }
+
+        // Ghi nhật ký kiểm toán bất biến
+        bookingLogRepository.save(ExcursionBookingLog.builder()
+                .bookingId(booking.getId())
+                .excursionId(excursionId)
+                .passengerId(booking.getPassengerId())
+                .ticketCode(booking.getTicketCode())
+                .action("CANCELLATION_WAIVED")
+                .chargedAmount(chargedAmount)
+                .refundAmount(refundAmount)
+                .penaltyFee(penaltyFee)
+                .transactionId(booking.getTransactionId())
+                .busNumber(booking.getBusNumber())
+                .groupName(booking.getGroupName())
+                .staffId(request.getApprovedByStaffId() != null ? request.getApprovedByStaffId() : "SHORE_EXCURSION_MANAGER")
+                .auditTime(now)
+                .details(String.format("Hủy vé diện Medical Waiver thành công. Hoàn 100%% (%s USD). Lý do: %s",
+                        refundAmount, request.getReason()))
+                .build());
+
+        // AC2: Tự động đôn khách trong hàng đợi Waitlist khi có chỗ trống do hủy y tế (chỉ khi hủy vé CONFIRMED)
+        if (wasConfirmed) {
+            triggerAutoPromotionIfPossible(excursionId);
+        }
+
+        return ExcursionCancellationResponse.builder()
+                .bookingId(booking.getId())
+                .excursionId(excursionId)
+                .passengerId(booking.getPassengerId())
+                .status("CANCELLED_MEDICAL_WAIVER")
+                .refundAmount(refundAmount)
+                .penaltyFee(penaltyFee)
+                .cancellationReason(booking.getCancellationReason())
+                .cancelledAt(now)
+                .build();
+    }
+
+
+    /**
+     * Xuất danh sách Roster định dạng CSV chuẩn RFC 4180 phục vụ điều phối tại cảng (KAN-327)
+     */
+    @Transactional
+    public byte[] exportRosterCsv(Long excursionId) {
+        findActiveExcursion(excursionId);
+        List<ExcursionPassenger> passengers = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
+
+        StringBuilder sb = new StringBuilder();
+        // CSV Header (CRLF terminator)
+        sb.append("Ticket Code,Passenger Name,Cabin Number,Phone,Status,Booking Status,Bus,Group,Special Requirements,Charged Amount (USD)\r\n");
+
+        for (ExcursionPassenger p : passengers) {
+            sb.append(escapeCsv(p.getTicketCode())).append(",")
+              .append(escapeCsv(p.getPassengerName())).append(",")
+              .append(escapeCsv(p.getCabinNumber())).append(",")
+              .append(escapeCsv(p.getEmergencyPhone())).append(",")
+              .append(escapeCsv(p.getStatus() != null ? p.getStatus().name() : "")).append(",")
+              .append(escapeCsv(p.getBookingStatus() != null ? p.getBookingStatus().name() : "")).append(",")
+              .append(escapeCsv(p.getBusNumber())).append(",")
+              .append(escapeCsv(p.getGroupName())).append(",")
+              .append(escapeCsv(p.getSpecialRequirements())).append(",")
+              .append(p.getChargedAmount() != null ? p.getChargedAmount().toPlainString() : "0.00")
+              .append("\r\n");
+        }
+
+        bookingLogRepository.save(ExcursionBookingLog.builder()
+                .bookingId(0L)
+                .excursionId(excursionId)
+                .passengerId(0L)
+                .action("ROSTER_EXPORTED")
+                .chargedAmount(BigDecimal.ZERO)
+                .refundAmount(BigDecimal.ZERO)
+                .penaltyFee(BigDecimal.ZERO)
+                .auditTime(Instant.now())
+                .details(String.format("Xuất danh sách Roster CSV cho tour bờ ID %d, tổng số %d hành khách",
+                        excursionId, passengers.size()))
+                .build());
+
+        return sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private String escapeCsv(String value) {
+        if (value == null) {
+            return "";
+        }
+        String safeValue = value;
+        if (!safeValue.isEmpty()) {
+            char firstChar = safeValue.charAt(0);
+            if (firstChar == '=' || firstChar == '+' || firstChar == '-' || firstChar == '@') {
+                safeValue = "'" + safeValue;
+            }
+        }
+        if (safeValue.contains(",") || safeValue.contains("\"") || safeValue.contains("\n") || safeValue.contains("\r")) {
+            return "\"" + safeValue.replace("\"", "\"\"") + "\"";
+        }
+        return safeValue;
+    }
+
+    /**
+     * Kích hoạt phát cảnh báo thay đổi lịch trình cho toàn bộ hành khách đăng ký tour bờ (KAN-327)
+     */
+    public ExcursionScheduleAlertResponse triggerScheduleAlert(Long excursionId, ExcursionScheduleAlertRequest request) {
+        findActiveExcursion(excursionId);
+        List<ExcursionPassenger> passengers = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
+
+        // Deduplicate recipients by passengerId and exclude waitlisted passengers
+        Set<Long> eligiblePassengerIds = new LinkedHashSet<>();
+        for (ExcursionPassenger p : passengers) {
+            if (p.getPassengerId() != null && p.getBookingStatus() != ExcursionBookingStatus.WAITLISTED) {
+                eligiblePassengerIds.add(p.getPassengerId());
+            }
+        }
+
+        // Construct structured message including updated meeting location and gathering time if provided
+        StringBuilder formattedMessage = new StringBuilder(request.getMessage());
+        List<String> scheduleDetails = new ArrayList<>();
+        if (request.getUpdatedMeetingLocation() != null && !request.getUpdatedMeetingLocation().isBlank()) {
+            scheduleDetails.add("Địa điểm tập trung mới: " + request.getUpdatedMeetingLocation().trim());
+        }
+        if (request.getUpdatedGatheringTime() != null && !request.getUpdatedGatheringTime().isBlank()) {
+            scheduleDetails.add("Thời gian tập trung mới: " + request.getUpdatedGatheringTime().trim());
+        }
+        if (!scheduleDetails.isEmpty()) {
+            formattedMessage.append(" (").append(String.join(", ", scheduleDetails)).append(")");
+        }
+        String fullNotificationMessage = formattedMessage.toString();
+
+        Instant now = Instant.now();
+        int sentCount = 0;
+        int failedCount = 0;
+
+        for (Long passengerId : eligiblePassengerIds) {
+            try {
+                notificationService.sendNotification(passengerId, SendNotificationRequest.builder()
+                        .title(request.getTitle())
+                        .message(fullNotificationMessage)
+                        .category(Boolean.TRUE.equals(request.getIsUrgent()) ? NotificationCategory.CRITICAL : NotificationCategory.OPERATIONAL)
+                        .actionUrl("/excursions/roster/" + excursionId)
+                        .build());
+                sentCount++;
+            } catch (Exception ex) {
+                failedCount++;
+                log.warn("Failed to dispatch alert to passengerId={}: {}", passengerId, ex.getMessage());
+            }
+        }
+
+        String broadcastStatus;
+        if (eligiblePassengerIds.isEmpty() || (sentCount > 0 && failedCount == 0)) {
+            broadcastStatus = "BROADCAST_SUCCESS";
+        } else if (sentCount > 0 && failedCount > 0) {
+            broadcastStatus = "PARTIAL";
+        } else {
+            broadcastStatus = "FAILED";
+        }
+
+        bookingLogRepository.save(ExcursionBookingLog.builder()
+                .bookingId(0L)
+                .excursionId(excursionId)
+                .passengerId(0L)
+                .action("SCHEDULE_ALERT_TRIGGERED")
+                .chargedAmount(BigDecimal.ZERO)
+                .refundAmount(BigDecimal.ZERO)
+                .penaltyFee(BigDecimal.ZERO)
+                .auditTime(now)
+                .details(String.format("Phát thông báo thay đổi lịch trình: '%s' tới %d hành khách thành công (%d thất bại, trạng thái: %s)",
+                        request.getTitle(), sentCount, failedCount, broadcastStatus))
+                .build());
+
+        return ExcursionScheduleAlertResponse.builder()
+                .excursionId(excursionId)
+                .recipientsCount(sentCount)
+                .failedCount(failedCount)
+                .title(request.getTitle())
+                .message(fullNotificationMessage)
+                .broadcastedAt(now)
+                .status(broadcastStatus)
+                .build();
+    }
+
 }

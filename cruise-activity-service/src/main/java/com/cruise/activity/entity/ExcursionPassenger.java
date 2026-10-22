@@ -1,5 +1,6 @@
 package com.cruise.activity.entity;
 
+import com.cruise.activity.enums.ExcursionBookingStatus;
 import com.cruise.activity.enums.ExcursionPassengerStatus;
 import com.cruise.common.model.BaseEntity;
 import jakarta.persistence.*;
@@ -10,14 +11,16 @@ import java.time.Instant;
 
 /**
  * Thực thể Hành khách đăng ký tham gia Tour tham quan trên bờ (Shore Excursion)
- * Quản lý thông tin phân nhóm, xe đưa đón và trạng thái chuyến đi (KAN-176, KAN-374, KAN-375)
+ * Quản lý thông tin phân nhóm, xe đưa đón, trạng thái chuyến đi, hàng đợi chờ (Waitlist) và hoàn tiền (KAN-176, KAN-324, KAN-374)
  */
 @Entity
 @Table(name = "excursion_passengers", indexes = {
         @Index(name = "idx_exc_passenger_excursion_id", columnList = "excursion_id"),
         @Index(name = "idx_exc_passenger_ticket_code", columnList = "ticket_code"),
         @Index(name = "idx_exc_passenger_cabin", columnList = "cabin_number"),
-        @Index(name = "idx_exc_passenger_group", columnList = "group_name")
+        @Index(name = "idx_exc_passenger_group", columnList = "group_name"),
+        @Index(name = "idx_exc_passenger_booking_status", columnList = "booking_status"),
+        @Index(name = "idx_exc_passenger_waitlist", columnList = "excursion_id, booking_status, waitlist_position")
 })
 @Getter
 @Setter
@@ -52,6 +55,14 @@ public class ExcursionPassenger extends BaseEntity {
 
     @Column(name = "emergency_phone", length = 50)
     private String emergencyPhone;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "booking_status", nullable = false, length = 30)
+    @Builder.Default
+    private ExcursionBookingStatus bookingStatus = ExcursionBookingStatus.CONFIRMED;
+
+    @Column(name = "waitlist_position")
+    private Integer waitlistPosition;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
@@ -91,6 +102,13 @@ public class ExcursionPassenger extends BaseEntity {
 
     @Column(name = "cancellation_reason", length = 500)
     private String cancellationReason;
+
+    @Column(name = "medical_waiver")
+    @Builder.Default
+    private Boolean medicalWaiver = false;
+
+    @Column(name = "medical_waiver_reason", length = 500)
+    private String medicalWaiverReason;
 
     @Column(name = "active", nullable = false)
     @Builder.Default
