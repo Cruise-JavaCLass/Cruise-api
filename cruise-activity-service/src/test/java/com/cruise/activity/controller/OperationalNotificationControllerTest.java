@@ -1,0 +1,85 @@
+package com.cruise.activity.controller;
+
+import com.cruise.activity.dto.OperationalBroadcastRequest;
+import com.cruise.activity.dto.OperationalNotificationEventDto;
+import com.cruise.activity.enums.NotificationCategory;
+import com.cruise.activity.enums.NotificationScope;
+import com.cruise.activity.service.OperationalNotificationBroadcaster;
+import com.cruise.activity.service.OperationalNotificationService;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import tools.jackson.databind.ObjectMapper;
+
+import java.time.Instant;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@WebMvcTest(OperationalNotificationController.class)
+@DisplayName("OperationalNotificationController Tests (KAN-263 & KAN-436)")
+class OperationalNotificationControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @MockitoBean
+    private OperationalNotificationService operationalNotificationService;
+
+    @MockitoBean
+    private OperationalNotificationBroadcaster broadcaster;
+
+    @Test
+    @DisplayName("POST /api/operations/notifications/broadcast returns 201 Created and dispatches alert")
+    void testBroadcastOperationalAlert() throws Exception {
+        OperationalBroadcastRequest req = OperationalBroadcastRequest.builder()
+                .title("Tập huấn an toàn khẩn cấp")
+                .message("Tất cả thuyền viên và hành khách tập trung tại boong số 4")
+                .category(NotificationCategory.CRITICAL)
+                .scope(NotificationScope.ALL)
+                .playAlertSound(true)
+                .build();
+
+        OperationalNotificationEventDto event = OperationalNotificationEventDto.builder()
+                .broadcastId("BC-12345")
+                .title("Tập huấn an toàn khẩn cấp")
+                .message("Tất cả thuyền viên và hành khách tập trung tại boong số 4")
+                .category(NotificationCategory.CRITICAL)
+                .scope(NotificationScope.ALL)
+                .broadcastAt(Instant.now())
+                .recipientCount(500)
+                .build();
+
+        when(operationalNotificationService.broadcastOperationalNotification(any())).thenReturn(event);
+
+        mockMvc.perform(post("/api/operations/notifications/broadcast")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.broadcastId").value("BC-12345"))
+                .andExpect(jsonPath("$.data.category").value("CRITICAL"))
+                .andExpect(jsonPath("$.data.recipientCount").value(500));
+    }
+
+    @Test
+    @DisplayName("GET /api/operations/notifications/stream connects to SSE emitter")
+    void testSubscribeOperationalAlertStream() throws Exception {
+        when(broadcaster.subscribe()).thenReturn(new SseEmitter());
+
+        mockMvc.perform(get("/api/operations/notifications/stream"))
+                .andExpect(status().isOk());
+    }
+}
