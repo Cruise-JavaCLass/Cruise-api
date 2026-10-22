@@ -85,11 +85,13 @@ public class ShoreExcursionBookingService {
         int totalVehicleCapacity = operationalVehicles.stream().mapToInt(ExcursionVehicle::getCapacity).sum();
         long currentBookings = passengerRepository.countByExcursionIdAndActiveTrue(excursionId);
 
-        boolean isCapacityFull = (totalVehicleCapacity > 0 && currentBookings >= totalVehicleCapacity)
-                || (excursion.getMaxCapacity() != null && currentBookings >= excursion.getMaxCapacity());
+        if (totalVehicleCapacity > 0 && currentBookings >= totalVehicleCapacity) {
+            throw new BusinessRuleException(String.format("Không thể đặt chỗ: tổng sức chứa của các xe đang hoạt động đã đầy (%d/%d chỗ)",
+                    currentBookings, totalVehicleCapacity));
+        }
 
-        if (isCapacityFull) {
-            return ingestWaitlistBooking(excursion, passenger, request);
+        if (excursion.getMaxCapacity() != null && currentBookings >= excursion.getMaxCapacity()) {
+            throw new BusinessRuleException(String.format("Tour bờ đã đạt sức chứa tối đa (%d khách)", excursion.getMaxCapacity()));
         }
 
         // 5. Phân bổ xe bus (AC1, AC2, AC5 - Cohabitation)
@@ -600,7 +602,21 @@ public class ShoreExcursionBookingService {
     /**
      * Đưa hành khách vào hàng đợi danh sách chờ khi tour đạt maxCapacity (KAN-326 / AC2)
      */
-    private ExcursionBookingResponse ingestWaitlistBooking(ShoreExcursion excursion, Passenger passenger, ExcursionBookingRequest request) {
+    
+    /**
+     * Đăng ký vào danh sách chờ (Waitlist) khi tour đã đầy hoặc hành khách chủ động đăng ký chờ (KAN-326)
+     */
+    @Transactional
+    public ExcursionBookingResponse joinWaitlist(Long excursionId, ExcursionBookingRequest request) {
+        ShoreExcursion excursion = findActiveExcursion(excursionId);
+        Passenger passenger = cruisePassengerRepository.findById(request.getPassengerId())
+                .filter(Passenger::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Hành khách với ID " + request.getPassengerId() + " không tồn tại"));
+
+        return ingestWaitlistBooking(excursion, passenger, request);
+    }
+
+    public ExcursionBookingResponse ingestWaitlistBooking(ShoreExcursion excursion, Passenger passenger, ExcursionBookingRequest request) {
         Long excursionId = excursion.getId();
         Integer maxPos = passengerRepository.findMaxWaitlistPosition(excursionId);
         int nextPos = (maxPos != null ? maxPos : 0) + 1;
