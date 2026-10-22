@@ -13,6 +13,7 @@ public class ExcursionScheduleAlertResponse {
 
     private Long excursionId;
     private int recipientsCount;
+    private int failedCount;
     private String title;
     private String message;
     private Instant broadcastedAt;

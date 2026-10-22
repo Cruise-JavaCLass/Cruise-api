@@ -242,6 +242,7 @@ class ExcursionRosterAndWaitlistServiceTest {
 
             given(passengerRepository.findByExcursionIdAndBookingStatusAndActiveTrueOrderByWaitlistPositionAsc(
                     50L, ExcursionBookingStatus.WAITLISTED)).willReturn(List.of(w1));
+            given(cruisePassengerRepository.findById(201L)).willReturn(Optional.of(samplePassenger));
             given(vehicleRepository.findByExcursionIdAndActiveTrue(50L)).willReturn(new ArrayList<>());
             given(passengerRepository.save(any(ExcursionPassenger.class))).willReturn(w1);
 
@@ -360,4 +361,97 @@ class ExcursionRosterAndWaitlistServiceTest {
             verify(notificationService, times(1)).sendNotification(eq(201L), any());
         }
     }
+
+        @Test
+        @DisplayName("Huy ve WAITLISTED khong lam giam so nguoi tham gia va khong don nguoi khac")
+        void shouldNotDecrementParticipantsWhenWaitlistedBookingCancelled() {
+            given(excursionRepository.findByIdWithLock(50L)).willReturn(Optional.of(sampleExcursion));
+
+            ExcursionPassenger waitlistedBooking = ExcursionPassenger.builder()
+                    .excursionId(50L)
+                    .passengerId(201L)
+                    .bookingStatus(ExcursionBookingStatus.WAITLISTED)
+                    .waitlistPosition(1)
+                    .active(true)
+                    .chargedAmount(BigDecimal.ZERO)
+                    .build();
+            waitlistedBooking.setId(101L);
+
+            given(passengerRepository.findByIdAndExcursionIdAndActiveTrue(101L, 50L))
+                    .willReturn(Optional.of(waitlistedBooking));
+            given(passengerRepository.save(any(ExcursionPassenger.class))).willReturn(waitlistedBooking);
+
+            int initialParticipants = sampleExcursion.getCurrentParticipants();
+            ExcursionCancellationResponse resp = bookingService.cancelBooking(50L, 101L, "Khach huy");
+
+            assertThat(resp).isNotNull();
+            assertThat(sampleExcursion.getCurrentParticipants()).isEqualTo(initialParticipants);
+            verify(passengerRepository, never()).findByExcursionIdAndBookingStatusAndActiveTrueOrderByWaitlistPositionAsc(anyLong(), any());
+        }
+
+        @Test
+        @DisplayName("Xuat CSV phong chong Spreadsheet Formula Injection va dung CRLF")
+        void shouldEscapeFormulaInjectionInCsv() {
+            given(excursionRepository.findById(50L)).willReturn(Optional.of(sampleExcursion));
+
+            ExcursionPassenger p = ExcursionPassenger.builder()
+                    .ticketCode("=cmd|' /C calc'!A0")
+                    .passengerName("+DangerousName")
+                    .cabinNumber("-101")
+                    .bookingStatus(ExcursionBookingStatus.CONFIRMED)
+                    .chargedAmount(new BigDecimal("120.00"))
+                    .active(true)
+                    .build();
+
+            given(passengerRepository.findByExcursionIdAndActiveTrue(50L)).willReturn(List.of(p));
+
+            byte[] csv = bookingService.exportRosterCsv(50L);
+            String csvText = new String(csv);
+
+            assertThat(csvText).contains("\r\n");
+            assertThat(csvText).contains("'=cmd|' /C calc'!A0");
+            assertThat(csvText).contains("'+DangerousName");
+            assertThat(csvText).contains("'-101");
+        }
+
+        @Test
+        @DisplayName("Phat canh bao dinh kem dia diem va gio tap trung, loai tru khach waitlist")
+        void shouldIncludeStructuredScheduleDetailsAndExcludeWaitlist() {
+            given(excursionRepository.findById(50L)).willReturn(Optional.of(sampleExcursion));
+
+            ExcursionPassenger confirmed = ExcursionPassenger.builder()
+                    .passengerId(201L)
+                    .bookingStatus(ExcursionBookingStatus.CONFIRMED)
+                    .active(true)
+                    .build();
+
+            ExcursionPassenger waitlisted = ExcursionPassenger.builder()
+                    .passengerId(202L)
+                    .bookingStatus(ExcursionBookingStatus.WAITLISTED)
+                    .active(true)
+                    .build();
+
+            given(passengerRepository.findByExcursionIdAndActiveTrue(50L)).willReturn(List.of(confirmed, waitlisted));
+
+            ExcursionScheduleAlertRequest req = ExcursionScheduleAlertRequest.builder()
+                    .title("Thay doi gio tap trung")
+                    .message("Vui long co mat dung gio")
+                    .updatedMeetingLocation("Boong 4")
+                    .updatedGatheringTime("08:30")
+                    .isUrgent(true)
+                    .build();
+
+            ExcursionScheduleAlertResponse resp = bookingService.triggerScheduleAlert(50L, req);
+
+            assertThat(resp).isNotNull();
+            assertThat(resp.getRecipientsCount()).isEqualTo(1);
+            assertThat(resp.getFailedCount()).isEqualTo(0);
+            assertThat(resp.getStatus()).isEqualTo("BROADCAST_SUCCESS");
+            assertThat(resp.getMessage()).contains("Boong 4");
+            assertThat(resp.getMessage()).contains("08:30");
+
+            verify(notificationService, times(1)).sendNotification(eq(201L), any());
+            verify(notificationService, never()).sendNotification(eq(202L), any());
+        }
+
 }

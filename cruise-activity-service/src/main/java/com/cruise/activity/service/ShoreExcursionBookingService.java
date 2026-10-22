@@ -101,9 +101,7 @@ public class ShoreExcursionBookingService {
                 : (assignedBus != null ? "Nhóm " + assignedBus : "Nhóm 1");
 
         // 6. Tính toán giá vé và gói quyền lợi Folio (AC3)
-        boolean isIncluded = Boolean.TRUE.equals(excursion.getIsIncluded())
-                || (passenger.getTourPackage() != null && passenger.getTourPackage().toLowerCase().contains("vip"))
-                || (passenger.getTourPackage() != null && passenger.getTourPackage().toLowerCase().contains("inclusive"));
+        boolean isIncluded = isExcursionIncluded(excursion, passenger);
 
         BigDecimal chargedAmount = BigDecimal.ZERO;
         String transactionId = null;
@@ -251,6 +249,8 @@ public class ShoreExcursionBookingService {
             }
         }
 
+        boolean wasConfirmed = booking.getBookingStatus() == ExcursionBookingStatus.CONFIRMED;
+
         booking.setActive(false);
         booking.setBookingStatus(ExcursionBookingStatus.CANCELLED);
         booking.setCancelledAt(now);
@@ -259,23 +259,25 @@ public class ShoreExcursionBookingService {
         booking.setPenaltyFee(penaltyFee);
         passengerRepository.save(booking);
 
-        // Giảm số người tham gia trong ShoreExcursion
-        if (excursion.getCurrentParticipants() != null && excursion.getCurrentParticipants() > 0) {
-            excursion.setCurrentParticipants(excursion.getCurrentParticipants() - 1);
-            excursionRepository.save(excursion);
-        }
+        if (wasConfirmed) {
+            // Giảm số người tham gia trong ShoreExcursion
+            if (excursion.getCurrentParticipants() != null && excursion.getCurrentParticipants() > 0) {
+                excursion.setCurrentParticipants(excursion.getCurrentParticipants() - 1);
+                excursionRepository.save(excursion);
+            }
 
-        // Giảm assignedPassengers của xe nếu có
-        if (booking.getBusNumber() != null) {
-            vehicleRepository.findByExcursionIdAndActiveTrue(excursionId).stream()
-                    .filter(v -> booking.getBusNumber().equalsIgnoreCase(v.getVehicleCode()) || booking.getBusNumber().equalsIgnoreCase(v.getLicensePlate()))
-                    .findFirst()
-                    .ifPresent(v -> {
-                        if (v.getAssignedPassengers() != null && v.getAssignedPassengers() > 0) {
-                            v.setAssignedPassengers(v.getAssignedPassengers() - 1);
-                            vehicleRepository.save(v);
-                        }
-                    });
+            // Giảm assignedPassengers của xe nếu có
+            if (booking.getBusNumber() != null) {
+                vehicleRepository.findByExcursionIdAndActiveTrue(excursionId).stream()
+                        .filter(v -> booking.getBusNumber().equalsIgnoreCase(v.getVehicleCode()) || booking.getBusNumber().equalsIgnoreCase(v.getLicensePlate()))
+                        .findFirst()
+                        .ifPresent(v -> {
+                            if (v.getAssignedPassengers() != null && v.getAssignedPassengers() > 0) {
+                                v.setAssignedPassengers(v.getAssignedPassengers() - 1);
+                                vehicleRepository.save(v);
+                            }
+                        });
+            }
         }
 
         // Ghi nhật ký kiểm toán bất biến (AC6)
@@ -296,8 +298,10 @@ public class ShoreExcursionBookingService {
                         refundAmount, penaltyFee, booking.getCancellationReason()))
                 .build());
 
-        // AC2: Tự động đôn khách đầu tiên trong Waitlist (Auto-promote) khi có chỗ trống
-        triggerAutoPromotionIfPossible(excursionId);
+        // AC2: Tự động đôn khách đầu tiên trong Waitlist (Auto-promote) khi có chỗ trống (chỉ khi hủy vé CONFIRMED)
+        if (wasConfirmed) {
+            triggerAutoPromotionIfPossible(excursionId);
+        }
 
         log.info("Excursion booking cancelled: bookingId={}, refundAmount={}, penaltyFee={}",
                 bookingId, refundAmount, penaltyFee);
@@ -495,6 +499,17 @@ public class ShoreExcursionBookingService {
         return ZoneId.of("Asia/Ho_Chi_Minh");
     }
 
+    private boolean isExcursionIncluded(ShoreExcursion excursion, Passenger passenger) {
+        if (Boolean.TRUE.equals(excursion.getIsIncluded())) {
+            return true;
+        }
+        if (passenger == null || passenger.getTourPackage() == null) {
+            return false;
+        }
+        String pkg = passenger.getTourPackage().toLowerCase();
+        return pkg.contains("vip") || pkg.contains("inclusive");
+    }
+
     private boolean isFolioLocked(Passenger passenger) {
         if (passenger.getEmail() != null && (passenger.getEmail().toLowerCase().contains("locked") || passenger.getEmail().toLowerCase().contains("blocked"))) {
             return true;
@@ -525,8 +540,9 @@ public class ShoreExcursionBookingService {
                 .orElseThrow(() -> new ResourceNotFoundException("Tour trên bờ với ID " + excursionId + " không tồn tại"));
 
         String cleanSearch = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
+        Pageable sanitizedPageable = org.springframework.data.domain.PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         Page<ExcursionPassenger> pageResult = passengerRepository.findRosterWithFilters(
-                excursionId, cleanSearch, bookingStatus, specialAssistance, Boolean.TRUE.equals(includeCancelled), pageable
+                excursionId, cleanSearch, bookingStatus, specialAssistance, Boolean.TRUE.equals(includeCancelled), sanitizedPageable
         );
 
         long confirmedCount = passengerRepository.countByExcursionIdAndBookingStatusAndActiveTrue(
@@ -736,30 +752,26 @@ public class ShoreExcursionBookingService {
      * Kích hoạt tự động đôn người trong Waitlist khi có chỗ trống (Auto-promote / AC2)
      */
     public void triggerAutoPromotionIfPossible(Long excursionId) {
-        try {
-            List<ExcursionPassenger> waitlist = passengerRepository
-                    .findByExcursionIdAndBookingStatusAndActiveTrueOrderByWaitlistPositionAsc(excursionId, ExcursionBookingStatus.WAITLISTED);
-            if (waitlist.isEmpty()) {
-                return;
-            }
-
-            ShoreExcursion excursion = excursionRepository.findById(excursionId).orElse(null);
-            if (excursion == null || !Boolean.TRUE.equals(excursion.getActive())) {
-                return;
-            }
-
-            long confirmedCount = passengerRepository.countByExcursionIdAndBookingStatusAndActiveTrue(
-                    excursionId, ExcursionBookingStatus.CONFIRMED);
-            if (excursion.getMaxCapacity() != null && confirmedCount >= excursion.getMaxCapacity()) {
-                return;
-            }
-
-            ExcursionPassenger candidate = waitlist.get(0);
-            promotePassengerToConfirmed(excursion, candidate);
-            log.info("Auto-promoted waitlist passenger: bookingId={}, excursionId={}", candidate.getId(), excursionId);
-        } catch (Exception e) {
-            log.warn("Auto-promotion failed or skipped for excursionId={}: {}", excursionId, e.getMessage());
+        List<ExcursionPassenger> waitlist = passengerRepository
+                .findByExcursionIdAndBookingStatusAndActiveTrueOrderByWaitlistPositionAsc(excursionId, ExcursionBookingStatus.WAITLISTED);
+        if (waitlist.isEmpty()) {
+            return;
         }
+
+        ShoreExcursion excursion = excursionRepository.findById(excursionId).orElse(null);
+        if (excursion == null || !Boolean.TRUE.equals(excursion.getActive())) {
+            return;
+        }
+
+        long confirmedCount = passengerRepository.countByExcursionIdAndBookingStatusAndActiveTrue(
+                excursionId, ExcursionBookingStatus.CONFIRMED);
+        if (excursion.getMaxCapacity() != null && confirmedCount >= excursion.getMaxCapacity()) {
+            return;
+        }
+
+        ExcursionPassenger candidate = waitlist.get(0);
+        promotePassengerToConfirmed(excursion, candidate);
+        log.info("Auto-promoted waitlist passenger: bookingId={}, excursionId={}", candidate.getId(), excursionId);
     }
 
     private WaitlistPromotionResultDto promotePassengerToConfirmed(ShoreExcursion excursion, ExcursionPassenger candidate) {
@@ -781,13 +793,23 @@ public class ShoreExcursionBookingService {
         String assignedBus = resolveAssignedBus(pseudoReq, operationalVehicles, excursionId, candidate.getCabinNumber());
         String groupName = (assignedBus != null) ? "Nhóm " + assignedBus : "Nhóm 1";
 
-        // 2. Tính phí và Folio transaction
-        BigDecimal chargedAmount = (excursion.getPrice() != null && excursion.getPrice().compareTo(BigDecimal.ZERO) > 0)
-                ? excursion.getPrice()
-                : BigDecimal.ZERO;
-        String transactionId = chargedAmount.compareTo(BigDecimal.ZERO) > 0
-                ? "FOLIO-PROMOTE-" + UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase()
-                : null;
+        // 2. Tính phí, kiểm tra Folio lock và quyền lợi Tour package
+        Passenger passenger = cruisePassengerRepository.findById(candidate.getPassengerId())
+                .filter(Passenger::getActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Hành khách với ID " + candidate.getPassengerId() + " không tồn tại"));
+
+        boolean isIncluded = isExcursionIncluded(excursion, passenger);
+        BigDecimal chargedAmount = BigDecimal.ZERO;
+        String transactionId = null;
+
+        if (!isIncluded && excursion.getPrice() != null && excursion.getPrice().compareTo(BigDecimal.ZERO) > 0) {
+            if (isFolioLocked(passenger)) {
+                throw new PaymentRequiredException("Tài khoản cabin folio của hành khách " + passenger.getFullName() +
+                        " (Cabin " + passenger.getCabinNumber() + ") đang bị khóa hoặc không đủ hạn mức thanh toán");
+            }
+            chargedAmount = excursion.getPrice();
+            transactionId = "FOLIO-PROMOTE-" + UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase();
+        }
 
         String ticketCode = String.format("EXC-%d-%d", excursionId, System.currentTimeMillis());
 
@@ -798,6 +820,7 @@ public class ShoreExcursionBookingService {
         candidate.setGroupName(groupName);
         candidate.setChargedAmount(chargedAmount);
         candidate.setTransactionId(transactionId);
+        candidate.setIsIncluded(isIncluded);
         candidate.setStatus(ExcursionPassengerStatus.REGISTERED);
         passengerRepository.save(candidate);
 
@@ -859,8 +882,8 @@ public class ShoreExcursionBookingService {
             Long bookingId,
             MedicalWaiverCancellationRequest request
     ) {
-        log.info("Processing medical waiver cancellation: excursionId={}, bookingId={}, reason={}",
-                excursionId, bookingId, request.getReason());
+        log.info("Processing medical waiver cancellation: excursionId={}, bookingId={}",
+                excursionId, bookingId);
 
         ShoreExcursion excursion = excursionRepository.findByIdWithLock(excursionId)
                 .filter(ShoreExcursion::getActive)
@@ -878,6 +901,8 @@ public class ShoreExcursionBookingService {
         BigDecimal refundAmount = chargedAmount; // Miễn phạt y tế: Hoàn trả 100%
         BigDecimal penaltyFee = BigDecimal.ZERO;
 
+        boolean wasConfirmed = booking.getBookingStatus() == ExcursionBookingStatus.CONFIRMED;
+
         booking.setActive(false);
         booking.setBookingStatus(ExcursionBookingStatus.CANCELLED);
         booking.setCancelledAt(now);
@@ -888,21 +913,23 @@ public class ShoreExcursionBookingService {
         booking.setPenaltyFee(penaltyFee);
         passengerRepository.save(booking);
 
-        if (excursion.getCurrentParticipants() != null && excursion.getCurrentParticipants() > 0) {
-            excursion.setCurrentParticipants(excursion.getCurrentParticipants() - 1);
-            excursionRepository.save(excursion);
-        }
+        if (wasConfirmed) {
+            if (excursion.getCurrentParticipants() != null && excursion.getCurrentParticipants() > 0) {
+                excursion.setCurrentParticipants(excursion.getCurrentParticipants() - 1);
+                excursionRepository.save(excursion);
+            }
 
-        if (booking.getBusNumber() != null) {
-            vehicleRepository.findByExcursionIdAndActiveTrue(excursionId).stream()
-                    .filter(v -> booking.getBusNumber().equalsIgnoreCase(v.getVehicleCode()) || booking.getBusNumber().equalsIgnoreCase(v.getLicensePlate()))
-                    .findFirst()
-                    .ifPresent(v -> {
-                        if (v.getAssignedPassengers() != null && v.getAssignedPassengers() > 0) {
-                            v.setAssignedPassengers(v.getAssignedPassengers() - 1);
-                            vehicleRepository.save(v);
-                        }
-                    });
+            if (booking.getBusNumber() != null) {
+                vehicleRepository.findByExcursionIdAndActiveTrue(excursionId).stream()
+                        .filter(v -> booking.getBusNumber().equalsIgnoreCase(v.getVehicleCode()) || booking.getBusNumber().equalsIgnoreCase(v.getLicensePlate()))
+                        .findFirst()
+                        .ifPresent(v -> {
+                            if (v.getAssignedPassengers() != null && v.getAssignedPassengers() > 0) {
+                                v.setAssignedPassengers(v.getAssignedPassengers() - 1);
+                                vehicleRepository.save(v);
+                            }
+                        });
+            }
         }
 
         // Ghi nhật ký kiểm toán bất biến
@@ -924,8 +951,10 @@ public class ShoreExcursionBookingService {
                         refundAmount, request.getReason()))
                 .build());
 
-        // AC2: Tự động đôn khách trong hàng đợi Waitlist khi có chỗ trống do hủy y tế
-        triggerAutoPromotionIfPossible(excursionId);
+        // AC2: Tự động đôn khách trong hàng đợi Waitlist khi có chỗ trống do hủy y tế (chỉ khi hủy vé CONFIRMED)
+        if (wasConfirmed) {
+            triggerAutoPromotionIfPossible(excursionId);
+        }
 
         return ExcursionCancellationResponse.builder()
                 .bookingId(booking.getId())
@@ -943,14 +972,14 @@ public class ShoreExcursionBookingService {
     /**
      * Xuất danh sách Roster định dạng CSV chuẩn RFC 4180 phục vụ điều phối tại cảng (KAN-327)
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public byte[] exportRosterCsv(Long excursionId) {
         findActiveExcursion(excursionId);
         List<ExcursionPassenger> passengers = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
 
         StringBuilder sb = new StringBuilder();
-        // CSV Header
-        sb.append("Ticket Code,Passenger Name,Cabin Number,Phone,Status,Booking Status,Bus,Group,Special Requirements,Charged Amount (USD)\n");
+        // CSV Header (CRLF terminator)
+        sb.append("Ticket Code,Passenger Name,Cabin Number,Phone,Status,Booking Status,Bus,Group,Special Requirements,Charged Amount (USD)\r\n");
 
         for (ExcursionPassenger p : passengers) {
             sb.append(escapeCsv(p.getTicketCode())).append(",")
@@ -963,7 +992,7 @@ public class ShoreExcursionBookingService {
               .append(escapeCsv(p.getGroupName())).append(",")
               .append(escapeCsv(p.getSpecialRequirements())).append(",")
               .append(p.getChargedAmount() != null ? p.getChargedAmount().toPlainString() : "0.00")
-              .append("\n");
+              .append("\r\n");
         }
 
         bookingLogRepository.save(ExcursionBookingLog.builder()
@@ -986,10 +1015,17 @@ public class ShoreExcursionBookingService {
         if (value == null) {
             return "";
         }
-        if (value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
-            return "\"" + value.replace("\"", "\"\"") + "\"";
+        String safeValue = value;
+        if (!safeValue.isEmpty()) {
+            char firstChar = safeValue.charAt(0);
+            if (firstChar == '=' || firstChar == '+' || firstChar == '-' || firstChar == '@') {
+                safeValue = "'" + safeValue;
+            }
         }
-        return value;
+        if (safeValue.contains(",") || safeValue.contains("\"") || safeValue.contains("\n") || safeValue.contains("\r")) {
+            return "\"" + safeValue.replace("\"", "\"\"") + "\"";
+        }
+        return safeValue;
     }
 
     /**
@@ -1000,23 +1036,54 @@ public class ShoreExcursionBookingService {
         findActiveExcursion(excursionId);
         List<ExcursionPassenger> passengers = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
 
+        // Deduplicate recipients by passengerId and exclude waitlisted passengers
+        Set<Long> eligiblePassengerIds = new LinkedHashSet<>();
+        for (ExcursionPassenger p : passengers) {
+            if (p.getPassengerId() != null && p.getBookingStatus() != ExcursionBookingStatus.WAITLISTED) {
+                eligiblePassengerIds.add(p.getPassengerId());
+            }
+        }
+
+        // Construct structured message including updated meeting location and gathering time if provided
+        StringBuilder formattedMessage = new StringBuilder(request.getMessage());
+        List<String> scheduleDetails = new ArrayList<>();
+        if (request.getUpdatedMeetingLocation() != null && !request.getUpdatedMeetingLocation().isBlank()) {
+            scheduleDetails.add("Địa điểm tập trung mới: " + request.getUpdatedMeetingLocation().trim());
+        }
+        if (request.getUpdatedGatheringTime() != null && !request.getUpdatedGatheringTime().isBlank()) {
+            scheduleDetails.add("Thời gian tập trung mới: " + request.getUpdatedGatheringTime().trim());
+        }
+        if (!scheduleDetails.isEmpty()) {
+            formattedMessage.append(" (").append(String.join(", ", scheduleDetails)).append(")");
+        }
+        String fullNotificationMessage = formattedMessage.toString();
+
         Instant now = Instant.now();
         int sentCount = 0;
+        int failedCount = 0;
 
-        for (ExcursionPassenger p : passengers) {
-            if (p.getPassengerId() != null) {
-                try {
-                    notificationService.sendNotification(p.getPassengerId(), SendNotificationRequest.builder()
-                            .title(request.getTitle())
-                            .message(request.getMessage())
-                            .category(Boolean.TRUE.equals(request.getIsUrgent()) ? NotificationCategory.CRITICAL : NotificationCategory.OPERATIONAL)
-                            .actionUrl("/excursions/roster/" + excursionId)
-                            .build());
-                    sentCount++;
-                } catch (Exception ex) {
-                    log.warn("Failed to dispatch alert to passengerId={}: {}", p.getPassengerId(), ex.getMessage());
-                }
+        for (Long passengerId : eligiblePassengerIds) {
+            try {
+                notificationService.sendNotification(passengerId, SendNotificationRequest.builder()
+                        .title(request.getTitle())
+                        .message(fullNotificationMessage)
+                        .category(Boolean.TRUE.equals(request.getIsUrgent()) ? NotificationCategory.CRITICAL : NotificationCategory.OPERATIONAL)
+                        .actionUrl("/excursions/roster/" + excursionId)
+                        .build());
+                sentCount++;
+            } catch (Exception ex) {
+                failedCount++;
+                log.warn("Failed to dispatch alert to passengerId={}: {}", passengerId, ex.getMessage());
             }
+        }
+
+        String broadcastStatus;
+        if (eligiblePassengerIds.isEmpty() || (sentCount > 0 && failedCount == 0)) {
+            broadcastStatus = "BROADCAST_SUCCESS";
+        } else if (sentCount > 0 && failedCount > 0) {
+            broadcastStatus = "PARTIAL";
+        } else {
+            broadcastStatus = "FAILED";
         }
 
         bookingLogRepository.save(ExcursionBookingLog.builder()
@@ -1028,17 +1095,18 @@ public class ShoreExcursionBookingService {
                 .refundAmount(BigDecimal.ZERO)
                 .penaltyFee(BigDecimal.ZERO)
                 .auditTime(now)
-                .details(String.format("Phát thông báo thay đổi lịch trình: '%s' tới %d hành khách trong roster",
-                        request.getTitle(), sentCount))
+                .details(String.format("Phát thông báo thay đổi lịch trình: '%s' tới %d hành khách thành công (%d thất bại, trạng thái: %s)",
+                        request.getTitle(), sentCount, failedCount, broadcastStatus))
                 .build());
 
         return ExcursionScheduleAlertResponse.builder()
                 .excursionId(excursionId)
                 .recipientsCount(sentCount)
+                .failedCount(failedCount)
                 .title(request.getTitle())
-                .message(request.getMessage())
+                .message(fullNotificationMessage)
                 .broadcastedAt(now)
-                .status("BROADCAST_SUCCESS")
+                .status(broadcastStatus)
                 .build();
     }
 
