@@ -11,6 +11,9 @@ import com.cruise.activity.exception.DuplicateRegistrationException;
 import com.cruise.activity.exception.PaymentRequiredException;
 import com.cruise.activity.exception.ResourceNotFoundException;
 import com.cruise.activity.repository.*;
+import com.cruise.activity.service.PassengerNotificationService;
+import com.cruise.activity.dto.SendNotificationRequest;
+import com.cruise.activity.enums.NotificationCategory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -37,6 +40,7 @@ public class ShoreExcursionBookingService {
     private final ExcursionVehicleRepository vehicleRepository;
     private final PassengerRepository cruisePassengerRepository;
     private final ExcursionBookingLogRepository bookingLogRepository;
+    private final PassengerNotificationService notificationService;
 
     /**
      * Đặt tour tham quan trên bờ, kiểm tra sức chứa xe và ghi nợ Folio (KAN-374 / AC1, AC2, AC3, AC5)
@@ -916,6 +920,109 @@ public class ShoreExcursionBookingService {
                 .penaltyFee(penaltyFee)
                 .cancellationReason(booking.getCancellationReason())
                 .cancelledAt(now)
+                .build();
+    }
+
+
+    /**
+     * Xuất danh sách Roster định dạng CSV chuẩn RFC 4180 phục vụ điều phối tại cảng (KAN-327)
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportRosterCsv(Long excursionId) {
+        findActiveExcursion(excursionId);
+        List<ExcursionPassenger> passengers = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
+
+        StringBuilder sb = new StringBuilder();
+        // CSV Header
+        sb.append("Ticket Code,Passenger Name,Cabin Number,Phone,Status,Booking Status,Bus,Group,Special Requirements,Charged Amount (USD)\n");
+
+        for (ExcursionPassenger p : passengers) {
+            sb.append(escapeCsv(p.getTicketCode())).append(",")
+              .append(escapeCsv(p.getPassengerName())).append(",")
+              .append(escapeCsv(p.getCabinNumber())).append(",")
+              .append(escapeCsv(p.getEmergencyPhone())).append(",")
+              .append(escapeCsv(p.getStatus() != null ? p.getStatus().name() : "")).append(",")
+              .append(escapeCsv(p.getBookingStatus() != null ? p.getBookingStatus().name() : "")).append(",")
+              .append(escapeCsv(p.getBusNumber())).append(",")
+              .append(escapeCsv(p.getGroupName())).append(",")
+              .append(escapeCsv(p.getSpecialRequirements())).append(",")
+              .append(p.getChargedAmount() != null ? p.getChargedAmount().toPlainString() : "0.00")
+              .append("\n");
+        }
+
+        bookingLogRepository.save(ExcursionBookingLog.builder()
+                .bookingId(0L)
+                .excursionId(excursionId)
+                .passengerId(0L)
+                .action("ROSTER_EXPORTED")
+                .chargedAmount(BigDecimal.ZERO)
+                .refundAmount(BigDecimal.ZERO)
+                .penaltyFee(BigDecimal.ZERO)
+                .auditTime(Instant.now())
+                .details(String.format("Xuất danh sách Roster CSV cho tour bờ ID %d, tổng số %d hành khách",
+                        excursionId, passengers.size()))
+                .build());
+
+        return sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private String escapeCsv(String value) {
+        if (value == null) {
+            return "";
+        }
+        if (value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
+    }
+
+    /**
+     * Kích hoạt phát cảnh báo thay đổi lịch trình cho toàn bộ hành khách đăng ký tour bờ (KAN-327)
+     */
+    @Transactional
+    public ExcursionScheduleAlertResponse triggerScheduleAlert(Long excursionId, ExcursionScheduleAlertRequest request) {
+        findActiveExcursion(excursionId);
+        List<ExcursionPassenger> passengers = passengerRepository.findByExcursionIdAndActiveTrue(excursionId);
+
+        Instant now = Instant.now();
+        int sentCount = 0;
+
+        for (ExcursionPassenger p : passengers) {
+            if (p.getPassengerId() != null) {
+                try {
+                    notificationService.sendNotification(p.getPassengerId(), SendNotificationRequest.builder()
+                            .title(request.getTitle())
+                            .message(request.getMessage())
+                            .category(Boolean.TRUE.equals(request.getIsUrgent()) ? NotificationCategory.CRITICAL : NotificationCategory.OPERATIONAL)
+                            .actionUrl("/excursions/roster/" + excursionId)
+                            .build());
+                    sentCount++;
+                } catch (Exception ex) {
+                    log.warn("Failed to dispatch alert to passengerId={}: {}", p.getPassengerId(), ex.getMessage());
+                }
+            }
+        }
+
+        bookingLogRepository.save(ExcursionBookingLog.builder()
+                .bookingId(0L)
+                .excursionId(excursionId)
+                .passengerId(0L)
+                .action("SCHEDULE_ALERT_TRIGGERED")
+                .chargedAmount(BigDecimal.ZERO)
+                .refundAmount(BigDecimal.ZERO)
+                .penaltyFee(BigDecimal.ZERO)
+                .auditTime(now)
+                .details(String.format("Phát thông báo thay đổi lịch trình: '%s' tới %d hành khách trong roster",
+                        request.getTitle(), sentCount))
+                .build());
+
+        return ExcursionScheduleAlertResponse.builder()
+                .excursionId(excursionId)
+                .recipientsCount(sentCount)
+                .title(request.getTitle())
+                .message(request.getMessage())
+                .broadcastedAt(now)
+                .status("BROADCAST_SUCCESS")
                 .build();
     }
 

@@ -8,12 +8,15 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 /**
- * Controller quản lý danh sách đăng ký Tour trên bờ (Passenger Roster & Manifest Control - KAN-324 / KAN-325, KAN-326)
+ * Controller quản lý danh sách đăng ký Tour trên bờ (Passenger Roster & Manifest Control - KAN-324 / KAN-325, KAN-326, KAN-327)
  */
 @RestController
 @RequestMapping({"/api/v1/shore-excursions", "/api/activities/excursions"})
@@ -65,5 +68,31 @@ public class ExcursionRosterController {
     ) {
         return ApiResponse.ok("Hủy vé với miễn trừ y tế thành công",
                 bookingService.cancelBookingWithMedicalWaiver(id, bookingId, request));
+    }
+
+    /**
+     * Xuất danh sách Roster định dạng CSV chuẩn RFC 4180 (KAN-327)
+     */
+    @GetMapping("/{id}/roster/export")
+    public ResponseEntity<byte[]> exportRosterCsv(@PathVariable Long id) {
+        byte[] csvData = bookingService.exportRosterCsv(id);
+        String filename = String.format("excursion-%d-roster.csv", id);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+                .body(csvData);
+    }
+
+    /**
+     * Phát cảnh báo thay đổi lịch trình cho toàn bộ hành khách đăng ký tour (KAN-327)
+     */
+    @PostMapping("/{id}/alerts/schedule-change")
+    public ApiResponse<ExcursionScheduleAlertResponse> triggerScheduleAlert(
+            @PathVariable Long id,
+            @Valid @RequestBody ExcursionScheduleAlertRequest request
+    ) {
+        return ApiResponse.ok("Phát cảnh báo thay đổi lịch trình thành công",
+                bookingService.triggerScheduleAlert(id, request));
     }
 }
