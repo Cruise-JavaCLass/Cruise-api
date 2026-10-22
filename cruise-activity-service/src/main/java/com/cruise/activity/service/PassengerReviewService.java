@@ -67,6 +67,82 @@ public class PassengerReviewService {
         return mapToResponse(review);
     }
 
+    @Transactional
+    public PassengerServiceReviewResponse triageReview(Long reviewId, com.cruise.activity.dto.TriageReviewRequest request) {
+        PassengerServiceReview review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new com.cruise.activity.exception.ResourceNotFoundException("Review not found with id: " + reviewId));
+
+        review.setStatus(request.getStatus());
+        if (request.getAdminNotes() != null) {
+            review.setAdminNotes(request.getAdminNotes());
+        }
+        if (request.getResolvedBy() != null) {
+            review.setResolvedBy(request.getResolvedBy());
+        }
+        if (request.getStatus() == FeedbackStatus.RESOLVED || request.getStatus() == FeedbackStatus.DISMISSED) {
+            review.setResolvedAt(Instant.now());
+        }
+
+        reviewRepository.save(review);
+        log.info("Triaged review id: {} to status: {} by: {}", reviewId, request.getStatus(), request.getResolvedBy());
+        return mapToResponse(review);
+    }
+
+    @Transactional(readOnly = true)
+    public com.cruise.activity.dto.FeedbackAnalyticsDto getFeedbackAnalytics() {
+        var all = reviewRepository.findAll();
+        long total = all.size();
+        if (total == 0) {
+            return com.cruise.activity.dto.FeedbackAnalyticsDto.builder()
+                    .totalReviews(0L)
+                    .averageRating(0.0)
+                    .lowRatingAlertCount(0L)
+                    .escalatedCount(0L)
+                    .resolvedCount(0L)
+                    .ratingDistribution(java.util.Map.of(1, 0L, 2, 0L, 3, 0L, 4, 0L, 5, 0L))
+                    .categoryAverages(java.util.Collections.emptyMap())
+                    .build();
+        }
+
+        double avgRating = all.stream().mapToInt(PassengerServiceReview::getRating).average().orElse(0.0);
+        long lowAlerts = all.stream().filter(r -> Boolean.TRUE.equals(r.getIsLowRatingAlert())).count();
+        long escalated = all.stream().filter(r -> r.getStatus() == FeedbackStatus.ESCALATED).count();
+        long resolved = all.stream().filter(r -> r.getStatus() == FeedbackStatus.RESOLVED).count();
+
+        java.util.Map<Integer, Long> dist = new java.util.HashMap<>();
+        for (int i = 1; i <= 5; i++) dist.put(i, 0L);
+        for (PassengerServiceReview r : all) {
+            dist.put(r.getRating(), dist.getOrDefault(r.getRating(), 0L) + 1);
+        }
+
+        java.util.Map<com.cruise.activity.enums.FeedbackCategory, Double> catAvg = all.stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        PassengerServiceReview::getCategory,
+                        java.util.stream.Collectors.averagingInt(PassengerServiceReview::getRating)
+                ));
+
+        return com.cruise.activity.dto.FeedbackAnalyticsDto.builder()
+                .totalReviews(total)
+                .averageRating(Math.round(avgRating * 10.0) / 10.0)
+                .lowRatingAlertCount(lowAlerts)
+                .escalatedCount(escalated)
+                .resolvedCount(resolved)
+                .ratingDistribution(dist)
+                .categoryAverages(catAvg)
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<PassengerServiceReviewResponse> searchReviews(
+            com.cruise.activity.enums.FeedbackStatus status,
+            com.cruise.activity.enums.FeedbackCategory category,
+            Boolean isAlert,
+            org.springframework.data.domain.Pageable pageable
+    ) {
+        return reviewRepository.searchReviews(status, category, isAlert, pageable)
+                .map(this::mapToResponse);
+    }
+
     public PassengerServiceReviewResponse mapToResponse(PassengerServiceReview review) {
         return PassengerServiceReviewResponse.builder()
                 .id(review.getId())
