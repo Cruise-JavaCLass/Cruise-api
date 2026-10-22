@@ -16,11 +16,18 @@ import org.springframework.web.bind.annotation.*;
 public class PosPassengerAuthController {
 
     private final PosPassengerAuthService posPassengerAuthService;
+    private final com.cruise.pos.service.PosCredentialAuditAndManifestService auditAndManifestService;
 
     @PostMapping("/identify")
     public ApiResponse<PassengerIdentificationResponse> identify(@Valid @RequestBody IdentifyPassengerRequest request) {
         log.info("Processing POS passenger identification, stationId: {}, cashierId: {}", request.getStationId(), request.getCashierId());
         PassengerIdentificationResponse response = posPassengerAuthService.identify(request);
         return ApiResponse.ok(response);
+    }
+
+    @GetMapping("/manifest/cache")
+    public ApiResponse<com.cruise.pos.dto.CredentialManifestCacheResponse> getManifestCache() {
+        log.info("Generating offline credential verification manifest cache");
+        return ApiResponse.ok(auditAndManifestService.getActiveManifestCache());
     }
 }

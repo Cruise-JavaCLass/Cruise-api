@@ -29,6 +29,7 @@ public class PosPassengerAuthService {
     private final PosCredentialRepository credentialRepository;
     private final CabinFolioAccountRepository folioRepository;
     private final GuestCardVerificationEngine verificationEngine;
+    private final PosCredentialAuditAndManifestService auditAndManifestService;
 
     public ParsedCredential parseRawCredential(String raw) {
         Objects.requireNonNull(raw, "rawCredential must not be null");
@@ -80,41 +81,65 @@ public class PosPassengerAuthService {
     public PassengerIdentificationResponse identify(IdentifyPassengerRequest request) {
         Objects.requireNonNull(request, "IdentifyPassengerRequest must not be null");
         ParsedCredential parsed = parseRawCredential(request.getRawCredential());
+        String masked = maskIdentifier(parsed.getIdentifier());
 
-        PosCredential credential = credentialRepository.findByIdentifier(parsed.getIdentifier())
-                .orElseThrow(() -> new ResourceNotFoundException("Credential not found for identifier: " + maskIdentifier(parsed.getIdentifier())));
+        try {
+            PosCredential credential = credentialRepository.findByIdentifier(parsed.getIdentifier())
+                    .orElseThrow(() -> new ResourceNotFoundException("Credential not found for identifier: " + masked));
 
-        // AC2: Security validation and fraud prevention
-        verificationEngine.validateCredentialSecurity(credential, request);
+            // AC2: Security validation and fraud prevention
+            verificationEngine.validateCredentialSecurity(credential, request);
 
-        CabinFolioAccount folio = folioRepository.findByCabinNumber(credential.getCabinNumber())
-                .orElseGet(() -> folioRepository.findByPassengerId(credential.getPassengerId())
-                        .orElse(null));
+            CabinFolioAccount folio = folioRepository.findByCabinNumber(credential.getCabinNumber())
+                    .orElseGet(() -> folioRepository.findByPassengerId(credential.getPassengerId())
+                            .orElse(null));
 
-        BigDecimal creditLimit = folio != null && folio.getCreditLimit() != null ? folio.getCreditLimit() : BigDecimal.ZERO;
-        BigDecimal currentBalance = folio != null && folio.getCurrentBalance() != null ? folio.getCurrentBalance() : BigDecimal.ZERO;
-        BigDecimal availableLimit = folio != null ? folio.getAvailableLimit() : BigDecimal.ZERO;
-        FolioStatus folioStatus = folio != null ? folio.getStatus() : FolioStatus.LOCKED;
+            BigDecimal creditLimit = folio != null && folio.getCreditLimit() != null ? folio.getCreditLimit() : BigDecimal.ZERO;
+            BigDecimal currentBalance = folio != null && folio.getCurrentBalance() != null ? folio.getCurrentBalance() : BigDecimal.ZERO;
+            BigDecimal availableLimit = folio != null ? folio.getAvailableLimit() : BigDecimal.ZERO;
+            FolioStatus folioStatus = folio != null ? folio.getStatus() : FolioStatus.LOCKED;
 
-        boolean finalSpendingAllowed = verificationEngine.evaluateSpendingAllowance(credential, folio);
-        boolean alcoholRestricted = verificationEngine.isAlcoholRestricted(credential);
+            boolean finalSpendingAllowed = verificationEngine.evaluateSpendingAllowance(credential, folio);
+            boolean alcoholRestricted = verificationEngine.isAlcoholRestricted(credential);
 
-        return PassengerIdentificationResponse.builder()
-                .passengerId(credential.getPassengerId())
-                .fullName(credential.getFullName())
-                .cabinNumber(credential.getCabinNumber())
-                .photoUrl(credential.getPhotoUrl())
-                .credentialType(credential.getCredentialType())
-                .maskedIdentifier(maskIdentifier(credential.getIdentifier()))
-                .credentialStatus(credential.getStatus())
-                .folioStatus(folioStatus)
-                .creditLimit(creditLimit)
-                .currentBalance(currentBalance)
-                .availableLimit(availableLimit)
-                .individualSpendingLimit(credential.getIndividualSpendingLimit())
-                .spendingAllowed(finalSpendingAllowed)
-                .alcoholRestricted(alcoholRestricted)
-                .isMinor(Boolean.TRUE.equals(credential.getIsMinor()))
-                .build();
+            PassengerIdentificationResponse response = PassengerIdentificationResponse.builder()
+                    .passengerId(credential.getPassengerId())
+                    .fullName(credential.getFullName())
+                    .cabinNumber(credential.getCabinNumber())
+                    .photoUrl(credential.getPhotoUrl())
+                    .credentialType(credential.getCredentialType())
+                    .maskedIdentifier(masked)
+                    .credentialStatus(credential.getStatus())
+                    .folioStatus(folioStatus)
+                    .creditLimit(creditLimit)
+                    .currentBalance(currentBalance)
+                    .availableLimit(availableLimit)
+                    .individualSpendingLimit(credential.getIndividualSpendingLimit())
+                    .spendingAllowed(finalSpendingAllowed)
+                    .alcoholRestricted(alcoholRestricted)
+                    .isMinor(Boolean.TRUE.equals(credential.getIsMinor()))
+                    .build();
+
+            auditAndManifestService.recordAudit(
+                    request.getStationId(),
+                    request.getCashierId(),
+                    credential.getCredentialType(),
+                    masked,
+                    "SUCCESS",
+                    null
+            );
+
+            return response;
+        } catch (Exception e) {
+            auditAndManifestService.recordAudit(
+                    request.getStationId(),
+                    request.getCashierId(),
+                    parsed.getType(),
+                    masked,
+                    "FAILED",
+                    e.getMessage()
+            );
+            throw e;
+        }
     }
 }
