@@ -1,21 +1,20 @@
 package com.cruise.activity.service;
 
-import com.cruise.activity.dto.CreateSettlementAdjustmentRequest;
-import com.cruise.activity.dto.InitializeSettlementRequest;
-import com.cruise.activity.dto.SettlementDetailDto;
-import com.cruise.activity.dto.UpdateSettlementStatusRequest;
-import com.cruise.activity.engine.SettlementCalculationEngine;
-import com.cruise.activity.entity.ExcursionPassenger;
-import com.cruise.activity.entity.ProviderSettlement;
-import com.cruise.activity.entity.ShoreExcursion;
+import com.cruise.activity.dto.*;
 import com.cruise.activity.enums.AdjustmentType;
 import com.cruise.activity.enums.ExcursionPassengerStatus;
 import com.cruise.activity.enums.SettlementStatus;
+import com.cruise.activity.exception.BusinessRuleException;
+import com.cruise.activity.exception.ResourceNotFoundException;
 import com.cruise.activity.repository.ExcursionPassengerRepository;
 import com.cruise.activity.repository.ProviderSettlementAdjustmentRepository;
 import com.cruise.activity.repository.ProviderSettlementRepository;
 import com.cruise.activity.repository.ShoreExcursionRepository;
-import com.cruise.activity.exception.BusinessRuleException;
+import com.cruise.activity.entity.ExcursionPassenger;
+import com.cruise.activity.entity.ProviderSettlement;
+import com.cruise.activity.entity.ProviderSettlementAdjustment;
+import com.cruise.activity.entity.ShoreExcursion;
+import com.cruise.activity.engine.SettlementCalculationEngine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,15 +23,20 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -104,9 +108,42 @@ class ProviderReconciliationServiceTest {
         assertThat(dto.actualPax()).isEqualTo(3);
         assertThat(dto.noShowPax()).isEqualTo(1);
         assertThat(dto.minGuaranteePax()).isEqualTo(10);
-        assertThat(dto.billablePax()).isEqualTo(10); // MAX(3, 10) = 10
-        assertThat(dto.baseAmount()).isEqualByComparingTo("1000.00"); // 10 * 100
+        assertThat(dto.billablePax()).isEqualTo(10);
+        assertThat(dto.baseAmount()).isEqualByComparingTo("1000.00");
         assertThat(dto.totalAmount()).isEqualByComparingTo("1000.00");
+    }
+
+    @Test
+    @DisplayName("Khởi tạo quyết toán khi đã tồn tại bản ghi và xử lý DataIntegrityViolationException")
+    void testInitializeSettlement_recalculateExistingAndConflictHandling() {
+        when(excursionRepository.findById(1L)).thenReturn(Optional.of(mockExcursion));
+        ProviderSettlement existing = ProviderSettlement.builder()
+                .providerId("phuket-island-tours")
+                .providerName("Phuket Island Tours")
+                .excursionId(1L)
+                .excursionTitle("Phuket Explorer Tour")
+                .voyageId(101L)
+                .status(SettlementStatus.DRAFT)
+                .agreedUnitRate(BigDecimal.valueOf(120.0))
+                .build();
+        existing.setId(50L);
+
+        when(settlementRepository.findByExcursionIdAndProviderIdWithLock(eq(1L), anyString()))
+                .thenReturn(Optional.of(existing));
+        when(excursionPassengerRepository.findByExcursionIdAndActiveTrue(1L)).thenReturn(List.of());
+
+        // First save throws DataIntegrityViolationException, retry loads and saves
+        when(settlementRepository.save(any(ProviderSettlement.class)))
+                .thenThrow(new DataIntegrityViolationException("Duplicate key"))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        InitializeSettlementRequest req = new InitializeSettlementRequest(
+                1L, "custom-provider", null, null, "Updated note"
+        );
+
+        SettlementDetailDto dto = reconciliationService.initializeOrRecalculateSettlement(req);
+        assertThat(dto).isNotNull();
+        assertThat(dto.notes()).isEqualTo("Updated note");
     }
 
     @Test
@@ -140,8 +177,35 @@ class ProviderReconciliationServiceTest {
         SettlementDetailDto result = reconciliationService.addAdjustment(10L, adjReq);
 
         assertThat(result.adjustedAmount()).isEqualByComparingTo("-200.00");
-        assertThat(result.baseAmount()).isEqualByComparingTo("1500.00"); // 15 * 100
-        assertThat(result.totalAmount()).isEqualByComparingTo("1300.00"); // 1500 - 200
+        assertThat(result.baseAmount()).isEqualByComparingTo("1500.00");
+        assertThat(result.totalAmount()).isEqualByComparingTo("1300.00");
+    }
+
+    @Test
+    @DisplayName("Thêm điều chỉnh Extra Service: cộng tiền vào quyết toán")
+    void testAddAdjustment_extraService() {
+        ProviderSettlement settlement = ProviderSettlement.builder()
+                .providerId("phuket-island-tours")
+                .status(SettlementStatus.DRAFT)
+                .agreedUnitRate(BigDecimal.valueOf(50.0))
+                .actualPax(10)
+                .adjustments(new ArrayList<>())
+                .build();
+        settlement.setId(12L);
+
+        when(settlementRepository.findByIdWithLock(12L)).thenReturn(Optional.of(settlement));
+        when(settlementRepository.save(any(ProviderSettlement.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CreateSettlementAdjustmentRequest adjReq = new CreateSettlementAdjustmentRequest(
+                AdjustmentType.EXTRA_SERVICE,
+                BigDecimal.valueOf(150.0),
+                "INV-EXTRA-01",
+                "Thêm đồ uống nhẹ",
+                "MANAGER"
+        );
+
+        SettlementDetailDto result = reconciliationService.addAdjustment(12L, adjReq);
+        assertThat(result.adjustedAmount()).isEqualByComparingTo("150.00");
     }
 
     @Test
@@ -168,7 +232,7 @@ class ProviderReconciliationServiceTest {
     }
 
     @Test
-    @DisplayName("Cập nhật trạng thái chuyển giao hợp lệ (DRAFT -> PENDING_VERIFICATION -> APPROVED)")
+    @DisplayName("Cập nhật trạng thái chuyển giao hợp lệ (DRAFT -> PENDING_VERIFICATION -> APPROVED -> PAID -> RECONCILED)")
     void testUpdateStatus_validLifecycle() {
         ProviderSettlement settlement = ProviderSettlement.builder()
                 .status(SettlementStatus.DRAFT)
@@ -189,6 +253,16 @@ class ProviderReconciliationServiceTest {
         assertThat(step2.status()).isEqualTo(SettlementStatus.APPROVED);
         assertThat(step2.approvedBy()).isEqualTo("FINANCE_DIRECTOR");
         assertThat(step2.approvedAt()).isNotNull();
+
+        SettlementDetailDto step3 = reconciliationService.updateStatus(
+                30L, new UpdateSettlementStatusRequest(SettlementStatus.PAID, "ACCOUNTANT", "Đã chi tiền")
+        );
+        assertThat(step3.status()).isEqualTo(SettlementStatus.PAID);
+
+        SettlementDetailDto step4 = reconciliationService.updateStatus(
+                30L, new UpdateSettlementStatusRequest(SettlementStatus.RECONCILED, "AUDITOR", "Khóa sổ")
+        );
+        assertThat(step4.status()).isEqualTo(SettlementStatus.RECONCILED);
     }
 
     @Test
@@ -197,6 +271,7 @@ class ProviderReconciliationServiceTest {
         ProviderSettlement settlement = ProviderSettlement.builder()
                 .status(SettlementStatus.PENDING_VERIFICATION)
                 .notes("Original note")
+                .adjustments(new ArrayList<>())
                 .build();
         settlement.setId(31L);
 
@@ -209,5 +284,97 @@ class ProviderReconciliationServiceTest {
         assertThat(result.status()).isEqualTo(SettlementStatus.PENDING_VERIFICATION);
         assertThat(result.notes()).isEqualTo("Original note");
         verify(settlementRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Kiểm tra chuyển đổi trạng thái không hợp lệ ném BusinessRuleException")
+    void testUpdateStatus_invalidTransitionThrows() {
+        ProviderSettlement settlement = ProviderSettlement.builder()
+                .status(SettlementStatus.DRAFT)
+                .build();
+        settlement.setId(32L);
+
+        when(settlementRepository.findByIdWithLock(32L)).thenReturn(Optional.of(settlement));
+
+        UpdateSettlementStatusRequest invalidReq = new UpdateSettlementStatusRequest(
+                SettlementStatus.RECONCILED, "AUDITOR", "Bỏ qua các bước"
+        );
+
+        assertThatThrownBy(() -> reconciliationService.updateStatus(32L, invalidReq))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Không thể chuyển trạng thái quyết toán");
+    }
+
+    @Test
+    @DisplayName("Tra cứu chi tiết quyết toán theo ID và ngoại lệ khi không tìm thấy")
+    void testGetSettlementById() {
+        ProviderSettlement settlement = ProviderSettlement.builder()
+                .providerId("provider-01")
+                .status(SettlementStatus.DRAFT)
+                .build();
+        settlement.setId(40L);
+
+        when(settlementRepository.findById(40L)).thenReturn(Optional.of(settlement));
+        when(settlementRepository.findById(999L)).thenReturn(Optional.empty());
+
+        SettlementDetailDto dto = reconciliationService.getSettlementById(40L);
+        assertThat(dto).isNotNull();
+        assertThat(dto.id()).isEqualTo(40L);
+
+        assertThatThrownBy(() -> reconciliationService.getSettlementById(999L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("Tìm kiếm quyết toán phân trang (searchSettlements)")
+    void testSearchSettlements() {
+        ProviderSettlement settlement = ProviderSettlement.builder()
+                .providerId("provider-01")
+                .status(SettlementStatus.DRAFT)
+                .build();
+        settlement.setId(41L);
+
+        Page<ProviderSettlement> page = new PageImpl<>(List.of(settlement));
+        when(settlementRepository.searchSettlements(eq("provider-01"), isNull(), eq(SettlementStatus.DRAFT), any()))
+                .thenReturn(page);
+
+        Page<SettlementDetailDto> result = reconciliationService.searchSettlements(
+                "provider-01", null, SettlementStatus.DRAFT, PageRequest.of(0, 10)
+        );
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).id()).isEqualTo(41L);
+    }
+
+    @Test
+    @DisplayName("Xuất báo cáo tổng kết đối soát nhà cung cấp (getSettlementSummary)")
+    void testGetSettlementSummary() {
+        ProviderSettlement s1 = ProviderSettlement.builder()
+                .providerId("p-1")
+                .providerName("Provider One")
+                .voyageId(100L)
+                .registeredPax(10)
+                .actualPax(8)
+                .noShowPax(2)
+                .billablePax(10)
+                .baseAmount(BigDecimal.valueOf(1000.0))
+                .adjustedAmount(BigDecimal.valueOf(-50.0))
+                .totalAmount(BigDecimal.valueOf(950.0))
+                .currency("USD")
+                .status(SettlementStatus.APPROVED)
+                .build();
+        s1.setId(101L);
+
+        when(settlementRepository.findByProviderIdAndVoyageId("p-1", 100L)).thenReturn(List.of(s1));
+        when(settlementRepository.findByProviderId("p-1")).thenReturn(List.of(s1));
+
+        ProviderSettlementSummaryResponse summaryWithVoyage = reconciliationService.getSettlementSummary("p-1", 100L);
+        assertThat(summaryWithVoyage.totalExcursions()).isEqualTo(1);
+        assertThat(summaryWithVoyage.totalRegisteredPax()).isEqualTo(10);
+        assertThat(summaryWithVoyage.totalActualPax()).isEqualTo(8);
+        assertThat(summaryWithVoyage.grandTotalAmount()).isEqualByComparingTo("950.0");
+
+        ProviderSettlementSummaryResponse summaryNoVoyage = reconciliationService.getSettlementSummary("p-1", null);
+        assertThat(summaryNoVoyage.providerName()).isEqualTo("Provider One");
     }
 }

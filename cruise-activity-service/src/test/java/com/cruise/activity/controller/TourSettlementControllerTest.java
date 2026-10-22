@@ -177,4 +177,20 @@ class TourSettlementControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.id").value(1));
     }
+
+    @Test
+    @DisplayName("GET /api/v1/tour-providers/settlements - Tìm kiếm và phân trang quyết toán")
+    void testSearchSettlements() throws Exception {
+        SettlementDetailDto sample = createSampleDto();
+        PageImpl<SettlementDetailDto> page = new PageImpl<>(List.of(sample));
+        when(reconciliationService.searchSettlements(any(), any(), any(), any())).thenReturn(page);
+
+        mockMvc.perform(get("/api/v1/tour-providers/settlements")
+                        .param("providerId", "phuket-tours")
+                        .param("page", "0")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content[0].id").value(1));
+    }
 }
