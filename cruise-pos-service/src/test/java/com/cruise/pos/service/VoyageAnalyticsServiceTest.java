@@ -245,6 +245,33 @@ class VoyageAnalyticsServiceTest {
     }
 
     @Test
+    @DisplayName("generateExecutivePdfBooklet: handles unicode and tabs in itinerary name successfully")
+    void testGenerateExecutivePdfBooklet_WithSpecialChars() {
+        VoyageFinancialClosure closure = VoyageFinancialClosure.builder()
+                .voyageNumber("VOY-UNICODE-01")
+                .shipId("SHIP-1")
+                .itineraryName("Hạ Long\tBay Special Cruise")
+                .voyageDurationDays(5)
+                .totalPassengerCapacity(1000)
+                .actualPassengerAttendance(950)
+                .occupancyPercentage(BigDecimal.valueOf(95.00))
+                .revenuePerPassengerCruiseDay(BigDecimal.valueOf(110.00))
+                .budgetedGrossRevenue(BigDecimal.valueOf(500000.00))
+                .actualGrossRevenue(BigDecimal.valueOf(550000.00))
+                .actualNetRevenue(BigDecimal.valueOf(520000.00))
+                .budgetVariancePercentage(BigDecimal.valueOf(10.00))
+                .profitabilityIndex(BigDecimal.valueOf(1.10))
+                .status(VoyageFinancialStatus.FINANCIALLY_CLOSED)
+                .build();
+
+        when(closureRepository.findByVoyageNumber("VOY-UNICODE-01")).thenReturn(Optional.of(closure));
+
+        byte[] pdfBytes = voyageAnalyticsService.generateExecutivePdfBooklet("VOY-UNICODE-01");
+
+        assertThat(pdfBytes).isNotEmpty();
+    }
+
+    @Test
     @DisplayName("dispatchExecutiveEmail: records audit log and confirms email queued")
     void testDispatchExecutiveEmail() {
         VoyageFinancialClosure closure = VoyageFinancialClosure.builder()
