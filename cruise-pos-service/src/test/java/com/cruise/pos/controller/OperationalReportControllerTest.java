@@ -91,4 +91,22 @@ class OperationalReportControllerTest {
         assertThat(response).isNotNull();
         verify(reportService).getExportJobs(pageable);
     }
+
+    @Test
+    @DisplayName("downloadExport returns 200 OK with file bytes")
+    void testDownloadExport() {
+        ReportExportJob mockJob = ReportExportJob.builder()
+                .jobId("JOB-123")
+                .format(ExportFormat.CSV)
+                .status(ExportJobStatus.COMPLETED)
+                .fileData("Dimension,Transactions\nBEVERAGE,1\n".getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                .build();
+
+        when(reportService.getExportJobById("JOB-123")).thenReturn(mockJob);
+
+        var response = controller.downloadExport("JOB-123");
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(response.getBody()).isNotNull();
+    }
 }

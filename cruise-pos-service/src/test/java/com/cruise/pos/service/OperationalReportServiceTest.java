@@ -159,6 +159,45 @@ class OperationalReportServiceTest {
     }
 
     @Test
+    @DisplayName("generateOperationalReport groups by CATEGORY with multiple items in same category and counts transaction once")
+    void testGenerateOperationalReportCategoryDimensionMultipleItems() {
+        PosTransactionItem itemA = PosTransactionItem.builder()
+                .category("BEVERAGE")
+                .itemName("Cocktail")
+                .quantity(1)
+                .totalPrice(BigDecimal.valueOf(50.00))
+                .build();
+        PosTransactionItem itemB = PosTransactionItem.builder()
+                .category("BEVERAGE")
+                .itemName("Beer")
+                .quantity(2)
+                .totalPrice(BigDecimal.valueOf(70.00))
+                .build();
+
+        PosTransaction multiItemTx = PosTransaction.builder()
+                .stationId("BAR-DECK-9")
+                .totalAmount(BigDecimal.valueOf(120.00))
+                .status(TransactionStatus.COMPLETED)
+                .items(List.of(itemA, itemB))
+                .build();
+        multiItemTx.setId(99L);
+
+        when(transactionRepository.findTransactionsForReport(isNull(), eq(TransactionStatus.COMPLETED), isNull(), isNull(), isNull()))
+                .thenReturn(List.of(multiItemTx));
+
+        OperationalReportQuery query = OperationalReportQuery.builder()
+                .dimension(ReportDimension.CATEGORY)
+                .build();
+
+        OperationalReportResponse response = reportService.generateOperationalReport(query);
+
+        assertThat(response.getBreakdown()).hasSize(1);
+        assertThat(response.getBreakdown().get(0).getLabel()).isEqualTo("BEVERAGE");
+        assertThat(response.getBreakdown().get(0).getTransactionCount()).isEqualTo(1L);
+        assertThat(response.getBreakdown().get(0).getGrossRevenue()).isEqualByComparingTo(BigDecimal.valueOf(120.00));
+    }
+
+    @Test
     @DisplayName("createExportJob generates CSV artifact, computes actual file size, and marks COMPLETED")
     void testCreateExportJobCsv() {
         when(transactionRepository.findTransactionsForReport(any(), any(), any(), any(), any()))
@@ -176,6 +215,7 @@ class OperationalReportServiceTest {
         assertThat(job.getDownloadUrl()).contains(".csv");
         assertThat(job.getReportTitle()).isEqualTo("Daily Revenue Report");
         assertThat(job.getFileSizeBytes()).isGreaterThan(0L);
+        assertThat(job.getFileData()).isNotNull().isNotEmpty();
 
         verify(exportJobRepository, times(2)).save(any(ReportExportJob.class));
     }
@@ -195,6 +235,7 @@ class OperationalReportServiceTest {
 
         assertThat(job.getStatus()).isEqualTo(ExportJobStatus.COMPLETED);
         assertThat(job.getDownloadUrl()).contains(".xlsx");
+        assertThat(job.getFileData()).isNotNull().isNotEmpty();
     }
 
     @Test
@@ -212,6 +253,7 @@ class OperationalReportServiceTest {
 
         assertThat(job.getStatus()).isEqualTo(ExportJobStatus.COMPLETED);
         assertThat(job.getDownloadUrl()).contains(".pdf");
+        assertThat(job.getFileData()).isNotNull().isNotEmpty();
     }
 
     @Test
