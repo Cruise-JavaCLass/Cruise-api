@@ -41,10 +41,17 @@ public class ServiceRecoveryService {
                 request.cabinNumber(), request.passengerName(), request.rootCause(), request.severity());
 
         String datePrefix = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
-        String caseNumber;
-        do {
-            caseNumber = "SRC-" + datePrefix + "-" + (1000 + secureRandom.nextInt(9000));
-        } while (caseRepository.existsByCaseNumber(caseNumber));
+        String caseNumber = null;
+        for (int attempts = 0; attempts < 50; attempts++) {
+            String candidate = "SRC-" + datePrefix + "-" + (1000 + secureRandom.nextInt(9000));
+            if (!caseRepository.existsByCaseNumber(candidate)) {
+                caseNumber = candidate;
+                break;
+            }
+        }
+        if (caseNumber == null) {
+            throw new IllegalStateException("Exhausted unique case number attempts for date " + datePrefix);
+        }
 
         Instant now = Instant.now();
         Instant slaDueAt = computeSlaDueDate(request.severity(), now);

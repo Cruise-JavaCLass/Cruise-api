@@ -121,6 +121,27 @@ class ServiceRecoveryServiceTest {
     }
 
     @Test
+    @DisplayName("createCase: throws IllegalStateException when unique case number generation is exhausted")
+    void testCreateCase_ExhaustedAttemptsThrows() {
+        CreateServiceRecoveryCaseRequest req = new CreateServiceRecoveryCaseRequest(
+                101L,
+                "Alexander Wright",
+                "CABIN-7012",
+                ServiceRecoveryRootCause.STATEROOM_PLUMBING_HVAC,
+                ServiceRecoverySeverity.LOW,
+                "Minor issue",
+                "Details",
+                null
+        );
+
+        when(caseRepository.existsByCaseNumber(anyString())).thenReturn(true);
+
+        assertThatThrownBy(() -> serviceRecoveryService.createCase(req, "STAFF"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Exhausted unique case number attempts");
+    }
+
+    @Test
     @DisplayName("escalateCase: updates case to ESCALATED and records escalation reason")
     void testEscalateCaseSuccess() {
         when(caseRepository.findById(1L)).thenReturn(Optional.of(sampleCase));
