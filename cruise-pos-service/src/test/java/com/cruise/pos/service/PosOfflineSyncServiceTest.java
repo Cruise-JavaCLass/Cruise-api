@@ -492,4 +492,84 @@ class PosOfflineSyncServiceTest {
                 Long.valueOf(201L).equals(log.getProductId())
         ));
     }
+
+    @Test
+    @DisplayName("bulkImportProducts logs GLOBAL as oldValue when global product moves to specific outlet")
+    void testBulkImportProductsGlobalToSpecificOutlet() {
+        PosProduct globalProduct = PosProduct.builder()
+                .sku("GLOBAL-DRINK")
+                .name("Global Drink")
+                .basePrice(new BigDecimal("10.00"))
+                .outletId(null)
+                .status(ProductStatus.ACTIVE)
+                .build();
+        globalProduct.setId(301L);
+
+        PosOutlet outlet3 = PosOutlet.builder()
+                .code("OUTLET-3")
+                .name("Outlet 3")
+                .outletType(OutletType.RESTAURANT)
+                .isActive(true)
+                .build();
+        outlet3.setId(3L);
+
+        when(outletRepository.findAll()).thenReturn(List.of(outlet3));
+        when(productRepository.findBySku("GLOBAL-DRINK")).thenReturn(Optional.of(globalProduct));
+        when(productRepository.save(any(PosProduct.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(categoryRepository.save(any(PosCategory.class))).thenAnswer(inv -> {
+            PosCategory c = inv.getArgument(0);
+            c.setId(10L);
+            return c;
+        });
+
+        BulkProductImportItem updateItem = BulkProductImportItem.builder()
+                .sku("GLOBAL-DRINK")
+                .name("Global Drink Restricted")
+                .basePrice(new BigDecimal("10.00"))
+                .categoryCode("BEV")
+                .outletCode("OUTLET-3")
+                .build();
+
+        BulkCatalogImportRequest request = BulkCatalogImportRequest.builder()
+                .supplierManifestNumber("MANIFEST-GLOBAL")
+                .products(List.of(updateItem))
+                .build();
+
+        BulkImportResponse response = offlineSyncService.bulkImportProducts(request);
+        assertThat(response.getSuccessCount()).isEqualTo(1);
+        assertThat(globalProduct.getOutletId()).isEqualTo(3L);
+
+        // Verify audit log for OUTLET_REASSIGNED with GLOBAL sentinel
+        verify(auditLogRepository).save(argThat(log ->
+                "OUTLET_REASSIGNED".equals(log.getAction()) &&
+                "GLOBAL".equals(log.getOldValue()) &&
+                "3".equals(log.getNewValue()) &&
+                Long.valueOf(301L).equals(log.getProductId())
+        ));
+    }
+
+    @Test
+    @DisplayName("getDeltaChangefeed excludes reassigned ID if product is already in updatedProducts")
+    void testGetDeltaChangefeedExcludesReassignedIfInUpdatedProducts() {
+        when(catalogService.getOutlets()).thenReturn(Collections.emptyList());
+        when(catalogService.getCategories(1L)).thenReturn(Collections.emptyList());
+        when(pricingEngine.getRulesByOutlet(1L)).thenReturn(Collections.emptyList());
+        when(productRepository.findActiveCatalogByOutlet(1L)).thenReturn(Collections.emptyList());
+
+        Instant since = Instant.now().minusSeconds(3600);
+
+        PosProduct activeProd = PosProduct.builder().sku("SKU-MOVED-BACK").status(ProductStatus.ACTIVE).build();
+        activeProd.setId(105L);
+
+        when(productRepository.findUpdatedProductsSince(eq(1L), eq(since))).thenReturn(List.of(activeProd));
+        when(catalogService.getProductById(105L)).thenReturn(ProductDetailDto.builder().id(105L).sku("SKU-MOVED-BACK").build());
+        // 105L appears in reassigned audit log, but is also in updatedProducts
+        when(auditLogRepository.findReassignedProductIdsForOutlet(eq("1"), eq(since))).thenReturn(List.of(105L, 106L));
+
+        PosDeltaCatalogChangefeedDto delta = offlineSyncService.getDeltaChangefeed(1L, "\"diff-hash\"", since);
+        assertThat(delta.getUpdatedProducts()).hasSize(1);
+        assertThat(delta.getUpdatedProducts().get(0).getId()).isEqualTo(105L);
+        // Only 106L should be in deletedProductIds; 105L must not be deleted
+        assertThat(delta.getDeletedProductIds()).containsExactly(106L);
+    }
 }
