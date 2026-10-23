@@ -101,13 +101,15 @@ public class RfidCardManagementService {
         Long affectedPassengerId = card.getAssignedPassengerId();
         String replacementUid = null;
 
-        // If this card is currently assigned to a passenger in Passenger entity
-        Optional<Passenger> passengerOpt = passengerRepository.findByRfidTag(uid);
-        if (passengerOpt.isPresent()) {
-            Passenger passenger = passengerOpt.get();
-            affectedPassengerId = passenger.getId();
-
-            if (request.getReplacementCardUid() != null && !request.getReplacementCardUid().trim().isBlank()) {
+        // If this card is currently assigned to a passenger in Passenger entity (match all case variants)
+        List<Passenger> passengers = passengerRepository.findAllByRfidTagIgnoreCase(uid);
+        boolean hasReplacement = request.getReplacementCardUid() != null && !request.getReplacementCardUid().trim().isBlank();
+        for (int i = 0; i < passengers.size(); i++) {
+            Passenger passenger = passengers.get(i);
+            if (i == 0) {
+                affectedPassengerId = passenger.getId();
+            }
+            if (i == 0 && hasReplacement) {
                 replacementUid = request.getReplacementCardUid().trim().toUpperCase();
                 pairReplacementCard(passenger, card, replacementUid);
             } else {

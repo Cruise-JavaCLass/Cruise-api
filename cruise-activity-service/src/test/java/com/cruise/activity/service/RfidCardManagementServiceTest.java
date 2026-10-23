@@ -82,7 +82,7 @@ class RfidCardManagementServiceTest {
                 .build();
 
         when(rfidRepository.findByCardUid("UID-BW-777")).thenReturn(Optional.of(oldCard));
-        when(passengerRepository.findByRfidTag("UID-BW-777")).thenReturn(Optional.of(passenger));
+        when(passengerRepository.findAllByRfidTagIgnoreCase("UID-BW-777")).thenReturn(List.of(passenger));
         when(rfidRepository.findByCardUid("UID-BW-888-NEW")).thenReturn(Optional.empty());
 
         BlacklistRfidCardRequest request = BlacklistRfidCardRequest.builder()
@@ -134,7 +134,7 @@ class RfidCardManagementServiceTest {
                 .build();
 
         when(rfidRepository.findByCardUid("UID-SAME-1")).thenReturn(Optional.of(oldCard));
-        when(passengerRepository.findByRfidTag("UID-SAME-1")).thenReturn(Optional.of(passenger));
+        when(passengerRepository.findAllByRfidTagIgnoreCase("UID-SAME-1")).thenReturn(List.of(passenger));
 
         BlacklistRfidCardRequest request = BlacklistRfidCardRequest.builder()
                 .cardUid("UID-SAME-1")
@@ -163,7 +163,7 @@ class RfidCardManagementServiceTest {
         unavailableCard.setId(999L);
 
         when(rfidRepository.findByCardUid("UID-OLD-1")).thenReturn(Optional.of(oldCard));
-        when(passengerRepository.findByRfidTag("UID-OLD-1")).thenReturn(Optional.of(passenger));
+        when(passengerRepository.findAllByRfidTagIgnoreCase("UID-OLD-1")).thenReturn(List.of(passenger));
         when(rfidRepository.findByCardUid("UID-BUSY-2")).thenReturn(Optional.of(unavailableCard));
 
         BlacklistRfidCardRequest request = BlacklistRfidCardRequest.builder()
