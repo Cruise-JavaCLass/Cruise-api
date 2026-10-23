@@ -28,6 +28,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@DisplayName("OperationalReportController Unit Tests")
 class OperationalReportControllerTest {
 
     @Mock
@@ -78,5 +79,16 @@ class OperationalReportControllerTest {
         assertThat(response).isNotNull();
         assertThat(response.getData().getJobId()).isEqualTo("JOB-123");
         verify(reportService).createExportJob(request);
+    }
+
+    @Test
+    @DisplayName("getExportJobs returns page of jobs")
+    void testGetExportJobs() {
+        PageRequest pageable = PageRequest.of(0, 10);
+        when(reportService.getExportJobs(pageable)).thenReturn(new PageImpl<>(List.of()));
+
+        ApiResponse<Page<ReportExportJob>> response = controller.getExportJobs(pageable);
+        assertThat(response).isNotNull();
+        verify(reportService).getExportJobs(pageable);
     }
 }
