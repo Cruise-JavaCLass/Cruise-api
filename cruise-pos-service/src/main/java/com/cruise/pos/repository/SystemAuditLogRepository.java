@@ -17,7 +17,7 @@ public interface SystemAuditLogRepository extends JpaRepository<SystemAuditLog, 
     @Query("SELECT a FROM SystemAuditLog a WHERE " +
            "(:category IS NULL OR a.category = :category) AND " +
            "(:action IS NULL OR a.action = :action) AND " +
-           "(:actor IS NULL OR LOWER(a.actor) LIKE LOWER(CONCAT('%', :actor, '%'))) AND " +
+           "(CAST(:actor AS String) IS NULL OR LOWER(a.actor) LIKE LOWER(CONCAT('%', CAST(:actor AS String), '%'))) AND " +
            "(:targetId IS NULL OR a.targetId = :targetId) AND " +
            "(:fromDate IS NULL OR a.createdAt >= :fromDate) AND " +
            "(:toDate IS NULL OR a.createdAt <= :toDate) " +
@@ -35,7 +35,7 @@ public interface SystemAuditLogRepository extends JpaRepository<SystemAuditLog, 
     @Query("SELECT a FROM SystemAuditLog a WHERE " +
            "(:category IS NULL OR a.category = :category) AND " +
            "(:action IS NULL OR a.action = :action) AND " +
-           "(:actor IS NULL OR LOWER(a.actor) LIKE LOWER(CONCAT('%', :actor, '%'))) AND " +
+           "(CAST(:actor AS String) IS NULL OR LOWER(a.actor) LIKE LOWER(CONCAT('%', CAST(:actor AS String), '%'))) AND " +
            "(:targetId IS NULL OR a.targetId = :targetId) " +
            "ORDER BY a.createdAt DESC")
     List<SystemAuditLog> exportAuditLogs(

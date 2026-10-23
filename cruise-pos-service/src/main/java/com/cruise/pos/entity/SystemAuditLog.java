@@ -50,4 +50,14 @@ public class SystemAuditLog extends BaseEntity {
 
     @Column(name = "immutable_hash", length = 128)
     private String immutableHash;
+
+    @Override
+    @PrePersist
+    public void onCreate() {
+        Instant preset = getCreatedAt();
+        super.onCreate();
+        if (preset != null) {
+            setCreatedAt(preset);
+        }
+    }
 }
