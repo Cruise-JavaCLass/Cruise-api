@@ -29,6 +29,13 @@ public interface OnboardActivityRepository extends JpaRepository<OnboardActivity
     @Query("SELECT a FROM OnboardActivity a WHERE a.active = true AND a.status IN (:statuses) ORDER BY a.activityDate ASC, a.startTime ASC")
     List<OnboardActivity> findLiveActivities(@Param("statuses") Collection<ActivityStatus> statuses);
 
+    long countByActiveTrueAndStatus(ActivityStatus status);
+
+    long countByActiveTrueAndStatusIn(Collection<ActivityStatus> statuses);
+
+    @Query("SELECT a.category, COUNT(a) FROM OnboardActivity a WHERE a.active = true AND a.category IS NOT NULL AND TRIM(a.category) <> '' GROUP BY a.category")
+    List<Object[]> countActiveActivitiesGroupedByCategory();
+
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT a FROM OnboardActivity a WHERE a.id = :id")
     Optional<OnboardActivity> findByIdForUpdate(@Param("id") Long id);
