@@ -152,7 +152,6 @@ public class PosCatalogService {
             throw new DuplicateResourceException("Mã SKU '" + req.getSku() + "' hoặc mã vạch đã tồn tại trong hệ thống");
         }
 
-        List<ProductModifierDto> savedModifiers = new ArrayList<>();
         if (req.getModifiers() != null && !req.getModifiers().isEmpty()) {
             for (ProductModifierDto mDto : req.getModifiers()) {
                 PosProductModifier mod = PosProductModifier.builder()
@@ -165,7 +164,7 @@ public class PosCatalogService {
                         .displayOrder(mDto.getDisplayOrder() != null ? mDto.getDisplayOrder() : 0)
                         .status("ACTIVE")
                         .build();
-                savedModifiers.add(toModifierDto(modifierRepository.save(mod)));
+                modifierRepository.save(mod);
             }
         }
 
