@@ -130,6 +130,7 @@ public class PosTerminalAdminService {
     public PosTerminalDto revokeTerminal(String deviceId, RevokeTerminalRequest request, String performedBy) {
         log.warn("Revoking POS terminal deviceId={}, reason={}, performedBy={}", deviceId, request.reason(), performedBy);
         PosTerminal terminal = findTerminalOrThrow(deviceId);
+        PosTerminalStatus previousStatus = terminal.getStatus();
 
         terminal.setStatus(PosTerminalStatus.REVOKED);
         terminal.setApiKeyHash(null);
@@ -141,7 +142,7 @@ public class PosTerminalAdminService {
                 "DEVICE_REVOKED",
                 performedBy,
                 "Device revoked. Reason: " + request.reason(),
-                "deviceId=" + deviceId + ", previousStatus=" + terminal.getStatus()
+                "deviceId=" + deviceId + ", previousStatus=" + previousStatus
         );
 
         return toDto(saved);
@@ -164,9 +165,10 @@ public class PosTerminalAdminService {
                 ? request.customExpiry()
                 : Instant.now().plus(365, ChronoUnit.DAYS);
 
-        String certPem = (request != null && request.csrPem() != null && !request.csrPem().isBlank())
-                ? request.csrPem()
-                : generateMockCertificatePem(deviceId, newExpiry);
+        if (request != null && request.csrPem() != null && !request.csrPem().isBlank()) {
+            throw new IllegalArgumentException("CSR-based renewal is not supported yet");
+        }
+        String certPem = generateMockCertificatePem(deviceId, newExpiry);
         String fingerprint = hashSha256(certPem);
 
         terminal.setCertificateExpiry(newExpiry);
