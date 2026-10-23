@@ -185,7 +185,8 @@ class PosTerminalAdminServiceTest {
         assertThat(captor.getValue().getStatus()).isEqualTo(PosTerminalStatus.REVOKED);
         assertThat(captor.getValue().getApiKeyHash()).isNull();
 
-        verify(auditLogRepository).save(argThat(l -> "DEVICE_REVOKED".equals(l.getAction())));
+        verify(auditLogRepository).save(argThat(l -> "DEVICE_REVOKED".equals(l.getAction())
+                && l.getDetails() != null && l.getDetails().contains("previousStatus=ACTIVE")));
     }
 
     @Test
@@ -215,16 +216,15 @@ class PosTerminalAdminServiceTest {
     }
 
     @Test
-    @DisplayName("renewCertificate: uses provided CSR PEM when present")
+    @DisplayName("renewCertificate: throws IllegalArgumentException when CSR-based renewal is requested")
     void testRenewCertificate_WithCsrPem() {
         when(terminalRepository.findByDeviceId("TERM-DECK9-01")).thenReturn(Optional.of(sampleTerminal));
-        when(terminalRepository.save(any(PosTerminal.class))).thenAnswer(inv -> inv.getArgument(0));
 
         String customPem = "-----BEGIN CERTIFICATE REQUEST-----\nMOCK_CSR\n-----END CERTIFICATE REQUEST-----";
         RenewCertificateRequest req = new RenewCertificateRequest(Instant.now().plus(60, ChronoUnit.DAYS), customPem);
-        CertificateRenewalResponse res = terminalAdminService.renewCertificate("TERM-DECK9-01", req, "SYS_ADMIN");
-
-        assertThat(res.clientCertificatePem()).isEqualTo(customPem);
+        assertThatThrownBy(() -> terminalAdminService.renewCertificate("TERM-DECK9-01", req, "SYS_ADMIN"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("CSR-based renewal is not supported yet");
     }
 
     @Test

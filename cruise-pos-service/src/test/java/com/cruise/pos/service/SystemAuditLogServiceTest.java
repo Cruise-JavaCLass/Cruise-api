@@ -140,4 +140,17 @@ class SystemAuditLogServiceTest {
         SystemAuditLog noCreatedAt = SystemAuditLog.builder().immutableHash("abc").build();
         assertThat(auditLogService.verifyLogIntegrity(noCreatedAt)).isFalse();
     }
+
+    @Test
+    @DisplayName("onCreate: preserves preset createdAt for integrity hash verification")
+    void testOnCreatePreservesPresetCreatedAt() {
+        Instant preset = Instant.now().minusSeconds(60);
+        SystemAuditLog log = SystemAuditLog.builder().build();
+        log.setCreatedAt(preset);
+
+        log.onCreate();
+
+        assertThat(log.getCreatedAt()).isEqualTo(preset);
+        assertThat(log.getUpdatedAt()).isNotNull();
+    }
 }
