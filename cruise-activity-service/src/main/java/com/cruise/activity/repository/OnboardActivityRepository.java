@@ -1,6 +1,7 @@
 package com.cruise.activity.repository;
 
 import com.cruise.activity.entity.OnboardActivity;
+import com.cruise.activity.enums.ActivityStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,6 +25,9 @@ public interface OnboardActivityRepository extends JpaRepository<OnboardActivity
     List<OnboardActivity> findByTourIdAndActivityDateAndActiveTrueOrderByStartTimeAsc(Long tourId, LocalDate activityDate);
 
     List<OnboardActivity> findByLocationAndActivityDateAndActiveTrue(String location, LocalDate activityDate);
+
+    @Query("SELECT a FROM OnboardActivity a WHERE a.active = true AND a.status IN (:statuses) ORDER BY a.activityDate ASC, a.startTime ASC")
+    List<OnboardActivity> findLiveActivities(@Param("statuses") Collection<ActivityStatus> statuses);
 
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT a FROM OnboardActivity a WHERE a.id = :id")

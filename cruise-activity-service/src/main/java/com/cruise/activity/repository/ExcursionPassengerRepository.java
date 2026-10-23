@@ -35,6 +35,9 @@ public interface ExcursionPassengerRepository extends JpaRepository<ExcursionPas
 
     long countByExcursionIdAndBookingStatusAndActiveTrue(Long excursionId, ExcursionBookingStatus bookingStatus);
 
+    @Query("SELECT COUNT(ep) FROM ExcursionPassenger ep WHERE ep.excursionId = :excursionId AND ep.checkedInAt IS NOT NULL AND ep.active = true")
+    long countCheckedInByExcursionId(@Param("excursionId") Long excursionId);
+
     Optional<ExcursionPassenger> findByExcursionIdAndTicketCodeAndActiveTrue(Long excursionId, String ticketCode);
 
     Optional<ExcursionPassenger> findByExcursionIdAndRfidTagAndActiveTrue(Long excursionId, String rfidTag);
