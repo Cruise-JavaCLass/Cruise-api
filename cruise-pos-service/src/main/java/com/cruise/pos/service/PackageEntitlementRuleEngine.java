@@ -37,8 +37,8 @@ public class PackageEntitlementRuleEngine {
             }
             if (a.getValidTo() != null) return -1;
             if (b.getValidTo() != null) return 1;
-            Long idA = a.getId() != null ? a.getId() : 0L;
-            Long idB = b.getId() != null ? b.getId() : 0L;
+            long idA = a.getId() != null ? a.getId() : 0L;
+            long idB = b.getId() != null ? b.getId() : 0L;
             return Long.compare(idA, idB);
         });
 

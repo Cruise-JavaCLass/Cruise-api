@@ -73,8 +73,8 @@ public class PackageEntitlementController {
             throw new AccessDeniedException("Người dùng chưa được xác định danh tính hợp lệ");
         }
         try {
-            Long authPassengerId = Long.parseLong(principal.username());
-            if (passengerId != null && !authPassengerId.equals(passengerId)) {
+            long authPassengerId = Long.parseLong(principal.username());
+            if (passengerId != null && authPassengerId != passengerId) {
                 throw new AccessDeniedException("Hành khách không có quyền truy cập gói đặc quyền của hành khách khác");
             }
         } catch (NumberFormatException e) {
