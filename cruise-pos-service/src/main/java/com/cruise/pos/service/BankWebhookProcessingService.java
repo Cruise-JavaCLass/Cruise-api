@@ -14,7 +14,10 @@ import com.cruise.pos.repository.PaymentOrderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -28,6 +31,7 @@ public class BankWebhookProcessingService {
     private final PaymentOrderRepository paymentOrderRepository;
     private final CabinFolioAccountRepository folioRepository;
     private final FolioSettlementService settlementService;
+    private final PlatformTransactionManager transactionManager;
 
     @Transactional(noRollbackFor = BusinessRuleException.class)
     public WebhookProcessingResult processBankWebhook(BankWebhookPayload payload) {
@@ -125,31 +129,36 @@ public class BankWebhookProcessingService {
 
     private boolean attemptFolioSettlement(PaymentOrder order, BigDecimal amount) {
         try {
-            var folioOpt = folioRepository.findByCabinNumber(order.getCabinNumber());
-            if (folioOpt.isPresent()) {
-                CabinFolioAccount folio = folioOpt.get();
-                if (folio.getStatus() == FolioStatus.ACTIVE || folio.getStatus() == FolioStatus.LOCKED) {
-                    String idempotencyKey = "VIETQR-" + order.getPaymentReference();
-                    java.util.Set<String> roles = java.util.Set.of("ROLE_CASHIER", "ROLE_ADMIN");
-                    settlementService.settle(
-                            folio.getCabinNumber(),
-                            idempotencyKey,
-                            PaymentMethod.VIETQR,
-                            amount,
-                            "Settled via VietQR Bank Webhook - Ref: " + order.getPaymentReference(),
-                            false,
-                            "SYSTEM_VIETQR",
-                            roles
-                    );
-                    log.info("Successfully auto-settled folio for cabin: {} via VietQR with paid amount: {}", order.getCabinNumber(), amount);
-                    return true;
-                } else if (folio.getStatus() == FolioStatus.SETTLED || folio.getStatus() == FolioStatus.CLOSED) {
-                    return true;
+            TransactionTemplate template = new TransactionTemplate(transactionManager);
+            template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            return Boolean.TRUE.equals(template.execute(status -> {
+                var folioOpt = folioRepository.findByCabinNumber(order.getCabinNumber());
+                if (folioOpt.isPresent()) {
+                    CabinFolioAccount folio = folioOpt.get();
+                    if (folio.getStatus() == FolioStatus.ACTIVE || folio.getStatus() == FolioStatus.LOCKED) {
+                        String idempotencyKey = "VIETQR-" + order.getPaymentReference();
+                        java.util.Set<String> roles = java.util.Set.of("ROLE_CASHIER", "ROLE_ADMIN");
+                        settlementService.settle(
+                                folio.getCabinNumber(),
+                                idempotencyKey,
+                                PaymentMethod.VIETQR,
+                                amount,
+                                "Settled via VietQR Bank Webhook - Ref: " + order.getPaymentReference(),
+                                false,
+                                "SYSTEM_VIETQR",
+                                roles
+                        );
+                        log.info("Successfully auto-settled folio for cabin: {} via VietQR with paid amount: {}", order.getCabinNumber(), amount);
+                        return true;
+                    } else if (folio.getStatus() == FolioStatus.SETTLED || folio.getStatus() == FolioStatus.CLOSED) {
+                        return true;
+                    }
                 }
-            }
+                return false;
+            }));
         } catch (Exception e) {
             log.error("Failed to auto-settle folio for cabin {}: {}", order.getCabinNumber(), e.getMessage(), e);
+            return false;
         }
-        return false;
     }
 }

@@ -42,6 +42,9 @@ class BankWebhookProcessingServiceTest {
     @Mock
     private FolioSettlementService settlementService;
 
+    @Mock
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
     @InjectMocks
     private BankWebhookProcessingService webhookProcessingService;
 
@@ -50,6 +53,8 @@ class BankWebhookProcessingServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(transactionManager.getTransaction(any())).thenReturn(mock(org.springframework.transaction.TransactionStatus.class));
+
         pendingOrder = PaymentOrder.builder()
                 .paymentReference("PAY-100")
                 .cabinNumber("CABIN-801")
