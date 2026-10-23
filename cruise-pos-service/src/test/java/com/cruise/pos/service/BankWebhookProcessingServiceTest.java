@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -53,6 +54,7 @@ class BankWebhookProcessingServiceTest {
                 .cabinNumber("CABIN-801")
                 .amount(BigDecimal.valueOf(1500000.00))
                 .status(PaymentGatewayStatus.PENDING)
+                .expiresAt(Instant.now().plus(15, ChronoUnit.MINUTES))
                 .build();
 
         activeFolio = CabinFolioAccount.builder()
@@ -65,7 +67,7 @@ class BankWebhookProcessingServiceTest {
     @Test
     @DisplayName("processBankWebhook processes SUCCESS payment and triggers settlement")
     void testProcessWebhookSuccess() {
-        when(paymentOrderRepository.findByPaymentReference("PAY-100")).thenReturn(Optional.of(pendingOrder));
+        when(paymentOrderRepository.findByPaymentReferenceForUpdate("PAY-100")).thenReturn(Optional.of(pendingOrder));
         when(folioRepository.findByCabinNumber("CABIN-801")).thenReturn(Optional.of(activeFolio));
 
         BankWebhookPayload payload = BankWebhookPayload.builder()
@@ -100,7 +102,7 @@ class BankWebhookProcessingServiceTest {
     void testProcessWebhookIdempotent() {
         pendingOrder.setStatus(PaymentGatewayStatus.PAID);
         pendingOrder.setSettledAt(Instant.now());
-        when(paymentOrderRepository.findByPaymentReference("PAY-100")).thenReturn(Optional.of(pendingOrder));
+        when(paymentOrderRepository.findByPaymentReferenceForUpdate("PAY-100")).thenReturn(Optional.of(pendingOrder));
 
         BankWebhookPayload payload = BankWebhookPayload.builder()
                 .paymentReference("PAY-100")
@@ -119,7 +121,7 @@ class BankWebhookProcessingServiceTest {
     @Test
     @DisplayName("processBankWebhook rejects underpayment with BusinessRuleException")
     void testProcessWebhookUnderpaid() {
-        when(paymentOrderRepository.findByPaymentReference("PAY-100")).thenReturn(Optional.of(pendingOrder));
+        when(paymentOrderRepository.findByPaymentReferenceForUpdate("PAY-100")).thenReturn(Optional.of(pendingOrder));
 
         BankWebhookPayload payload = BankWebhookPayload.builder()
                 .paymentReference("PAY-100")
@@ -131,5 +133,23 @@ class BankWebhookProcessingServiceTest {
         assertThatThrownBy(() -> webhookProcessingService.processBankWebhook(payload))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("Underpaid amount");
+    }
+
+    @Test
+    @DisplayName("processBankWebhook rejects expired order")
+    void testProcessWebhookExpired() {
+        pendingOrder.setExpiresAt(Instant.now().minus(5, ChronoUnit.MINUTES));
+        when(paymentOrderRepository.findByPaymentReferenceForUpdate("PAY-100")).thenReturn(Optional.of(pendingOrder));
+
+        BankWebhookPayload payload = BankWebhookPayload.builder()
+                .paymentReference("PAY-100")
+                .transactionId("BANK-TX-999")
+                .amount(BigDecimal.valueOf(1500000.00))
+                .status("SUCCESS")
+                .build();
+
+        assertThatThrownBy(() -> webhookProcessingService.processBankWebhook(payload))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("EXPIRED");
     }
 }

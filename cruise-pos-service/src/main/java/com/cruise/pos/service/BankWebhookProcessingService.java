@@ -1,7 +1,6 @@
 package com.cruise.pos.service;
 
 import com.cruise.pos.dto.BankWebhookPayload;
-import com.cruise.pos.dto.SettleFolioRequest;
 import com.cruise.pos.dto.WebhookProcessingResult;
 import com.cruise.pos.entity.CabinFolioAccount;
 import com.cruise.pos.entity.PaymentOrder;
@@ -34,10 +33,11 @@ public class BankWebhookProcessingService {
     public WebhookProcessingResult processBankWebhook(BankWebhookPayload payload) {
         Objects.requireNonNull(payload, "BankWebhookPayload must not be null");
 
-        PaymentOrder order = paymentOrderRepository.findByPaymentReference(payload.getPaymentReference())
+        // Pessimistic lock protects against concurrent duplicate webhook deliveries
+        PaymentOrder order = paymentOrderRepository.findByPaymentReferenceForUpdate(payload.getPaymentReference())
                 .orElseThrow(() -> new ResourceNotFoundException("Payment order not found for ref: " + payload.getPaymentReference()));
 
-        // Idempotency: If already marked as PAID, return idempotently
+        // Idempotency: If already marked as PAID, retry folio settlement if needed and return idempotently
         if (order.getStatus() == PaymentGatewayStatus.PAID) {
             log.info("Payment order {} already settled, returning idempotent success", payload.getPaymentReference());
             return WebhookProcessingResult.builder()
@@ -47,6 +47,17 @@ public class BankWebhookProcessingService {
                     .message("Payment already processed and folio settled")
                     .processedAt(order.getSettledAt())
                     .build();
+        }
+
+        // Validate order state and expiry before processing
+        Instant now = Instant.now();
+        if (order.getStatus() == PaymentGatewayStatus.CANCELLED) {
+            throw new BusinessRuleException("Payment order has been CANCELLED and cannot be paid");
+        }
+        if (order.getStatus() == PaymentGatewayStatus.EXPIRED || (order.getExpiresAt() != null && now.isAfter(order.getExpiresAt()))) {
+            order.setStatus(PaymentGatewayStatus.EXPIRED);
+            paymentOrderRepository.save(order);
+            throw new BusinessRuleException("Payment order has EXPIRED (expired at: " + order.getExpiresAt() + ")");
         }
 
         if ("FAILED".equalsIgnoreCase(payload.getStatus())) {
@@ -61,9 +72,20 @@ public class BankWebhookProcessingService {
                     .build();
         }
 
-        // Amount verification
+        // Amount verification against expected order amount
         if (payload.getAmount().compareTo(order.getAmount()) < 0) {
             throw new BusinessRuleException("Underpaid amount: expected " + order.getAmount() + " but received " + payload.getAmount());
+        }
+
+        // Fetch live folio to compare with current balance
+        var folioOpt = folioRepository.findByCabinNumber(order.getCabinNumber());
+        if (folioOpt.isPresent()) {
+            CabinFolioAccount folio = folioOpt.get();
+            if (payload.getAmount().compareTo(folio.getCurrentBalance()) < 0) {
+                log.warn("Payment amount {} is less than live folio balance {} for cabin {}",
+                        payload.getAmount(), folio.getCurrentBalance(), order.getCabinNumber());
+                throw new BusinessRuleException("Paid amount is less than current live folio balance. Folio remains open for manual review.");
+            }
         }
 
         order.setStatus(PaymentGatewayStatus.PAID);
@@ -71,10 +93,9 @@ public class BankWebhookProcessingService {
         order.setSettledAt(Instant.now());
         paymentOrderRepository.save(order);
 
-        // Auto settle cabin folio
+        // Auto settle cabin folio using actual paid amount
         boolean folioSettled = false;
         try {
-            var folioOpt = folioRepository.findByCabinNumber(order.getCabinNumber());
             if (folioOpt.isPresent()) {
                 CabinFolioAccount folio = folioOpt.get();
                 if (folio.getStatus() == FolioStatus.ACTIVE || folio.getStatus() == FolioStatus.LOCKED) {
@@ -84,14 +105,14 @@ public class BankWebhookProcessingService {
                             folio.getCabinNumber(),
                             idempotencyKey,
                             PaymentMethod.VIETQR,
-                            folio.getCurrentBalance(),
+                            payload.getAmount(),
                             "Settled via VietQR Bank Webhook - Ref: " + order.getPaymentReference(),
                             false,
                             "SYSTEM_VIETQR",
                             roles
                     );
                     folioSettled = true;
-                    log.info("Successfully auto-settled folio for cabin: {} via VietQR", order.getCabinNumber());
+                    log.info("Successfully auto-settled folio for cabin: {} via VietQR with paid amount: {}", order.getCabinNumber(), payload.getAmount());
                 }
             }
         } catch (Exception e) {

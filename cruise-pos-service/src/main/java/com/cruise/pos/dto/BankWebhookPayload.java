@@ -3,6 +3,7 @@ package com.cruise.pos.dto;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -26,7 +27,9 @@ public class BankWebhookPayload {
     @DecimalMin("1000.00")
     private BigDecimal amount;
 
-    private String status; // SUCCESS, FAILED
+    @NotBlank(message = "Payment status must not be blank")
+    @Pattern(regexp = "^(?i)(SUCCESS|FAILED)$", message = "Status must be either SUCCESS or FAILED")
+    private String status;
 
     private String bankCode;
 

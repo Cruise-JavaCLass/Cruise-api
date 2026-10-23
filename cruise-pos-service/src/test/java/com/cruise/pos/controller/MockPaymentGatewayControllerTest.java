@@ -79,7 +79,7 @@ class MockPaymentGatewayControllerTest {
                 .status("SUCCESS")
                 .build();
 
-        ApiResponse<WebhookProcessingResult> response = controller.processBankWebhook(payload);
+        ApiResponse<WebhookProcessingResult> response = controller.processBankWebhook(null, payload);
 
         assertThat(response).isNotNull();
         assertThat(response.getData().getFolioSettled()).isTrue();

@@ -11,6 +11,7 @@ import java.time.Instant;
 @Entity
 @Table(name = "pos_payment_orders", indexes = {
         @Index(name = "idx_pay_order_payment_ref", columnList = "payment_reference", unique = true),
+        @Index(name = "idx_pay_order_idem_key", columnList = "idempotency_key", unique = true),
         @Index(name = "idx_pay_order_cabin", columnList = "cabin_number"),
         @Index(name = "idx_pay_order_status", columnList = "status")
 })

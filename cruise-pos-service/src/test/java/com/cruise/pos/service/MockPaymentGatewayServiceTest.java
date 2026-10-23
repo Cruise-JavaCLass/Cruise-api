@@ -56,7 +56,7 @@ class MockPaymentGatewayServiceTest {
         assertThat(response.getQrImageUrl()).contains("https://img.vietqr.io/image/970436");
         assertThat(response.getStatus()).isEqualTo(PaymentGatewayStatus.PENDING);
 
-        verify(paymentOrderRepository).save(any(PaymentOrder.class));
+        verify(paymentOrderRepository).saveAndFlush(any(PaymentOrder.class));
     }
 
     @Test
@@ -76,6 +76,21 @@ class MockPaymentGatewayServiceTest {
         VietQrPaymentResponse response = paymentGatewayService.generateVietQrPayment(request);
 
         assertThat(response.getPaymentReference()).isEqualTo("PAY-EXISTING-123");
-        verify(paymentOrderRepository, never()).save(any(PaymentOrder.class));
+        verify(paymentOrderRepository, never()).saveAndFlush(any(PaymentOrder.class));
+    }
+
+    @Test
+    @DisplayName("getOrderStatus returns order status or FAILED if not found")
+    void testGetOrderStatus() {
+        PaymentOrder existing = PaymentOrder.builder()
+                .paymentReference("PAY-100")
+                .status(PaymentGatewayStatus.PAID)
+                .build();
+
+        when(paymentOrderRepository.findByPaymentReference("PAY-100")).thenReturn(Optional.of(existing));
+        when(paymentOrderRepository.findByPaymentReference("UNKNOWN")).thenReturn(Optional.empty());
+
+        assertThat(paymentGatewayService.getOrderStatus("PAY-100")).isEqualTo(PaymentGatewayStatus.PAID);
+        assertThat(paymentGatewayService.getOrderStatus("UNKNOWN")).isEqualTo(PaymentGatewayStatus.FAILED);
     }
 }
