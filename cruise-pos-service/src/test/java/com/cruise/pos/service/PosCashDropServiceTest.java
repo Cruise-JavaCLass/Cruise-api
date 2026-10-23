@@ -225,6 +225,44 @@ class PosCashDropServiceTest {
         }
 
         @Test
+        @DisplayName("Throws BusinessRuleException when currency breakdown has negative denomination")
+        void currencyBreakdownNegativeDenomination_throwsException() {
+            CashDropRequest invalidDenom = new CashDropRequest(
+                    BigDecimal.valueOf(500.00),
+                    "CREW-ALICE",
+                    "MGR-01",
+                    "8888",
+                    Map.of("-50", 10),
+                    "Negative denomination"
+            );
+            when(shiftRepository.findByIdWithLock(101L)).thenReturn(Optional.of(openShift));
+            when(posManagerAuthService.verifyRefundApproval("MGR-01", "8888")).thenReturn(true);
+
+            assertThatThrownBy(() -> cashDropService.processCashDrop(101L, invalidDenom))
+                    .isInstanceOf(BusinessRuleException.class)
+                    .hasMessageContaining("greater than zero");
+        }
+
+        @Test
+        @DisplayName("Throws BusinessRuleException when currency breakdown has non-numeric denomination")
+        void currencyBreakdownNonNumericDenomination_throwsException() {
+            CashDropRequest nonNumeric = new CashDropRequest(
+                    BigDecimal.valueOf(500.00),
+                    "CREW-ALICE",
+                    "MGR-01",
+                    "8888",
+                    Map.of("ABC", 10),
+                    "Non-numeric denomination"
+            );
+            when(shiftRepository.findByIdWithLock(101L)).thenReturn(Optional.of(openShift));
+            when(posManagerAuthService.verifyRefundApproval("MGR-01", "8888")).thenReturn(true);
+
+            assertThatThrownBy(() -> cashDropService.processCashDrop(101L, nonNumeric))
+                    .isInstanceOf(BusinessRuleException.class)
+                    .hasMessageContaining("must be numeric");
+        }
+
+        @Test
         @DisplayName("Throws BusinessRuleException when witness PIN is invalid")
         void invalidWitnessPin_throwsException() {
             when(shiftRepository.findByIdWithLock(101L)).thenReturn(Optional.of(openShift));

@@ -21,8 +21,8 @@ public class EscPosReceiptService {
     public static final String ESC_ALIGN_RIGHT = "\u001Ba2";  // Align right
     public static final String ESC_EMPHASIZE_ON = "\u001BE1"; // Bold on
     public static final String ESC_EMPHASIZE_OFF = "\u001BE0";// Bold off
-    public static final String ESC_DOUBLE_HEIGHT = "\u001B!10";// Double height text
-    public static final String ESC_NORMAL_TEXT = "\u001B!0";  // Normal text size
+    public static final String ESC_DOUBLE_HEIGHT = "\u001B!\u0010"; // Double height text (n = 0x10)
+    public static final String ESC_NORMAL_TEXT = "\u001B!\u0000";   // Normal text size (n = 0x00)
     public static final String ESC_CUT_PAPER = "\u001DV0";    // Cut paper full/partial
 
     private static final DateTimeFormatter DATE_FORMATTER =

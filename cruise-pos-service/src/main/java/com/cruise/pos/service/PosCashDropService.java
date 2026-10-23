@@ -32,6 +32,9 @@ import java.util.UUID;
 public class PosCashDropService {
 
     public static final String DEFAULT_SAFE_ID = "MAIN_SAFE";
+    /**
+     * Standard opening float allocated to the vessel main safe upon initial deployment.
+     */
     public static final BigDecimal DEFAULT_INITIAL_SAFE_BALANCE = BigDecimal.valueOf(10000.00);
 
     private final PosShiftRepository shiftRepository;
@@ -84,19 +87,22 @@ public class PosCashDropService {
         // Validate currency breakdown if provided
         if (request.currencyBreakdown() != null && !request.currencyBreakdown().isEmpty()) {
             BigDecimal breakdownTotal = BigDecimal.ZERO;
-            boolean allNumeric = true;
             for (Map.Entry<String, Integer> entry : request.currencyBreakdown().entrySet()) {
                 if (entry.getValue() == null || entry.getValue() < 0) {
                     throw new BusinessRuleException("Currency breakdown counts must be non-negative");
                 }
+                BigDecimal denom;
                 try {
-                    BigDecimal denom = new BigDecimal(entry.getKey());
-                    breakdownTotal = breakdownTotal.add(denom.multiply(BigDecimal.valueOf(entry.getValue())));
+                    denom = new BigDecimal(entry.getKey().trim());
                 } catch (NumberFormatException e) {
-                    allNumeric = false;
+                    throw new BusinessRuleException("Currency breakdown denominations must be numeric");
                 }
+                if (denom.signum() <= 0) {
+                    throw new BusinessRuleException("Currency breakdown denominations must be greater than zero");
+                }
+                breakdownTotal = breakdownTotal.add(denom.multiply(BigDecimal.valueOf(entry.getValue())));
             }
-            if (allNumeric && breakdownTotal.compareTo(dropAmount) != 0) {
+            if (breakdownTotal.compareTo(dropAmount) != 0) {
                 throw new BusinessRuleException(String.format(
                         "Currency breakdown total ($%s) does not match drop amount ($%s)",
                         breakdownTotal, dropAmount));
