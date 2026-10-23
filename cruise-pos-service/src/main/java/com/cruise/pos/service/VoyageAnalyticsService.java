@@ -305,8 +305,8 @@ public class VoyageAnalyticsService {
                 ? String.join(",", request.ccEmails()).replaceAll("[\\r\\n]", " ")
                 : "none";
 
-        log.warn("Executive booklet email dispatch requested for voyage {} to {}, but outbound mail service is not configured",
-                voyageNumber, safeRecipient);
+        log.warn("Executive booklet email dispatch requested for voyage {} (itinerary: {}) to {} (cc: {}), but outbound mail service is not configured",
+                voyageNumber, safeItinerary, safeRecipient, safeCc);
         throw new BusinessRuleException("Executive email delivery is unavailable: outbound mail dispatch service is not configured on vessel environment");
     }
 
