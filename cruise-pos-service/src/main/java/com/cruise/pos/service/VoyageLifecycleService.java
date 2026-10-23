@@ -132,7 +132,8 @@ public class VoyageLifecycleService {
     public VoyageLifecycleStateDto syncPortTimezone(String voyageNumber, SyncPortTimezoneRequest request, String actor) {
         log.info("Synchronizing port timezone for voyage {}: port={}, tz={}, offset={}m, actor={}",
                 voyageNumber, request.portName(), request.timezone(), request.clockOffsetMinutes(), actor);
-        VoyageLifecycleState state = findOrThrow(voyageNumber);
+        VoyageLifecycleState state = stateRepository.findByVoyageNumberWithLock(voyageNumber)
+                .orElseThrow(() -> new ResourceNotFoundException("Voyage lifecycle state not found for: " + voyageNumber));
 
         ZoneId zoneId;
         try {
@@ -163,7 +164,8 @@ public class VoyageLifecycleService {
 
     @Transactional(readOnly = true)
     public TimezoneShiftScheduleResponse getTimezoneSchedule(String voyageNumber) {
-        VoyageLifecycleState state = findOrThrow(voyageNumber);
+        VoyageLifecycleState state = stateRepository.findByVoyageNumberWithLock(voyageNumber)
+                .orElseThrow(() -> new ResourceNotFoundException("Voyage lifecycle state not found for: " + voyageNumber));
 
         int offsetMinutes = state.getVesselClockOffsetMinutes() != null ? state.getVesselClockOffsetMinutes() : 0;
         ZoneOffset zoneOffset = ZoneOffset.ofTotalSeconds(offsetMinutes * 60);

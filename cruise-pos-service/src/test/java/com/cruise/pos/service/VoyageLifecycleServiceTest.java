@@ -161,7 +161,7 @@ class VoyageLifecycleServiceTest {
     @Test
     @DisplayName("syncPortTimezone: adjusts timezone and vessel clock offset minutes")
     void testSyncPortTimezoneSuccess() {
-        when(stateRepository.findByVoyageNumber("VOY-2026-MED-05")).thenReturn(Optional.of(sampleState));
+        when(stateRepository.findByVoyageNumberWithLock("VOY-2026-MED-05")).thenReturn(Optional.of(sampleState));
         when(stateRepository.save(any(VoyageLifecycleState.class))).thenAnswer(inv -> inv.getArgument(0));
 
         SyncPortTimezoneRequest req = new SyncPortTimezoneRequest(
@@ -182,7 +182,7 @@ class VoyageLifecycleServiceTest {
         sampleState.setCurrentTimezone("Europe/Athens");
         sampleState.setVesselClockOffsetMinutes(120);
 
-        when(stateRepository.findByVoyageNumber("VOY-2026-MED-05")).thenReturn(Optional.of(sampleState));
+        when(stateRepository.findByVoyageNumberWithLock("VOY-2026-MED-05")).thenReturn(Optional.of(sampleState));
 
         TimezoneShiftScheduleResponse res = voyageLifecycleService.getTimezoneSchedule("VOY-2026-MED-05");
 
