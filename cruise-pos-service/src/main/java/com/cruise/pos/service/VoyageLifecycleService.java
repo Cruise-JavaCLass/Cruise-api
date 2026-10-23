@@ -164,8 +164,7 @@ public class VoyageLifecycleService {
 
     @Transactional(readOnly = true)
     public TimezoneShiftScheduleResponse getTimezoneSchedule(String voyageNumber) {
-        VoyageLifecycleState state = stateRepository.findByVoyageNumberWithLock(voyageNumber)
-                .orElseThrow(() -> new ResourceNotFoundException("Voyage lifecycle state not found for: " + voyageNumber));
+        VoyageLifecycleState state = findOrThrow(voyageNumber);
 
         int offsetMinutes = state.getVesselClockOffsetMinutes() != null ? state.getVesselClockOffsetMinutes() : 0;
         ZoneOffset zoneOffset = ZoneOffset.ofTotalSeconds(offsetMinutes * 60);

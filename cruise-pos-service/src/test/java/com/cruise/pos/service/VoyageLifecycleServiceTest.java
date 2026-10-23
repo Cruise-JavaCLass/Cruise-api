@@ -182,7 +182,7 @@ class VoyageLifecycleServiceTest {
         sampleState.setCurrentTimezone("Europe/Athens");
         sampleState.setVesselClockOffsetMinutes(120);
 
-        when(stateRepository.findByVoyageNumberWithLock("VOY-2026-MED-05")).thenReturn(Optional.of(sampleState));
+        when(stateRepository.findByVoyageNumber("VOY-2026-MED-05")).thenReturn(Optional.of(sampleState));
 
         TimezoneShiftScheduleResponse res = voyageLifecycleService.getTimezoneSchedule("VOY-2026-MED-05");
 
