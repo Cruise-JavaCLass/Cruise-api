@@ -6,6 +6,7 @@ import com.cruise.activity.entity.SolasMusterCheckin;
 import com.cruise.activity.entity.SolasMusterIncident;
 import com.cruise.activity.enums.MusterStatus;
 import com.cruise.activity.enums.SolasEmergencyType;
+import com.cruise.activity.exception.MusterIncidentNotActiveException;
 import com.cruise.activity.exception.ResourceNotFoundException;
 import com.cruise.activity.repository.PassengerRepository;
 import com.cruise.activity.repository.SolasMusterCheckinRepository;
@@ -150,7 +151,7 @@ class SolasMusterEmergencyServiceTest {
     }
 
     @Test
-    @DisplayName("checkinPassengerToMusterStation: throws IllegalStateException if incident is not active")
+    @DisplayName("checkinPassengerToMusterStation: throws MusterIncidentNotActiveException if incident is not active")
     void testCheckinPassenger_InactiveIncidentThrows() {
         SolasMusterIncident incident = SolasMusterIncident.builder()
                 .status(MusterStatus.ALL_CLEAR)
@@ -166,7 +167,7 @@ class SolasMusterEmergencyServiceTest {
                 .build();
 
         assertThatThrownBy(() -> emergencyService.checkinPassengerToMusterStation(req))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(MusterIncidentNotActiveException.class)
                 .hasMessageContaining("not active");
     }
 
@@ -222,7 +223,8 @@ class SolasMusterEmergencyServiceTest {
         SolasMusterIncidentDto dto = emergencyService.checkinPassengerToMusterStation(req);
 
         assertThat(dto).isNotNull();
-        verify(checkinRepository, never()).save(any());
+        verify(checkinRepository, never()).saveAndFlush(any());
+        verify(incidentRepository, never()).save(any());
     }
 
     @Test
@@ -275,7 +277,7 @@ class SolasMusterEmergencyServiceTest {
     }
 
     @Test
-    @DisplayName("setAllClear: throws IllegalStateException if incident is already ALL_CLEAR")
+    @DisplayName("setAllClear: throws MusterIncidentNotActiveException if incident is already ALL_CLEAR")
     void testSetAllClear_AlreadyAllClearThrows() {
         SolasMusterIncident incident = SolasMusterIncident.builder()
                 .status(MusterStatus.ALL_CLEAR)
@@ -285,7 +287,7 @@ class SolasMusterEmergencyServiceTest {
         when(incidentRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(incident));
 
         assertThatThrownBy(() -> emergencyService.setAllClear(10L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(MusterIncidentNotActiveException.class)
                 .hasMessageContaining("Cannot declare ALL_CLEAR");
     }
 
