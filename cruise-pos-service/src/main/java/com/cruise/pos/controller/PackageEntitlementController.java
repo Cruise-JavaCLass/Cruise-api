@@ -16,6 +16,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/pos/entitlements")
@@ -23,13 +24,17 @@ import java.util.List;
 @Slf4j
 public class PackageEntitlementController {
 
+    private static final Set<String> ALLOWED_STAFF_ROLES = Set.of(
+            "ROLE_CASHIER", "ROLE_STAFF", "ROLE_ADMIN", "ROLE_MANAGER", "ROLE_FINANCE_FRONT_DESK"
+    );
+
     private final PackageEntitlementRuleEngine entitlementRuleEngine;
     private final GuestPackageEntitlementRepository entitlementRepository;
     private final com.cruise.pos.service.PackageEntitlementLedgerService ledgerService;
 
     @PostMapping("/evaluate")
     public ApiResponse<EntitlementEvaluateResponse> evaluateCart(@Valid @RequestBody EntitlementEvaluateRequest request) {
-        verifyPosAccess(request.getPassengerId());
+        verifyReadAccess(request.getPassengerId());
         log.info("Evaluating entitlements for passengerId: {}, items count: {}", request.getPassengerId(), request.getItems() != null ? request.getItems().size() : 0);
         EntitlementEvaluateResponse response = entitlementRuleEngine.evaluateCartEntitlements(request);
         return ApiResponse.ok(response);
@@ -37,7 +42,7 @@ public class PackageEntitlementController {
 
     @PostMapping("/deduct")
     public ApiResponse<Void> deductQuota(@Valid @RequestBody com.cruise.pos.dto.EntitlementDeductRequest request) {
-        verifyPosAccess(request.getPassengerId());
+        verifyStaffMutationAccess();
         log.info("Deducting package entitlements for passengerId: {}", request.getPassengerId());
         ledgerService.deductEntitlementQuota(request);
         return ApiResponse.ok(null);
@@ -45,7 +50,7 @@ public class PackageEntitlementController {
 
     @PostMapping("/rollback")
     public ApiResponse<Void> rollbackQuota(@Valid @RequestBody com.cruise.pos.dto.EntitlementRollbackRequest request) {
-        verifyPosAccess(request.getPassengerId());
+        verifyStaffMutationAccess();
         log.info("Rolling back package entitlements for passengerId: {}", request.getPassengerId());
         ledgerService.rollbackEntitlementQuota(request);
         return ApiResponse.ok(null);
@@ -53,20 +58,35 @@ public class PackageEntitlementController {
 
     @GetMapping("/passengers/{passengerId}")
     public ApiResponse<List<GuestPackageEntitlement>> getPassengerEntitlements(@PathVariable("passengerId") Long passengerId) {
-        verifyPosAccess(passengerId);
+        verifyReadAccess(passengerId);
         log.info("Fetching active entitlements for passengerId: {}", passengerId);
         List<GuestPackageEntitlement> list = ledgerService.resolvePackageCollision(passengerId);
         return ApiResponse.ok(list);
     }
 
-    private void verifyPosAccess(Long passengerId) {
+    private void verifyStaffMutationAccess() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return; // When security is disabled/unauthenticated in test/demo mode
+        }
+        if (auth.getPrincipal() instanceof AuthPrincipal principal) {
+            String role = principal.role();
+            String normalizedRole = role != null && !role.startsWith("ROLE_") ? "ROLE_" + role : role;
+            if (normalizedRole != null && ALLOWED_STAFF_ROLES.contains(normalizedRole)) {
+                return;
+            }
+            throw new AccessDeniedException("Chỉ nhân viên POS mới có quyền thực hiện trừ hoặc hoàn quota gói đặc quyền");
+        }
+    }
+
+    private void verifyReadAccess(Long passengerId) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated() || !(auth.getPrincipal() instanceof AuthPrincipal principal)) {
             return;
         }
         String role = principal.role();
-        // Allow POS staff / cashiers / managers / admins to manage or passenger themselves
-        if (role != null && (role.contains("STAFF") || role.contains("ADMIN") || role.contains("MANAGER") || role.contains("CASHIER"))) {
+        String normalizedRole = role != null && !role.startsWith("ROLE_") ? "ROLE_" + role : role;
+        if (normalizedRole != null && ALLOWED_STAFF_ROLES.contains(normalizedRole)) {
             return;
         }
         if (principal.username() == null) {

@@ -62,6 +62,7 @@ public class PackageEntitlementRuleEngine {
                 String lastAppliedPkgName = null;
                 Long lastAppliedEntitlementId = null;
                 int totalQuotaDeducted = 0;
+                List<EntitlementEvaluateResponse.PackageCoverageDetail> appliedCoverages = new ArrayList<>();
 
                 // Loop through applicable packages until covered or no quota left
                 for (GuestPackageEntitlement pkg : activePackages) {
@@ -83,6 +84,13 @@ public class PackageEntitlementRuleEngine {
                                 : item.getUnitPrice();
                         BigDecimal coveredPart = coveredPerUnit.multiply(BigDecimal.valueOf(unitsToCover));
                         totalItemCovered = totalItemCovered.add(coveredPart);
+
+                        appliedCoverages.add(EntitlementEvaluateResponse.PackageCoverageDetail.builder()
+                                .entitlementId(pkg.getId())
+                                .packageName(pkg.getPackageName())
+                                .unitsCovered(unitsToCover)
+                                .amountCovered(coveredPart)
+                                .build());
                     }
                 }
 
@@ -102,6 +110,7 @@ public class PackageEntitlementRuleEngine {
                         .appliedPackageName(lastAppliedPkgName)
                         .appliedEntitlementId(lastAppliedEntitlementId)
                         .quotaDeducted(totalQuotaDeducted)
+                        .appliedCoverages(appliedCoverages)
                         .build());
             }
         }

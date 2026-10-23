@@ -30,20 +30,22 @@ public class PackageEntitlementLedgerService {
     public void deductEntitlementQuota(EntitlementDeductRequest request) {
         Objects.requireNonNull(request, "EntitlementDeductRequest must not be null");
 
+        // Idempotency: check if whole transaction deduction was already applied
+        if (request.getTransactionId() != null && !request.getTransactionId().isBlank()) {
+            boolean alreadyProcessed = auditLedgerRepository.findByTransactionIdAndEntitlementId(
+                    request.getTransactionId(), null != request.getItems() && !request.getItems().isEmpty() ? request.getItems().get(0).getEntitlementId() : -1L
+            ).stream().anyMatch(e -> "DEDUCTION".equals(e.getOperationType()));
+
+            if (alreadyProcessed) {
+                log.info("Deduction transaction {} already processed, returning idempotently", request.getTransactionId());
+                return;
+            }
+        }
+
         Instant now = Instant.now();
 
         for (EntitlementDeductRequest.DeductItem item : request.getItems()) {
-            // Idempotency check for deduction
-            if (request.getTransactionId() != null && !request.getTransactionId().isBlank()) {
-                boolean alreadyApplied = auditLedgerRepository.existsByTransactionIdAndOperationTypeAndEntitlementId(
-                        request.getTransactionId(), "DEDUCTION", item.getEntitlementId());
-                if (alreadyApplied) {
-                    log.info("Deduction already processed for txId={}, entitlementId={}, skipping",
-                            request.getTransactionId(), item.getEntitlementId());
-                    continue;
-                }
-            }
-
+            // Pessimistic lock first to serialize updates
             GuestPackageEntitlement entitlement = entitlementRepository.findByIdForUpdate(item.getEntitlementId())
                     .orElseThrow(() -> new ResourceNotFoundException("Entitlement not found: " + item.getEntitlementId()));
 
@@ -96,17 +98,7 @@ public class PackageEntitlementLedgerService {
         Objects.requireNonNull(request, "EntitlementRollbackRequest must not be null");
 
         for (EntitlementRollbackRequest.RollbackItem item : request.getItems()) {
-            // Idempotency check for rollback
-            if (request.getTransactionId() != null && !request.getTransactionId().isBlank()) {
-                boolean alreadyApplied = auditLedgerRepository.existsByTransactionIdAndOperationTypeAndEntitlementId(
-                        request.getTransactionId(), "ROLLBACK", item.getEntitlementId());
-                if (alreadyApplied) {
-                    log.info("Rollback already processed for txId={}, entitlementId={}, skipping",
-                            request.getTransactionId(), item.getEntitlementId());
-                    continue;
-                }
-            }
-
+            // Pessimistic lock first to serialize updates
             GuestPackageEntitlement entitlement = entitlementRepository.findByIdForUpdate(item.getEntitlementId())
                     .orElseThrow(() -> new ResourceNotFoundException("Entitlement not found: " + item.getEntitlementId()));
 
@@ -129,7 +121,8 @@ public class PackageEntitlementLedgerService {
                     }
                 }
                 if (netDeducted <= 0) {
-                    throw new BusinessRuleException("No prior deductions found for transaction " + request.getTransactionId() + " to rollback");
+                    log.info("No prior net deductions remaining for txId={}, entitlementId={}", request.getTransactionId(), item.getEntitlementId());
+                    continue;
                 }
                 if (unitsToRollback > netDeducted) {
                     throw new BusinessRuleException("Cannot rollback " + unitsToRollback + " units; only " + netDeducted + " units were deducted in transaction " + request.getTransactionId());

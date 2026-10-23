@@ -37,5 +37,17 @@ public class EntitlementEvaluateResponse {
         private String appliedPackageName;
         private Long appliedEntitlementId;
         private Integer quotaDeducted;
+        private List<PackageCoverageDetail> appliedCoverages;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PackageCoverageDetail {
+        private Long entitlementId;
+        private String packageName;
+        private Integer unitsCovered;
+        private BigDecimal amountCovered;
     }
 }
