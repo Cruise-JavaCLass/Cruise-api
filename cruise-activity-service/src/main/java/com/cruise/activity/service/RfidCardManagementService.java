@@ -98,24 +98,41 @@ public class RfidCardManagementService {
         card.setBlacklistReason(request.getReason());
         card.setBlacklistedBy(request.getReportedBy() != null ? request.getReportedBy() : "Security / Front Desk");
 
-        Long affectedPassengerId = card.getAssignedPassengerId();
+        final Long assignedPassengerId = card.getAssignedPassengerId();
+        Long affectedPassengerId = assignedPassengerId;
         String replacementUid = null;
 
         // If this card is currently assigned to a passenger in Passenger entity (match all case variants)
         List<Passenger> passengers = passengerRepository.findAllByRfidTagIgnoreCase(uid);
         boolean hasReplacement = request.getReplacementCardUid() != null && !request.getReplacementCardUid().trim().isBlank();
-        for (int i = 0; i < passengers.size(); i++) {
-            Passenger passenger = passengers.get(i);
-            if (i == 0) {
-                affectedPassengerId = passenger.getId();
+
+        Passenger targetPassenger = null;
+        if (assignedPassengerId != null) {
+            targetPassenger = passengers.stream()
+                    .filter(p -> assignedPassengerId.equals(p.getId()))
+                    .findFirst()
+                    .orElse(null);
+            if (targetPassenger == null) {
+                targetPassenger = passengerRepository.findById(assignedPassengerId).orElse(null);
             }
-            if (i == 0 && hasReplacement) {
-                replacementUid = request.getReplacementCardUid().trim().toUpperCase();
-                pairReplacementCard(passenger, card, replacementUid);
-            } else {
-                // Clear RFID from passenger to prevent unauthorized charges
-                passenger.setRfidTag(null);
-                passengerRepository.save(passenger);
+        } else if (passengers.size() == 1) {
+            targetPassenger = passengers.get(0);
+            affectedPassengerId = targetPassenger.getId();
+        }
+
+        if (hasReplacement) {
+            if (targetPassenger == null || (passengers.size() > 1 && card.getAssignedPassengerId() == null)) {
+                throw new BusinessRuleException("Cannot unambiguously identify assigned passenger for RFID replacement");
+            }
+            replacementUid = request.getReplacementCardUid().trim().toUpperCase();
+            pairReplacementCard(targetPassenger, card, replacementUid);
+        }
+
+        // Clear RFID from any passengers that should not retain this UID
+        for (Passenger p : passengers) {
+            if (!hasReplacement || targetPassenger == null || !p.getId().equals(targetPassenger.getId())) {
+                p.setRfidTag(null);
+                passengerRepository.save(p);
             }
         }
 

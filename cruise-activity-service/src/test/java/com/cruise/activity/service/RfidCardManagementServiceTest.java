@@ -176,4 +176,70 @@ class RfidCardManagementServiceTest {
                 .isInstanceOf(com.cruise.activity.exception.BusinessRuleException.class)
                 .hasMessageContaining("Replacement card is not available");
     }
+
+    @Test
+    @DisplayName("blacklistCard: assigns replacement to passenger matching assignedPassengerId when multiple case variants match")
+    void blacklistCard_SelectsAssignedPassengerAmongMultipleMatches() {
+        Passenger otherPassenger = Passenger.builder()
+                .tourId(10L)
+                .fullName("Clark Kent")
+                .cabinNumber("CABIN-101")
+                .rfidTag("UID-DUP")
+                .build();
+        otherPassenger.setId(99L);
+
+        RfidCardInventory oldCard = RfidCardInventory.builder()
+                .cardUid("UID-DUP")
+                .status(RfidCardStatus.ISSUED)
+                .assignedPassengerId(88L)
+                .build();
+
+        when(rfidRepository.findByCardUid("UID-DUP")).thenReturn(Optional.of(oldCard));
+        when(passengerRepository.findAllByRfidTagIgnoreCase("UID-DUP")).thenReturn(List.of(otherPassenger, passenger));
+        when(rfidRepository.findByCardUid("UID-NEW-REPLACEMENT")).thenReturn(Optional.empty());
+
+        BlacklistRfidCardRequest request = BlacklistRfidCardRequest.builder()
+                .cardUid("UID-DUP")
+                .reason("DAMAGED")
+                .replacementCardUid("UID-NEW-REPLACEMENT")
+                .build();
+
+        BlacklistRfidCardResponse response = rfidService.blacklistCard(request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getAffectedPassengerId()).isEqualTo(88L);
+        assertThat(passenger.getRfidTag()).isEqualTo("UID-NEW-REPLACEMENT");
+        assertThat(otherPassenger.getRfidTag()).isNull();
+    }
+
+    @Test
+    @DisplayName("blacklistCard: throws exception when assigned passenger is ambiguous with multiple matches")
+    void blacklistCard_AmbiguousPassenger_ThrowsException() {
+        Passenger otherPassenger = Passenger.builder()
+                .tourId(10L)
+                .fullName("Diana Prince")
+                .cabinNumber("CABIN-102")
+                .rfidTag("UID-AMB")
+                .build();
+        otherPassenger.setId(77L);
+
+        RfidCardInventory oldCard = RfidCardInventory.builder()
+                .cardUid("UID-AMB")
+                .status(RfidCardStatus.ISSUED)
+                .assignedPassengerId(null) // Unambiguous assignment missing
+                .build();
+
+        when(rfidRepository.findByCardUid("UID-AMB")).thenReturn(Optional.of(oldCard));
+        when(passengerRepository.findAllByRfidTagIgnoreCase("UID-AMB")).thenReturn(List.of(otherPassenger, passenger));
+
+        BlacklistRfidCardRequest request = BlacklistRfidCardRequest.builder()
+                .cardUid("UID-AMB")
+                .reason("STOLEN")
+                .replacementCardUid("UID-NEW-REPLACEMENT")
+                .build();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> rfidService.blacklistCard(request))
+                .isInstanceOf(com.cruise.activity.exception.BusinessRuleException.class)
+                .hasMessageContaining("Cannot unambiguously identify assigned passenger");
+    }
 }
