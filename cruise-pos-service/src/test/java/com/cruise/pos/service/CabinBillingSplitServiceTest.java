@@ -235,4 +235,180 @@ class CabinBillingSplitServiceTest {
                 .isInstanceOf(InsufficientFolioBalanceException.class)
                 .hasMessageContaining("Over-limit Lock");
     }
+
+    @Test
+    @DisplayName("Should return cabin members when getCabinMembers is called")
+    void testGetCabinMembers() {
+        when(memberRepository.existsByCabinNumber("CABIN-7012")).thenReturn(true);
+        when(memberRepository.findByCabinNumber("CABIN-7012")).thenReturn(List.of(adultMember1, adultMember2));
+
+        List<CabinMemberDto> result = billingSplitService.getCabinMembers("CABIN-7012");
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).getGuestName()).isEqualTo("Nguyễn Văn An");
+        assertThat(result.get(0).getAvailableLimit()).isEqualByComparingTo("800.00"); // 1000 - 200
+        assertThat(result.get(1).getGuestName()).isEqualTo("Trần Thị Mai");
+    }
+
+    @Test
+    @DisplayName("Should seed primary guest when cabin has no members yet")
+    void testEnsureSeededCabinMembersWhenEmpty() {
+        when(memberRepository.existsByCabinNumber("CABIN-9999")).thenReturn(false);
+        when(folioRepository.findByCabinNumber("CABIN-9999")).thenReturn(Optional.of(activeFolio));
+        when(memberRepository.findByCabinNumber("CABIN-9999")).thenReturn(List.of());
+
+        billingSplitService.getCabinMembers("CABIN-9999");
+
+        verify(memberRepository, times(1)).save(any(CabinMember.class));
+    }
+
+    @Test
+    @DisplayName("Should get signature by transaction UUID successfully")
+    void testGetSignatureByTransactionUuidSuccess() {
+        PosSignature sig = PosSignature.builder()
+                .transactionUuid("TX-SIG-VALID")
+                .signerName("Nguyễn Văn An")
+                .signatureImageBase64("validbase64string...")
+                .sha256Checksum("checksum123")
+                .build();
+        sig.setId(10L);
+
+        when(signatureRepository.findByTransactionUuid("TX-SIG-VALID")).thenReturn(Optional.of(sig));
+
+        SignatureResponse res = billingSplitService.getSignatureByTransactionUuid("TX-SIG-VALID");
+
+        assertThat(res).isNotNull();
+        assertThat(res.getTransactionUuid()).isEqualTo("TX-SIG-VALID");
+        assertThat(res.getSignerName()).isEqualTo("Nguyễn Văn An");
+    }
+
+    @Test
+    @DisplayName("Should throw ResourceNotFoundException when signature not found")
+    void testGetSignatureByTransactionUuidNotFound() {
+        when(signatureRepository.findByTransactionUuid("TX-NON-EXISTENT")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> billingSplitService.getSignatureByTransactionUuid("TX-NON-EXISTENT"))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Không tìm thấy chữ ký số");
+    }
+
+    @Test
+    @DisplayName("Should throw InsufficientFolioBalanceException when total split exceeds cabin credit limit")
+    void testProcessSplitBillingTotalExceedsCabinLimit() {
+        // activeFolio limit 2000, balance 500 -> avail 1500. Request total 1600.
+        when(folioRepository.findByCabinNumberWithLock("CABIN-7012")).thenReturn(Optional.of(activeFolio));
+        when(memberRepository.existsByCabinNumber("CABIN-7012")).thenReturn(true);
+
+        CabinSplitBillingRequest req = CabinSplitBillingRequest.builder()
+                .cabinNumber("CABIN-7012")
+                .splitShares(List.of(
+                        CabinSplitShareRequest.builder().passengerId(101L).amount(new BigDecimal("1600.00")).build()
+                ))
+                .build();
+
+        assertThatThrownBy(() -> billingSplitService.processSplitBilling(req))
+                .isInstanceOf(InsufficientFolioBalanceException.class)
+                .hasMessageContaining("không đủ hạn mức tín dụng");
+    }
+
+    @Test
+    @DisplayName("Should reject invalid share amounts (<= 0 or null)")
+    void testProcessSplitBillingInvalidShareAmount() {
+        when(folioRepository.findByCabinNumberWithLock("CABIN-7012")).thenReturn(Optional.of(activeFolio));
+        when(memberRepository.existsByCabinNumber("CABIN-7012")).thenReturn(true);
+
+        CabinSplitBillingRequest req = CabinSplitBillingRequest.builder()
+                .cabinNumber("CABIN-7012")
+                .splitShares(List.of(
+                        CabinSplitShareRequest.builder().passengerId(101L).amount(BigDecimal.ZERO).build()
+                ))
+                .build();
+
+        assertThatThrownBy(() -> billingSplitService.processSplitBilling(req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("lớn hơn 0");
+    }
+
+    @Test
+    @DisplayName("Should reject split share when passenger does not belong to cabin")
+    void testProcessSplitBillingMemberNotInCabin() {
+        when(folioRepository.findByCabinNumberWithLock("CABIN-7012")).thenReturn(Optional.of(activeFolio));
+        when(memberRepository.existsByCabinNumber("CABIN-7012")).thenReturn(true);
+        when(memberRepository.findByCabinNumberAndPassengerId("CABIN-7012", 999L)).thenReturn(Optional.empty());
+
+        CabinSplitBillingRequest req = CabinSplitBillingRequest.builder()
+                .cabinNumber("CABIN-7012")
+                .splitShares(List.of(
+                        CabinSplitShareRequest.builder().passengerId(999L).amount(new BigDecimal("50.00")).build()
+                ))
+                .build();
+
+        assertThatThrownBy(() -> billingSplitService.processSplitBilling(req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("không thuộc phòng");
+    }
+
+    @Test
+    @DisplayName("Should process split billing with signature archival in share and null member individual limit")
+    void testProcessSplitBillingWithSignatureAndNullIndividualLimit() {
+        CabinMember memberNoLimit = CabinMember.builder()
+                .cabinNumber("CABIN-7012")
+                .passengerId(104L)
+                .guestName("Lê Khách")
+                .isMinor(false)
+                .isAuthorizedSigner(true)
+                .individualCreditLimit(null)
+                .build();
+
+        when(folioRepository.findByCabinNumberWithLock("CABIN-7012")).thenReturn(Optional.of(activeFolio));
+        when(memberRepository.existsByCabinNumber("CABIN-7012")).thenReturn(true);
+        when(memberRepository.findByCabinNumberAndPassengerId("CABIN-7012", 104L)).thenReturn(Optional.of(memberNoLimit));
+        when(transactionRepository.save(any(PosTransaction.class))).thenAnswer(inv -> {
+            PosTransaction tx = inv.getArgument(0);
+            tx.setId(777L);
+            return tx;
+        });
+        when(signatureRepository.existsByTransactionUuid(any())).thenReturn(false);
+        when(signatureRepository.save(any(PosSignature.class))).thenAnswer(inv -> {
+            PosSignature s = inv.getArgument(0);
+            s.setId(888L);
+            return s;
+        });
+
+        String sigBase64 = "data:image/png;base64,VkFMSURfVEVTVF9ESUdJVEFMX1NJR05BVFVSRV9QQVlMT0FEX0ZPUl9VTklUX1RFU1RJTkc=";
+        CabinSplitBillingRequest req = CabinSplitBillingRequest.builder()
+                .cabinNumber("CABIN-7012")
+                .cashierId("CASHIER-99")
+                .splitShares(List.of(
+                        CabinSplitShareRequest.builder()
+                                .passengerId(104L)
+                                .amount(new BigDecimal("100.00"))
+                                .signatureBase64(sigBase64)
+                                .build()
+                ))
+                .build();
+
+        CabinSplitBillingResponse res = billingSplitService.processSplitBilling(req);
+
+        assertThat(res).isNotNull();
+        assertThat(res.getSplits().get(0).isSignatureArchived()).isTrue();
+        verify(signatureRepository, times(1)).save(any(PosSignature.class));
+    }
+
+    @Test
+    @DisplayName("Should reject invalid non-base64 characters in signature archive")
+    void testArchiveSignatureInvalidBase64() {
+        ArchiveSignatureRequest invalidBase64Req = ArchiveSignatureRequest.builder()
+                .transactionUuid("TX-SIG-BAD")
+                .cabinNumber("CABIN-7012")
+                .signerName("Nguyễn Văn An")
+                .signatureImageBase64("this_is_a_very_long_string_with_invalid_characters_!!!@@@###$$$%%%")
+                .build();
+
+        when(signatureRepository.existsByTransactionUuid("TX-SIG-BAD")).thenReturn(false);
+
+        assertThatThrownBy(() -> billingSplitService.archiveSignature(invalidBase64Req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Định dạng dữ liệu chữ ký Base64 không hợp lệ");
+    }
 }

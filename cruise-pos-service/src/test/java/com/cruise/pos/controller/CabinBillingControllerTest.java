@@ -156,4 +156,24 @@ class CabinBillingControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.sha256Checksum").isString());
     }
+
+    @Test
+    @DisplayName("GET /api/pos/cabin-billing/signatures/{transactionUuid} should return signature")
+    void testGetSignature() throws Exception {
+        SignatureResponse res = SignatureResponse.builder()
+                .id(1L)
+                .transactionUuid("TX-SIG-01")
+                .signerName("Nguyễn Văn An")
+                .sha256Checksum("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+                .createdAt(Instant.now())
+                .build();
+
+        when(billingSplitService.getSignatureByTransactionUuid("TX-SIG-01")).thenReturn(res);
+
+        mockMvc.perform(get("/api/pos/cabin-billing/signatures/TX-SIG-01"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.transactionUuid").value("TX-SIG-01"))
+                .andExpect(jsonPath("$.data.signerName").value("Nguyễn Văn An"));
+    }
 }

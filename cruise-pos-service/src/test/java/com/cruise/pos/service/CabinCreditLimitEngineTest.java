@@ -139,4 +139,106 @@ class CabinCreditLimitEngineTest {
         assertThat(res.isLocked()).isTrue();
         assertThat(res.getLockReason()).contains("Folio Locked");
     }
+
+    @Test
+    @DisplayName("Should lock charge when folio is not ACTIVE (e.g. FROZEN/CLOSED)")
+    void testCheckCreditLimitInactiveFolio() {
+        activeFolio.setStatus(FolioStatus.FROZEN);
+        when(folioRepository.findByCabinNumber("CABIN-7012")).thenReturn(Optional.of(activeFolio));
+
+        CabinCreditLimitCheckRequest req = CabinCreditLimitCheckRequest.builder()
+                .amount(BigDecimal.valueOf(20.00))
+                .build();
+
+        CabinCreditLimitCheckResponse res = creditLimitEngine.checkCreditLimit("CABIN-7012", req);
+
+        assertThat(res.isAllowed()).isFalse();
+        assertThat(res.isLocked()).isTrue();
+        assertThat(res.getLockReason()).contains("FROZEN");
+    }
+
+    @Test
+    @DisplayName("Should lock charge when passenger does not belong to cabin")
+    void testCheckCreditLimitMemberNotFound() {
+        when(folioRepository.findByCabinNumber("CABIN-7012")).thenReturn(Optional.of(activeFolio));
+        when(memberRepository.findByCabinNumberAndPassengerId("CABIN-7012", 999L)).thenReturn(Optional.empty());
+
+        CabinCreditLimitCheckRequest req = CabinCreditLimitCheckRequest.builder()
+                .amount(BigDecimal.valueOf(20.00))
+                .passengerId(999L)
+                .build();
+
+        CabinCreditLimitCheckResponse res = creditLimitEngine.checkCreditLimit("CABIN-7012", req);
+
+        assertThat(res.isAllowed()).isFalse();
+        assertThat(res.isLocked()).isTrue();
+        assertThat(res.getLockReason()).contains("Hành khách không thuộc phòng CABIN-7012");
+    }
+
+    @Test
+    @DisplayName("Should lock charge when member individual credit limit is exceeded")
+    void testCheckCreditLimitMemberOverLimit() {
+        when(folioRepository.findByCabinNumber("CABIN-7012")).thenReturn(Optional.of(activeFolio));
+        when(memberRepository.findByCabinNumberAndPassengerId("CABIN-7012", 101L)).thenReturn(Optional.of(adultMember));
+
+        // adultMember: limit 400, balance 100 -> avail 300. Request 350.
+        CabinCreditLimitCheckRequest req = CabinCreditLimitCheckRequest.builder()
+                .amount(BigDecimal.valueOf(350.00))
+                .passengerId(101L)
+                .build();
+
+        CabinCreditLimitCheckResponse res = creditLimitEngine.checkCreditLimit("CABIN-7012", req);
+
+        assertThat(res.isAllowed()).isFalse();
+        assertThat(res.isLocked()).isTrue();
+        assertThat(res.isOverLimit()).isTrue();
+        assertThat(res.getLockReason()).contains("Member Over-limit");
+        assertThat(res.getMemberCreditLimit()).isEqualByComparingTo(BigDecimal.valueOf(400.00));
+        assertThat(res.getMemberCurrentBalance()).isEqualByComparingTo(BigDecimal.valueOf(100.00));
+        assertThat(res.getMemberAvailableLimit()).isEqualByComparingTo(BigDecimal.valueOf(300.00));
+    }
+
+    @Test
+    @DisplayName("Should approve charge when member has null individualCreditLimit")
+    void testCheckCreditLimitMemberWithNullIndividualCreditLimit() {
+        CabinMember memberWithoutLimit = CabinMember.builder()
+                .cabinNumber("CABIN-7012")
+                .passengerId(105L)
+                .guestName("Nguyễn Khách")
+                .isMinor(false)
+                .isAuthorizedSigner(true)
+                .individualCreditLimit(null)
+                .build();
+
+        when(folioRepository.findByCabinNumber("CABIN-7012")).thenReturn(Optional.of(activeFolio));
+        when(memberRepository.findByCabinNumberAndPassengerId("CABIN-7012", 105L)).thenReturn(Optional.of(memberWithoutLimit));
+
+        CabinCreditLimitCheckRequest req = CabinCreditLimitCheckRequest.builder()
+                .amount(BigDecimal.valueOf(50.00))
+                .passengerId(105L)
+                .build();
+
+        CabinCreditLimitCheckResponse res = creditLimitEngine.checkCreditLimit("CABIN-7012", req);
+
+        assertThat(res.isAllowed()).isTrue();
+        assertThat(res.isLocked()).isFalse();
+        assertThat(res.isOverLimit()).isFalse();
+    }
+
+    @Test
+    @DisplayName("Should approve charge when passengerId is not specified in request")
+    void testCheckCreditLimitNullPassengerIdApproved() {
+        when(folioRepository.findByCabinNumber("CABIN-7012")).thenReturn(Optional.of(activeFolio));
+
+        CabinCreditLimitCheckRequest req = CabinCreditLimitCheckRequest.builder()
+                .amount(BigDecimal.valueOf(50.00))
+                .passengerId(null)
+                .build();
+
+        CabinCreditLimitCheckResponse res = creditLimitEngine.checkCreditLimit("CABIN-7012", req);
+
+        assertThat(res.isAllowed()).isTrue();
+        assertThat(res.isLocked()).isFalse();
+        assertThat(res.isOverLimit()).isFalse();
+    }
 }
