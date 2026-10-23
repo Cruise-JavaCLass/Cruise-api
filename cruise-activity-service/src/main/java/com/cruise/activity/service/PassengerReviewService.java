@@ -1,19 +1,30 @@
 package com.cruise.activity.service;
 
+import com.cruise.activity.dto.FeedbackAnalyticsDto;
 import com.cruise.activity.dto.PassengerServiceReviewResponse;
 import com.cruise.activity.dto.SubmitPassengerReviewRequest;
+import com.cruise.activity.dto.TriageReviewRequest;
 import com.cruise.activity.entity.PassengerServiceReview;
+import com.cruise.activity.enums.FeedbackCategory;
 import com.cruise.activity.enums.FeedbackStatus;
 import com.cruise.activity.exception.BusinessRuleException;
+import com.cruise.activity.exception.ResourceNotFoundException;
+import com.cruise.activity.repository.PassengerRepository;
 import com.cruise.activity.repository.PassengerServiceReviewRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -22,6 +33,7 @@ public class PassengerReviewService {
 
     private static final int MAX_SUBMISSIONS_PER_HOUR = 5;
     private final PassengerServiceReviewRepository reviewRepository;
+    private final PassengerRepository passengerRepository;
 
     public String computeSentiment(int rating) {
         if (rating >= 4) return "POSITIVE";
@@ -32,6 +44,11 @@ public class PassengerReviewService {
     @Transactional
     public PassengerServiceReviewResponse submitReview(SubmitPassengerReviewRequest request) {
         Objects.requireNonNull(request, "SubmitPassengerReviewRequest must not be null");
+
+        // Serialize review submissions per passenger
+        if (request.getPassengerId() != null) {
+            passengerRepository.findByIdForUpdate(request.getPassengerId());
+        }
 
         // Anti-spam validation: no more than 5 reviews submitted in past hour by same passenger
         Instant oneHourAgo = Instant.now().minus(1, ChronoUnit.HOURS);
@@ -68,9 +85,9 @@ public class PassengerReviewService {
     }
 
     @Transactional
-    public PassengerServiceReviewResponse triageReview(Long reviewId, com.cruise.activity.dto.TriageReviewRequest request) {
+    public PassengerServiceReviewResponse triageReview(Long reviewId, TriageReviewRequest request) {
         PassengerServiceReview review = reviewRepository.findById(reviewId)
-                .orElseThrow(() -> new com.cruise.activity.exception.ResourceNotFoundException("Review not found with id: " + reviewId));
+                .orElseThrow(() -> new ResourceNotFoundException("Review not found with id: " + reviewId));
 
         review.setStatus(request.getStatus());
         if (request.getAdminNotes() != null) {
@@ -79,8 +96,15 @@ public class PassengerReviewService {
         if (request.getResolvedBy() != null) {
             review.setResolvedBy(request.getResolvedBy());
         }
-        if (request.getStatus() == FeedbackStatus.RESOLVED || request.getStatus() == FeedbackStatus.DISMISSED) {
-            review.setResolvedAt(Instant.now());
+
+        boolean closed = request.getStatus() == FeedbackStatus.RESOLVED || request.getStatus() == FeedbackStatus.DISMISSED;
+        if (closed) {
+            if (review.getResolvedAt() == null) {
+                review.setResolvedAt(Instant.now());
+            }
+        } else {
+            review.setResolvedAt(null);
+            review.setResolvedBy(null);
         }
 
         reviewRepository.save(review);
@@ -89,18 +113,18 @@ public class PassengerReviewService {
     }
 
     @Transactional(readOnly = true)
-    public com.cruise.activity.dto.FeedbackAnalyticsDto getFeedbackAnalytics() {
+    public FeedbackAnalyticsDto getFeedbackAnalytics() {
         var all = reviewRepository.findAll();
         long total = all.size();
         if (total == 0) {
-            return com.cruise.activity.dto.FeedbackAnalyticsDto.builder()
+            return FeedbackAnalyticsDto.builder()
                     .totalReviews(0L)
                     .averageRating(0.0)
                     .lowRatingAlertCount(0L)
                     .escalatedCount(0L)
                     .resolvedCount(0L)
-                    .ratingDistribution(java.util.Map.of(1, 0L, 2, 0L, 3, 0L, 4, 0L, 5, 0L))
-                    .categoryAverages(java.util.Collections.emptyMap())
+                    .ratingDistribution(Map.of(1, 0L, 2, 0L, 3, 0L, 4, 0L, 5, 0L))
+                    .categoryAverages(Collections.emptyMap())
                     .build();
         }
 
@@ -109,19 +133,19 @@ public class PassengerReviewService {
         long escalated = all.stream().filter(r -> r.getStatus() == FeedbackStatus.ESCALATED).count();
         long resolved = all.stream().filter(r -> r.getStatus() == FeedbackStatus.RESOLVED).count();
 
-        java.util.Map<Integer, Long> dist = new java.util.HashMap<>();
+        Map<Integer, Long> dist = new HashMap<>();
         for (int i = 1; i <= 5; i++) dist.put(i, 0L);
         for (PassengerServiceReview r : all) {
             dist.put(r.getRating(), dist.getOrDefault(r.getRating(), 0L) + 1);
         }
 
-        java.util.Map<com.cruise.activity.enums.FeedbackCategory, Double> catAvg = all.stream()
-                .collect(java.util.stream.Collectors.groupingBy(
+        Map<FeedbackCategory, Double> catAvg = all.stream()
+                .collect(Collectors.groupingBy(
                         PassengerServiceReview::getCategory,
-                        java.util.stream.Collectors.averagingInt(PassengerServiceReview::getRating)
+                        Collectors.averagingInt(PassengerServiceReview::getRating)
                 ));
 
-        return com.cruise.activity.dto.FeedbackAnalyticsDto.builder()
+        return FeedbackAnalyticsDto.builder()
                 .totalReviews(total)
                 .averageRating(Math.round(avgRating * 10.0) / 10.0)
                 .lowRatingAlertCount(lowAlerts)
@@ -133,34 +157,34 @@ public class PassengerReviewService {
     }
 
     @Transactional(readOnly = true)
-    public org.springframework.data.domain.Page<PassengerServiceReviewResponse> searchReviews(
-            com.cruise.activity.enums.FeedbackStatus status,
-            com.cruise.activity.enums.FeedbackCategory category,
+    public Page<PassengerServiceReviewResponse> searchReviews(
+            FeedbackStatus status,
+            FeedbackCategory category,
             Boolean isAlert,
-            org.springframework.data.domain.Pageable pageable
+            Pageable pageable
     ) {
         return reviewRepository.searchReviews(status, category, isAlert, pageable)
                 .map(this::mapToResponse);
     }
 
-    public PassengerServiceReviewResponse mapToResponse(PassengerServiceReview review) {
+    private PassengerServiceReviewResponse mapToResponse(PassengerServiceReview r) {
         return PassengerServiceReviewResponse.builder()
-                .id(review.getId())
-                .passengerId(review.getPassengerId())
-                .passengerName(review.getPassengerName())
-                .cabinNumber(review.getCabinNumber())
-                .category(review.getCategory())
-                .rating(review.getRating())
-                .sentiment(review.getSentiment())
-                .comments(review.getComments())
-                .serviceOutlet(review.getServiceOutlet())
-                .status(review.getStatus())
-                .isLowRatingAlert(review.getIsLowRatingAlert())
-                .escalationReason(review.getEscalationReason())
-                .adminNotes(review.getAdminNotes())
-                .resolvedBy(review.getResolvedBy())
-                .resolvedAt(review.getResolvedAt())
-                .createdAt(review.getCreatedAt())
+                .id(r.getId())
+                .passengerId(r.getPassengerId())
+                .passengerName(r.getPassengerName())
+                .cabinNumber(r.getCabinNumber())
+                .category(r.getCategory())
+                .rating(r.getRating())
+                .sentiment(r.getSentiment())
+                .comments(r.getComments())
+                .serviceOutlet(r.getServiceOutlet())
+                .status(r.getStatus())
+                .isLowRatingAlert(r.getIsLowRatingAlert())
+                .escalationReason(r.getEscalationReason())
+                .adminNotes(r.getAdminNotes())
+                .resolvedAt(r.getResolvedAt())
+                .resolvedBy(r.getResolvedBy())
+                .createdAt(r.getCreatedAt())
                 .build();
     }
 }
