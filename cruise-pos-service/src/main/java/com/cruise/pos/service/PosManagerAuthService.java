@@ -23,8 +23,14 @@ public class PosManagerAuthService {
             "MGR-ADMIN", "888df25ae35772424a560c7152a1de794440e0ea5cfee62828333a456a506e05"
     ));
 
-    private final Map<String, AtomicInteger> failedAttempts = new ConcurrentHashMap<>();
+    private static class AttemptRecord {
+        final AtomicInteger count = new AtomicInteger(0);
+        volatile long lastFailedAt = 0L;
+    }
+
+    private final Map<String, AttemptRecord> failedAttempts = new ConcurrentHashMap<>();
     private static final int MAX_FAILED_ATTEMPTS = 5;
+    private static final long LOCKOUT_DURATION_MS = 5 * 60 * 1000L;
 
     public Map<String, String> getManagers() {
         return managers;
@@ -45,16 +51,19 @@ public class PosManagerAuthService {
 
         String normalizedId = managerId.trim().toUpperCase();
 
-        // Rate-limiting / brute-force protection per manager ID
-        AtomicInteger attempts = failedAttempts.computeIfAbsent(normalizedId, k -> new AtomicInteger(0));
-        if (attempts.get() >= MAX_FAILED_ATTEMPTS) {
+        // Only track attempts for known managers to prevent memory exhaustion from arbitrary IDs
+        String expectedHash = managers.get(normalizedId);
+        if (expectedHash == null) {
             return false;
         }
 
-        String expectedHash = managers.get(normalizedId);
-        if (expectedHash == null) {
-            attempts.incrementAndGet();
-            return false;
+        AttemptRecord record = failedAttempts.computeIfAbsent(normalizedId, k -> new AttemptRecord());
+        long now = System.currentTimeMillis();
+        if (record.count.get() >= MAX_FAILED_ATTEMPTS) {
+            if (now - record.lastFailedAt < LOCKOUT_DURATION_MS) {
+                return false;
+            }
+            record.count.set(0);
         }
 
         try {
@@ -68,10 +77,11 @@ public class PosManagerAuthService {
             );
 
             if (match) {
-                attempts.set(0); // Reset on success
+                record.count.set(0); // Reset on success
                 return true;
             } else {
-                attempts.incrementAndGet();
+                record.count.incrementAndGet();
+                record.lastFailedAt = System.currentTimeMillis();
                 return false;
             }
         } catch (NoSuchAlgorithmException e) {
