@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
@@ -21,6 +22,7 @@ public record InitiateVoyageClosureRequest(
 
         @NotBlank(message = "itineraryName is required")
         @Size(max = 128, message = "itineraryName cannot exceed 128 characters")
+        @Pattern(regexp = "^[^\\r\\n]+$", message = "itineraryName cannot contain CR or LF characters")
         String itineraryName,
 
         @NotNull(message = "voyageStartDate is required")

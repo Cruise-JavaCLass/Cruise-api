@@ -276,6 +276,7 @@ class VoyageAnalyticsServiceTest {
     void testDispatchExecutiveEmail() {
         VoyageFinancialClosure closure = VoyageFinancialClosure.builder()
                 .voyageNumber("VOY-EMAIL-01")
+                .itineraryName("Sample Itinerary")
                 .build();
         when(closureRepository.findByVoyageNumber("VOY-EMAIL-01")).thenReturn(Optional.of(closure));
 
@@ -288,6 +289,43 @@ class VoyageAnalyticsServiceTest {
         voyageAnalyticsService.dispatchExecutiveEmail("VOY-EMAIL-01", request, "EXECUTIVE_CONTROLLER");
 
         verify(auditLogRepository).save(any(PosAuditLog.class));
+    }
+
+    @Test
+    @DisplayName("dispatchExecutiveEmail: rejects CRLF or invalid recipient and CC emails")
+    void testDispatchExecutiveEmailRejectsCrlfOrInvalidEmails() {
+        DispatchExecutiveSummaryEmailRequest crlfRecipient = new DispatchExecutiveSummaryEmailRequest(
+                "exec\r\n@cruise.com",
+                "note",
+                java.util.List.of("cc@cruise.com")
+        );
+        assertThatThrownBy(() -> voyageAnalyticsService.dispatchExecutiveEmail("VOY-1", crlfRecipient, "ACTOR"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Invalid recipient email");
+
+        DispatchExecutiveSummaryEmailRequest crlfCc = new DispatchExecutiveSummaryEmailRequest(
+                "exec@cruise.com",
+                "note",
+                java.util.List.of("bad\ncc@cruise.com")
+        );
+        assertThatThrownBy(() -> voyageAnalyticsService.dispatchExecutiveEmail("VOY-1", crlfCc, "ACTOR"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Invalid CC email");
+    }
+
+    @Test
+    @DisplayName("initiateVoyageClosure: rejects itineraryName with CRLF characters")
+    void testInitiateVoyageClosureRejectsCrlfItinerary() {
+        InitiateVoyageClosureRequest req = new InitiateVoyageClosureRequest(
+                "VOY-CRLF", "SHIP-1", "Itinerary\r\nInjected",
+                startDate, endDate,
+                1000, 800, BigDecimal.valueOf(500000.00),
+                null, null, null, null, null, null, null
+        );
+
+        assertThatThrownBy(() -> voyageAnalyticsService.initiateVoyageClosure(req, "ADMIN"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("itineraryName cannot contain CR or LF");
     }
 
     @Test

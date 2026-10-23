@@ -30,11 +30,15 @@ import java.text.Normalizer;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class VoyageAnalyticsService {
+
+    private static final Pattern EMAIL_PATTERN =
+            Pattern.compile("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$");
 
     private final VoyageFinancialClosureRepository closureRepository;
     private final PosAuditLogRepository auditLogRepository;
@@ -43,6 +47,10 @@ public class VoyageAnalyticsService {
     public VoyageFinancialClosureDto initiateVoyageClosure(InitiateVoyageClosureRequest request, String actor) {
         log.info("Initiating voyage financial closure for voyageNumber={}, shipId={}, actor={}",
                 request.voyageNumber(), request.shipId(), actor);
+
+        if (request.itineraryName() != null && (request.itineraryName().contains("\r") || request.itineraryName().contains("\n"))) {
+            throw new BusinessRuleException("itineraryName cannot contain CR or LF characters");
+        }
 
         if (closureRepository.findByVoyageNumber(request.voyageNumber()).isPresent()) {
             throw new DuplicateResourceException("Financial closure record for voyage " + request.voyageNumber() + " already exists");
@@ -272,14 +280,38 @@ public class VoyageAnalyticsService {
 
     @Transactional
     public void dispatchExecutiveEmail(String voyageNumber, DispatchExecutiveSummaryEmailRequest request, String actor) {
+        if (request.recipientEmail() == null || request.recipientEmail().isBlank()
+                || request.recipientEmail().contains("\r") || request.recipientEmail().contains("\n")
+                || !EMAIL_PATTERN.matcher(request.recipientEmail()).matches()) {
+            throw new BusinessRuleException("Invalid recipient email format");
+        }
+
+        if (request.ccEmails() != null) {
+            for (String cc : request.ccEmails()) {
+                if (cc == null || cc.isBlank()
+                        || cc.contains("\r") || cc.contains("\n")
+                        || !EMAIL_PATTERN.matcher(cc).matches()) {
+                    throw new BusinessRuleException("Invalid CC email format: " + cc);
+                }
+            }
+        }
+
         VoyageFinancialClosure closure = findByVoyageNumberOrThrow(voyageNumber);
+        String safeItinerary = closure.getItineraryName() != null
+                ? closure.getItineraryName().replaceAll("[\\r\\n]", " ")
+                : "";
+        String safeRecipient = request.recipientEmail().replaceAll("[\\r\\n]", " ");
+        String safeCc = (request.ccEmails() != null && !request.ccEmails().isEmpty())
+                ? String.join(",", request.ccEmails()).replaceAll("[\\r\\n]", " ")
+                : "none";
+
         log.info("Executive booklet email queued for dispatch to {} for voyage {} ({})",
-                request.recipientEmail(), voyageNumber, closure.getItineraryName());
+                safeRecipient, voyageNumber, safeItinerary);
         recordAudit(
                 "EXECUTIVE_BOOKLET_EMAILED",
                 actor,
-                "Dispatched executive summary booklet for voyage " + voyageNumber + " to " + request.recipientEmail(),
-                "itinerary=" + closure.getItineraryName() + ", cc=" + (request.ccEmails() != null ? String.join(",", request.ccEmails()) : "none")
+                "Dispatched executive summary booklet for voyage " + voyageNumber + " to " + safeRecipient,
+                "itinerary=" + safeItinerary + ", cc=" + safeCc
         );
     }
 
