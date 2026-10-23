@@ -10,7 +10,6 @@ import com.cruise.pos.repository.PosCredentialRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -25,7 +24,6 @@ public class PosCredentialAuditAndManifestService {
     private final PosCredentialAuditLogRepository auditLogRepository;
     private final PosCredentialRepository credentialRepository;
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordAudit(String stationId, String cashierId, CredentialType credentialType, String maskedIdentifier, String result, String failureReason) {
         try {
             String sanitizedFailureReason = failureReason;
