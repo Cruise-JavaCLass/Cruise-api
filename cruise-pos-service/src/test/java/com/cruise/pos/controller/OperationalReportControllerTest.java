@@ -4,6 +4,7 @@ import com.cruise.common.dto.ApiResponse;
 import com.cruise.pos.dto.CreateExportJobRequest;
 import com.cruise.pos.dto.OperationalReportQuery;
 import com.cruise.pos.dto.OperationalReportResponse;
+import com.cruise.pos.dto.ReportExportJobResponse;
 import com.cruise.pos.entity.ReportExportJob;
 import com.cruise.pos.enums.ExportFormat;
 import com.cruise.pos.enums.ExportJobStatus;
@@ -60,7 +61,7 @@ class OperationalReportControllerTest {
     @Test
     @DisplayName("createExportJob returns 201 Created with job status")
     void testCreateExportJob() {
-        ReportExportJob mockJob = ReportExportJob.builder()
+        ReportExportJobResponse mockJob = ReportExportJobResponse.builder()
                 .jobId("JOB-123")
                 .format(ExportFormat.PDF)
                 .status(ExportJobStatus.COMPLETED)
@@ -74,7 +75,7 @@ class OperationalReportControllerTest {
 
         when(reportService.createExportJob(any(CreateExportJobRequest.class))).thenReturn(mockJob);
 
-        ApiResponse<ReportExportJob> response = controller.createExportJob(request);
+        ApiResponse<ReportExportJobResponse> response = controller.createExportJob(request);
 
         assertThat(response).isNotNull();
         assertThat(response.getData().getJobId()).isEqualTo("JOB-123");
@@ -87,7 +88,7 @@ class OperationalReportControllerTest {
         PageRequest pageable = PageRequest.of(0, 10);
         when(reportService.getExportJobs(pageable)).thenReturn(new PageImpl<>(List.of()));
 
-        ApiResponse<Page<ReportExportJob>> response = controller.getExportJobs(pageable);
+        ApiResponse<Page<ReportExportJobResponse>> response = controller.getExportJobs(pageable);
         assertThat(response).isNotNull();
         verify(reportService).getExportJobs(pageable);
     }

@@ -4,6 +4,7 @@ import com.cruise.common.dto.ApiResponse;
 import com.cruise.pos.dto.CreateExportJobRequest;
 import com.cruise.pos.dto.OperationalReportQuery;
 import com.cruise.pos.dto.OperationalReportResponse;
+import com.cruise.pos.dto.ReportExportJobResponse;
 import com.cruise.pos.entity.ReportExportJob;
 import com.cruise.pos.enums.ExportFormat;
 import com.cruise.pos.enums.ExportJobStatus;
@@ -58,14 +59,14 @@ public class OperationalReportController {
 
     @PostMapping("/exports")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<ReportExportJob> createExportJob(@Valid @RequestBody CreateExportJobRequest request) {
+    public ApiResponse<ReportExportJobResponse> createExportJob(@Valid @RequestBody CreateExportJobRequest request) {
         log.info("Requesting report export job: format={}, title={}", request.getFormat(), request.getReportTitle());
-        ReportExportJob job = reportService.createExportJob(request);
+        ReportExportJobResponse job = reportService.createExportJob(request);
         return ApiResponse.ok("Tạo tác vụ xuất báo cáo thành công", job);
     }
 
     @GetMapping("/exports")
-    public ApiResponse<Page<ReportExportJob>> getExportJobs(Pageable pageable) {
+    public ApiResponse<Page<ReportExportJobResponse>> getExportJobs(Pageable pageable) {
         return ApiResponse.ok(reportService.getExportJobs(pageable));
     }
 

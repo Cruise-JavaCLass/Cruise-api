@@ -3,6 +3,7 @@ package com.cruise.pos.service;
 import com.cruise.pos.dto.CreateExportJobRequest;
 import com.cruise.pos.dto.OperationalReportQuery;
 import com.cruise.pos.dto.OperationalReportResponse;
+import com.cruise.pos.dto.ReportExportJobResponse;
 import com.cruise.pos.entity.PosOutlet;
 import com.cruise.pos.entity.PosTransaction;
 import com.cruise.pos.entity.PosTransactionItem;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -208,16 +210,17 @@ class OperationalReportServiceTest {
                 .reportTitle("Daily Revenue Report")
                 .build();
 
-        ReportExportJob job = reportService.createExportJob(request);
+        ReportExportJobResponse job = reportService.createExportJob(request);
 
         assertThat(job).isNotNull();
         assertThat(job.getStatus()).isEqualTo(ExportJobStatus.COMPLETED);
         assertThat(job.getDownloadUrl()).contains(".csv");
         assertThat(job.getReportTitle()).isEqualTo("Daily Revenue Report");
         assertThat(job.getFileSizeBytes()).isGreaterThan(0L);
-        assertThat(job.getFileData()).isNotNull().isNotEmpty();
 
-        verify(exportJobRepository, times(2)).save(any(ReportExportJob.class));
+        ArgumentCaptor<ReportExportJob> captor = ArgumentCaptor.forClass(ReportExportJob.class);
+        verify(exportJobRepository, times(2)).save(captor.capture());
+        assertThat(captor.getValue().getFileData()).isNotNull().isNotEmpty();
     }
 
     @Test
@@ -231,11 +234,14 @@ class OperationalReportServiceTest {
                 .reportTitle("Excel Revenue Report")
                 .build();
 
-        ReportExportJob job = reportService.createExportJob(request);
+        ReportExportJobResponse job = reportService.createExportJob(request);
 
         assertThat(job.getStatus()).isEqualTo(ExportJobStatus.COMPLETED);
         assertThat(job.getDownloadUrl()).contains(".xlsx");
-        assertThat(job.getFileData()).isNotNull().isNotEmpty();
+
+        ArgumentCaptor<ReportExportJob> captor = ArgumentCaptor.forClass(ReportExportJob.class);
+        verify(exportJobRepository, times(2)).save(captor.capture());
+        assertThat(captor.getValue().getFileData()).isNotNull().isNotEmpty();
     }
 
     @Test
@@ -249,22 +255,25 @@ class OperationalReportServiceTest {
                 .reportTitle("PDF Audit Report")
                 .build();
 
-        ReportExportJob job = reportService.createExportJob(request);
+        ReportExportJobResponse job = reportService.createExportJob(request);
 
         assertThat(job.getStatus()).isEqualTo(ExportJobStatus.COMPLETED);
         assertThat(job.getDownloadUrl()).contains(".pdf");
-        assertThat(job.getFileData()).isNotNull().isNotEmpty();
+
+        ArgumentCaptor<ReportExportJob> captor = ArgumentCaptor.forClass(ReportExportJob.class);
+        verify(exportJobRepository, times(2)).save(captor.capture());
+        assertThat(captor.getValue().getFileData()).isNotNull().isNotEmpty();
     }
 
     @Test
-    @DisplayName("getExportJobs delegates to repository ordering by createdAt and id descending")
+    @DisplayName("getExportJobs delegates to repository ordering by createdAt and id descending without LOB")
     void testGetExportJobs() {
         PageRequest pageable = PageRequest.of(0, 10);
-        when(exportJobRepository.findAllByOrderByCreatedAtDescIdDesc(pageable))
+        when(exportJobRepository.findAllMetadata(pageable))
                 .thenReturn(new PageImpl<>(List.of()));
 
-        Page<ReportExportJob> page = reportService.getExportJobs(pageable);
+        Page<ReportExportJobResponse> page = reportService.getExportJobs(pageable);
         assertThat(page).isNotNull();
-        verify(exportJobRepository).findAllByOrderByCreatedAtDescIdDesc(pageable);
+        verify(exportJobRepository).findAllMetadata(pageable);
     }
 }

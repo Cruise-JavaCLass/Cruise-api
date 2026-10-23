@@ -3,6 +3,7 @@ package com.cruise.pos.service;
 import com.cruise.pos.dto.CreateExportJobRequest;
 import com.cruise.pos.dto.OperationalReportQuery;
 import com.cruise.pos.dto.OperationalReportResponse;
+import com.cruise.pos.dto.ReportExportJobResponse;
 import com.cruise.pos.entity.PosOutlet;
 import com.cruise.pos.entity.PosTransaction;
 import com.cruise.pos.entity.PosTransactionItem;
@@ -221,7 +222,7 @@ public class OperationalReportService {
     }
 
     @Transactional
-    public ReportExportJob createExportJob(CreateExportJobRequest request) {
+    public ReportExportJobResponse createExportJob(CreateExportJobRequest request) {
         String jobId = "JOB-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
         String title = request.getReportTitle() != null ? request.getReportTitle() : "Financial & Operational Report";
 
@@ -265,7 +266,7 @@ public class OperationalReportService {
             exportJobRepository.save(job);
         }
 
-        return job;
+        return toResponse(job);
     }
 
     private byte[] renderCsv(OperationalReportResponse report) {
@@ -441,7 +442,23 @@ public class OperationalReportService {
     }
 
     @Transactional(readOnly = true)
-    public Page<ReportExportJob> getExportJobs(Pageable pageable) {
-        return exportJobRepository.findAllByOrderByCreatedAtDescIdDesc(pageable);
+    public Page<ReportExportJobResponse> getExportJobs(Pageable pageable) {
+        return exportJobRepository.findAllMetadata(pageable);
+    }
+
+    public ReportExportJobResponse toResponse(ReportExportJob job) {
+        if (job == null) return null;
+        return ReportExportJobResponse.builder()
+                .id(job.getId())
+                .jobId(job.getJobId())
+                .format(job.getFormat())
+                .status(job.getStatus())
+                .reportTitle(job.getReportTitle())
+                .downloadUrl(job.getDownloadUrl())
+                .fileSizeBytes(job.getFileSizeBytes())
+                .errorMessage(job.getErrorMessage())
+                .createdAt(job.getCreatedAt())
+                .completedAt(job.getCompletedAt())
+                .build();
     }
 }

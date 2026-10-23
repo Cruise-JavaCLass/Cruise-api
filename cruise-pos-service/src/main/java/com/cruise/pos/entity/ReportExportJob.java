@@ -43,6 +43,7 @@ public class ReportExportJob extends BaseEntity {
 
     @com.fasterxml.jackson.annotation.JsonIgnore
     @Lob
+    @Basic(fetch = FetchType.LAZY)
     @Column(name = "file_data")
     private byte[] fileData;
 
