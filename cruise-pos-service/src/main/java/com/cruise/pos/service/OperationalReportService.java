@@ -3,12 +3,14 @@ package com.cruise.pos.service;
 import com.cruise.pos.dto.CreateExportJobRequest;
 import com.cruise.pos.dto.OperationalReportQuery;
 import com.cruise.pos.dto.OperationalReportResponse;
+import com.cruise.pos.entity.PosOutlet;
 import com.cruise.pos.entity.PosTransaction;
 import com.cruise.pos.entity.ReportExportJob;
 import com.cruise.pos.enums.ExportFormat;
 import com.cruise.pos.enums.ExportJobStatus;
 import com.cruise.pos.enums.ReportDimension;
 import com.cruise.pos.enums.TransactionStatus;
+import com.cruise.pos.repository.PosOutletRepository;
 import com.cruise.pos.repository.PosTransactionRepository;
 import com.cruise.pos.repository.ReportExportJobRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -31,15 +36,30 @@ public class OperationalReportService {
 
     private final PosTransactionRepository transactionRepository;
     private final ReportExportJobRepository exportJobRepository;
+    private final PosOutletRepository outletRepository;
 
     @Transactional(readOnly = true)
     public OperationalReportResponse generateOperationalReport(OperationalReportQuery query) {
-        List<PosTransaction> transactions = transactionRepository.findAll().stream()
-                .filter(t -> t.getStatus() == TransactionStatus.COMPLETED)
-                .filter(t -> query.getPaymentMethod() == null || query.getPaymentMethod() == t.getPaymentMethod())
-                .filter(t -> query.getStartDate() == null || (t.getCreatedAt() != null && !t.getCreatedAt().isBefore(query.getStartDate())))
-                .filter(t -> query.getEndDate() == null || (t.getCreatedAt() != null && !t.getCreatedAt().isAfter(query.getEndDate())))
-                .collect(Collectors.toList());
+        String stationFilter = null;
+        if (query.getOutletId() != null) {
+            Optional<PosOutlet> outletOpt = outletRepository.findById(query.getOutletId());
+            stationFilter = outletOpt.map(PosOutlet::getCode).orElseGet(() -> String.valueOf(query.getOutletId()));
+        }
+
+        List<PosTransaction> transactions = transactionRepository.findTransactionsForReport(
+                stationFilter,
+                TransactionStatus.COMPLETED,
+                query.getPaymentMethod(),
+                query.getStartDate(),
+                query.getEndDate()
+        );
+
+        if (query.getCategory() != null && !query.getCategory().isBlank()) {
+            transactions = transactions.stream()
+                    .filter(t -> t.getItems() != null && t.getItems().stream()
+                            .anyMatch(i -> query.getCategory().equalsIgnoreCase(i.getCategory())))
+                    .collect(Collectors.toList());
+        }
 
         BigDecimal totalGross = transactions.stream()
                 .map(t -> t.getTotalAmount() != null ? t.getTotalAmount() : BigDecimal.ZERO)
@@ -92,6 +112,24 @@ public class OperationalReportService {
             grouped = transactions.stream().collect(Collectors.groupingBy(
                     t -> t.getPaymentMethod() != null ? t.getPaymentMethod().name() : "UNKNOWN"
             ));
+        } else if (dimension == ReportDimension.DATE_RANGE) {
+            grouped = transactions.stream().collect(Collectors.groupingBy(
+                    t -> t.getCreatedAt() != null
+                            ? LocalDate.ofInstant(t.getCreatedAt(), ZoneOffset.UTC).toString()
+                            : "Undated"
+            ));
+        } else if (dimension == ReportDimension.CATEGORY) {
+            grouped = new HashMap<>();
+            for (PosTransaction t : transactions) {
+                if (t.getItems() != null && !t.getItems().isEmpty()) {
+                    for (var item : t.getItems()) {
+                        String cat = item.getCategory() != null ? item.getCategory() : "Uncategorized";
+                        grouped.computeIfAbsent(cat, k -> new ArrayList<>()).add(t);
+                    }
+                } else {
+                    grouped.computeIfAbsent("Uncategorized", k -> new ArrayList<>()).add(t);
+                }
+            }
         } else {
             // Default station / outlet identifier
             grouped = transactions.stream().collect(Collectors.groupingBy(
@@ -111,17 +149,16 @@ public class OperationalReportService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             BigDecimal net = gross.subtract(discount).max(BigDecimal.ZERO);
-            double pct = totalGross.compareTo(BigDecimal.ZERO) > 0
-                    ? gross.multiply(BigDecimal.valueOf(100)).divide(totalGross, 1, RoundingMode.HALF_UP).doubleValue()
-                    : 0.0;
+            BigDecimal pct = totalGross.compareTo(BigDecimal.ZERO) > 0
+                    ? gross.multiply(BigDecimal.valueOf(100)).divide(totalGross, 2, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
 
             result.add(OperationalReportResponse.DimensionBreakdownDto.builder()
-                    .key(entry.getKey())
                     .label(entry.getKey())
                     .transactionCount((long) txs.size())
                     .grossRevenue(gross)
                     .netRevenue(net)
-                    .revenuePercentage(pct)
+                    .revenuePercentage(pct.doubleValue())
                     .build());
         }
 
@@ -140,20 +177,55 @@ public class OperationalReportService {
         ReportExportJob job = ReportExportJob.builder()
                 .jobId(jobId)
                 .format(request.getFormat())
-                .status(ExportJobStatus.COMPLETED)
+                .status(ExportJobStatus.PENDING)
                 .reportTitle(title)
                 .downloadUrl(downloadUrl)
-                .fileSizeBytes(24576L)
-                .completedAt(Instant.now())
                 .build();
 
         exportJobRepository.save(job);
-        log.info("Created export job: {} format: {} title: {}", jobId, request.getFormat(), title);
+        log.info("Started report export job: {} format: {} title: {}", jobId, request.getFormat(), title);
+
+        try {
+            OperationalReportQuery query = request.getQuery() != null ? request.getQuery() : new OperationalReportQuery();
+            OperationalReportResponse report = generateOperationalReport(query);
+
+            byte[] fileBytes;
+            if (request.getFormat() == ExportFormat.CSV) {
+                StringBuilder sb = new StringBuilder("Dimension,Transactions,Gross Revenue,Net Revenue,Revenue %\n");
+                for (var b : report.getBreakdown()) {
+                    sb.append(String.format(Locale.US, "\"%s\",%d,%.2f,%.2f,%.2f%%\n",
+                            b.getLabel(), b.getTransactionCount(), b.getGrossRevenue(), b.getNetRevenue(), b.getRevenuePercentage()));
+                }
+                fileBytes = sb.toString().getBytes(StandardCharsets.UTF_8);
+            } else if (request.getFormat() == ExportFormat.EXCEL) {
+                StringBuilder sb = new StringBuilder("Dimension\tTransactions\tGross Revenue\tNet Revenue\tRevenue %\n");
+                for (var b : report.getBreakdown()) {
+                    sb.append(String.format(Locale.US, "%s\t%d\t%.2f\t%.2f\t%.2f%%\n",
+                            b.getLabel(), b.getTransactionCount(), b.getGrossRevenue(), b.getNetRevenue(), b.getRevenuePercentage()));
+                }
+                fileBytes = sb.toString().getBytes(StandardCharsets.UTF_8);
+            } else {
+                String pdf = "%PDF-1.4\n1 0 obj\n<< /Title (" + title + ") >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF";
+                fileBytes = pdf.getBytes(StandardCharsets.UTF_8);
+            }
+
+            job.setFileSizeBytes((long) fileBytes.length);
+            job.setStatus(ExportJobStatus.COMPLETED);
+            job.setCompletedAt(Instant.now());
+            exportJobRepository.save(job);
+            log.info("Completed export job: {} with size {} bytes", jobId, fileBytes.length);
+        } catch (Exception e) {
+            log.error("Failed to generate export job: {}", jobId, e);
+            job.setStatus(ExportJobStatus.FAILED);
+            job.setErrorMessage(e.getMessage() != null ? e.getMessage() : "Export rendering error");
+            exportJobRepository.save(job);
+        }
+
         return job;
     }
 
     @Transactional(readOnly = true)
     public Page<ReportExportJob> getExportJobs(Pageable pageable) {
-        return exportJobRepository.findAllByOrderByCreatedAtDesc(pageable);
+        return exportJobRepository.findAllByOrderByCreatedAtDescIdDesc(pageable);
     }
 }
