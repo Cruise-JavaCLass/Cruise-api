@@ -62,6 +62,10 @@ public class PosShift extends BaseEntity {
     @Builder.Default
     private Integer transactionCount = 0;
 
+    @Column(name = "total_cash_drops", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal totalCashDrops = BigDecimal.ZERO;
+
     @Column(name = "closed_by_manager_id", length = 64)
     private String closedByManagerId;
 
@@ -74,5 +78,11 @@ public class PosShift extends BaseEntity {
     public void addRefund(BigDecimal amount) {
         this.totalRefunds = this.totalRefunds.add(amount);
         this.netRevenue = this.totalSales.subtract(this.totalRefunds);
+    }
+
+    public void addCashDrop(BigDecimal amount) {
+        if (amount != null && amount.compareTo(BigDecimal.ZERO) > 0) {
+            this.totalCashDrops = this.totalCashDrops.add(amount);
+        }
     }
 }
