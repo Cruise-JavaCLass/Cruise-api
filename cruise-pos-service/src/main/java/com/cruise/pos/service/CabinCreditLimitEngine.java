@@ -25,7 +25,7 @@ public class CabinCreditLimitEngine {
     private final CabinMemberRepository memberRepository;
     private final CabinBillingSplitService billingSplitService;
 
-    @Transactional(readOnly = true)
+    @Transactional
     public CabinCreditLimitCheckResponse checkCreditLimit(String cabinNumber, CabinCreditLimitCheckRequest request) {
         CabinFolioAccount folio = folioRepository.findByCabinNumber(cabinNumber)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tài khoản Folio cho cabin: " + cabinNumber));
