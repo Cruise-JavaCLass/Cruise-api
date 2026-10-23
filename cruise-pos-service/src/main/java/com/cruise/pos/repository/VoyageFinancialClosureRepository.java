@@ -25,7 +25,7 @@ public interface VoyageFinancialClosureRepository extends JpaRepository<VoyageFi
            "(:shipId IS NULL OR v.shipId = :shipId) AND " +
            "(:search IS NULL OR LOWER(v.voyageNumber) LIKE LOWER(CONCAT('%', :search, '%')) " +
            " OR LOWER(v.itineraryName) LIKE LOWER(CONCAT('%', :search, '%'))) " +
-           "ORDER BY v.voyageEndDate DESC")
+           "ORDER BY v.voyageEndDate DESC, v.id DESC")
     Page<VoyageFinancialClosure> searchVoyages(
             @Param("status") VoyageFinancialStatus status,
             @Param("shipId") String shipId,
@@ -33,7 +33,7 @@ public interface VoyageFinancialClosureRepository extends JpaRepository<VoyageFi
             Pageable pageable
     );
 
-    @Query("SELECT v FROM VoyageFinancialClosure v WHERE v.status IN :statuses ORDER BY v.voyageEndDate DESC")
+    @Query("SELECT v FROM VoyageFinancialClosure v WHERE v.status IN :statuses ORDER BY v.voyageEndDate DESC, v.id DESC")
     List<VoyageFinancialClosure> findRecentClosedVoyages(
             @Param("statuses") Collection<VoyageFinancialStatus> statuses,
             Pageable pageable

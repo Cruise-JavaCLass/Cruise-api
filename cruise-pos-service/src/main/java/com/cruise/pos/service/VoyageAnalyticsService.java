@@ -26,6 +26,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.text.Normalizer;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -272,12 +273,13 @@ public class VoyageAnalyticsService {
     @Transactional
     public void dispatchExecutiveEmail(String voyageNumber, DispatchExecutiveSummaryEmailRequest request, String actor) {
         VoyageFinancialClosure closure = findByVoyageNumberOrThrow(voyageNumber);
-        log.info("Executive booklet email queued for dispatch to {} for voyage {}", request.recipientEmail(), voyageNumber);
+        log.info("Executive booklet email queued for dispatch to {} for voyage {} ({})",
+                request.recipientEmail(), voyageNumber, closure.getItineraryName());
         recordAudit(
                 "EXECUTIVE_BOOKLET_EMAILED",
                 actor,
                 "Dispatched executive summary booklet for voyage " + voyageNumber + " to " + request.recipientEmail(),
-                "cc=" + (request.ccEmails() != null ? String.join(",", request.ccEmails()) : "none")
+                "itinerary=" + closure.getItineraryName() + ", cc=" + (request.ccEmails() != null ? String.join(",", request.ccEmails()) : "none")
         );
     }
 
@@ -285,7 +287,11 @@ public class VoyageAnalyticsService {
         if (text == null) {
             return "";
         }
-        return text.replaceAll("[\\r\\n]+", " ").trim();
+        String folded = Normalizer.normalize(text, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
+                .replace('đ', 'd')
+                .replace('Đ', 'D');
+        return folded.replaceAll("[^\\x20-\\x7E]", "?").trim();
     }
 
     private VoyageFinancialClosure findByVoyageNumberOrThrow(String voyageNumber) {
