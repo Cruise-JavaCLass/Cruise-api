@@ -62,23 +62,12 @@ class OperationsDashboardServiceTest {
         when(passengerRepository.count()).thenReturn(2000L);
         when(embarkationLogRepository.count()).thenReturn(1500L);
 
-        OnboardActivity scheduledAct = OnboardActivity.builder()
-                .title("Yoga")
-                .category("WELLNESS")
-                .status(ActivityStatus.SCHEDULED)
-                .build();
-        OnboardActivity inProgressAct = OnboardActivity.builder()
-                .title("Live Jazz")
-                .category("ENTERTAINMENT")
-                .status(ActivityStatus.IN_PROGRESS)
-                .build();
-        OnboardActivity cancelledAct = OnboardActivity.builder()
-                .title("Cancelled Pool Party")
-                .category("ENTERTAINMENT")
-                .status(ActivityStatus.CANCELLED)
-                .build();
-
-        when(activityRepository.findAll()).thenReturn(List.of(scheduledAct, inProgressAct, cancelledAct));
+        when(activityRepository.countByActiveTrueAndStatus(ActivityStatus.SCHEDULED)).thenReturn(1L);
+        when(activityRepository.countByActiveTrueAndStatusIn(List.of(ActivityStatus.SCHEDULED, ActivityStatus.IN_PROGRESS))).thenReturn(2L);
+        when(activityRepository.countActiveActivitiesGroupedByCategory()).thenReturn(List.of(
+                new Object[]{"WELLNESS", 1L},
+                new Object[]{"ENTERTAINMENT", 2L}
+        ));
         when(registrationRepository.count()).thenReturn(450L);
         when(excursionRepository.count()).thenReturn(12L);
         when(excursionRepository.countByExcursionDateAndActiveTrue(any(LocalDate.class))).thenReturn(3L);
@@ -117,7 +106,9 @@ class OperationsDashboardServiceTest {
     void testGetOperationsKpiSummary_ZeroFallbacks() {
         when(passengerRepository.count()).thenReturn(0L);
         when(embarkationLogRepository.count()).thenReturn(0L);
-        when(activityRepository.findAll()).thenReturn(Collections.emptyList());
+        when(activityRepository.countByActiveTrueAndStatus(ActivityStatus.SCHEDULED)).thenReturn(0L);
+        when(activityRepository.countByActiveTrueAndStatusIn(List.of(ActivityStatus.SCHEDULED, ActivityStatus.IN_PROGRESS))).thenReturn(0L);
+        when(activityRepository.countActiveActivitiesGroupedByCategory()).thenReturn(Collections.emptyList());
         when(registrationRepository.count()).thenReturn(0L);
         when(excursionRepository.count()).thenReturn(0L);
         when(excursionRepository.countByExcursionDateAndActiveTrue(any(LocalDate.class))).thenReturn(0L);
@@ -145,18 +136,19 @@ class OperationsDashboardServiceTest {
         act1.setId(101L);
 
         when(activityRepository.findLiveActivities(any())).thenReturn(List.of(act1));
-        when(attendanceRepository.countByActivityIdAndStatusAndActiveTrue(eq(101L), eq(ActivityAttendanceStatus.CHECKED_IN)))
-                .thenReturn(25L);
+        when(attendanceRepository.countCheckedInGroupedByActivityId(eq(List.of(101L)), eq(ActivityAttendanceStatus.CHECKED_IN)))
+                .thenReturn(Collections.singletonList(new Object[]{101L, 25L}));
 
-        LocalDate today = LocalDate.now();
-        LocalTime soonTime = LocalTime.now().plusMinutes(45);
-        LocalTime farTime = LocalTime.now().plusHours(5);
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        java.time.LocalDateTime soonDateTime = now.plusMinutes(45);
+        LocalDate today = now.toLocalDate();
+        LocalTime farTime = now.toLocalTime().plusHours(5);
 
         ShoreExcursion excSoon = ShoreExcursion.builder()
                 .title("Coral Reef Diving")
                 .portName("Cozumel")
-                .excursionDate(today)
-                .departureTime(soonTime)
+                .excursionDate(soonDateTime.toLocalDate())
+                .departureTime(soonDateTime.toLocalTime())
                 .status(ExcursionStatus.OPEN_FOR_BOOKING)
                 .maxCapacity(50)
                 .currentParticipants(45)
@@ -184,9 +176,8 @@ class OperationsDashboardServiceTest {
         excMissingTime.setId(203L);
 
         when(excursionRepository.findLiveUpcomingExcursions(any(), any())).thenReturn(List.of(excSoon, excFar, excMissingTime));
-        when(excursionPassengerRepository.countCheckedInByExcursionId(201L)).thenReturn(40L);
-        when(excursionPassengerRepository.countCheckedInByExcursionId(202L)).thenReturn(0L);
-        when(excursionPassengerRepository.countCheckedInByExcursionId(203L)).thenReturn(0L);
+        when(excursionPassengerRepository.countCheckedInGroupedByExcursionId(eq(List.of(201L, 202L, 203L))))
+                .thenReturn(Collections.singletonList(new Object[]{201L, 40L}));
 
         OperationsLiveRadarDto radar = dashboardService.getLiveOperationsRadar();
 
@@ -245,7 +236,7 @@ class OperationsDashboardServiceTest {
         actBlankCategory.setId(998L);
 
         when(activityRepository.findLiveActivities(any())).thenReturn(List.of(actWithNulls, actBlankCategory));
-        when(attendanceRepository.countByActivityIdAndStatusAndActiveTrue(any(), any())).thenReturn(0L);
+        when(attendanceRepository.countCheckedInGroupedByActivityId(any(), any())).thenReturn(Collections.emptyList());
 
         ShoreExcursion excWithNulls = ShoreExcursion.builder()
                 .title("Null Excursion")
@@ -259,7 +250,7 @@ class OperationsDashboardServiceTest {
         excWithNulls.setId(888L);
 
         when(excursionRepository.findLiveUpcomingExcursions(any(), any())).thenReturn(List.of(excWithNulls));
-        when(excursionPassengerRepository.countCheckedInByExcursionId(any())).thenReturn(0L);
+        when(excursionPassengerRepository.countCheckedInGroupedByExcursionId(any())).thenReturn(Collections.emptyList());
 
         OperationsLiveRadarDto radar = dashboardService.getLiveOperationsRadar();
         assertThat(radar.getActivityRadar()).hasSize(2);
