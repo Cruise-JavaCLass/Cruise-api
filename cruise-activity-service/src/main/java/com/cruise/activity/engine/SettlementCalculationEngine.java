@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Objects;
 
 /**
  * Calculation Engine cho quyết toán nhà cung cấp tour (KAN-332, AC1)
@@ -30,9 +31,11 @@ public class SettlementCalculationEngine {
     ) {
         int safeActualPax = Math.max(0, actualPax);
         int safeMinPax = Math.max(0, minGuaranteePax);
-        BigDecimal safeRate = (agreedUnitRate != null && agreedUnitRate.compareTo(BigDecimal.ZERO) >= 0)
-                ? agreedUnitRate : BigDecimal.ZERO;
-        BigDecimal safeAdjustments = totalAdjustments != null ? totalAdjustments : BigDecimal.ZERO;
+        BigDecimal safeRate = Objects.requireNonNullElse(agreedUnitRate, BigDecimal.ZERO);
+        if (safeRate.compareTo(BigDecimal.ZERO) < 0) {
+            safeRate = BigDecimal.ZERO;
+        }
+        BigDecimal safeAdjustments = Objects.requireNonNullElse(totalAdjustments, BigDecimal.ZERO);
 
         int billablePax = Math.max(safeActualPax, safeMinPax);
         BigDecimal baseAmount = safeRate.multiply(BigDecimal.valueOf(billablePax))
