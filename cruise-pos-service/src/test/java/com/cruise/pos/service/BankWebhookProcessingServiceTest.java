@@ -102,7 +102,13 @@ class BankWebhookProcessingServiceTest {
     void testProcessWebhookIdempotent() {
         pendingOrder.setStatus(PaymentGatewayStatus.PAID);
         pendingOrder.setSettledAt(Instant.now());
+        CabinFolioAccount settledFolio = CabinFolioAccount.builder()
+                .cabinNumber("CABIN-801")
+                .status(FolioStatus.SETTLED)
+                .build();
+
         when(paymentOrderRepository.findByPaymentReferenceForUpdate("PAY-100")).thenReturn(Optional.of(pendingOrder));
+        when(folioRepository.findByCabinNumber("CABIN-801")).thenReturn(Optional.of(settledFolio));
 
         BankWebhookPayload payload = BankWebhookPayload.builder()
                 .paymentReference("PAY-100")

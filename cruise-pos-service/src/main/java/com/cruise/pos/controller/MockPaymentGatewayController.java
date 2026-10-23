@@ -4,12 +4,12 @@ import com.cruise.common.dto.ApiResponse;
 import com.cruise.pos.dto.GenerateVietQrRequest;
 import com.cruise.pos.dto.VietQrPaymentResponse;
 import com.cruise.pos.service.MockPaymentGatewayService;
+import jakarta.annotation.PostConstruct;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -28,8 +28,18 @@ public class MockPaymentGatewayController {
     private final MockPaymentGatewayService paymentGatewayService;
     private final com.cruise.pos.service.BankWebhookProcessingService webhookProcessingService;
 
-    @Value("${pos.payment.bank.webhook-secret:vietqr-bank-secret-key-32bytes-len}")
+    @Value("${pos.payment.bank.webhook-secret}")
     private String webhookSecret;
+
+    @Value("${pos.payment.bank.enforce-signature:true}")
+    private boolean enforceSignature;
+
+    @PostConstruct
+    public void validateConfiguration() {
+        if (enforceSignature && (webhookSecret == null || webhookSecret.isBlank())) {
+            throw new IllegalStateException("pos.payment.bank.webhook-secret must be configured and not blank when signature enforcement is active");
+        }
+    }
 
     @PostMapping("/vietqr/generate")
     public ApiResponse<VietQrPaymentResponse> generateVietQr(@Valid @RequestBody GenerateVietQrRequest request) {
@@ -57,9 +67,11 @@ public class MockPaymentGatewayController {
     }
 
     private void verifyWebhookSignature(String paymentRef, String txId, String signatureHeader) {
-        if (signatureHeader == null || signatureHeader.isBlank()) {
-            // If signature is omitted in development / mock mode, allow if signatureHeader is not strictly enforced or check token
+        if (!enforceSignature) {
             return;
+        }
+        if (signatureHeader == null || signatureHeader.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing required X-Bank-Signature header");
         }
         try {
             Mac mac = Mac.getInstance("HmacSHA256");

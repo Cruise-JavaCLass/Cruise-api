@@ -10,7 +10,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.math.BigDecimal;
@@ -30,11 +29,10 @@ public class MockPaymentGatewayService {
 
     private final PaymentOrderRepository paymentOrderRepository;
 
-    @Transactional
     public VietQrPaymentResponse generateVietQrPayment(GenerateVietQrRequest request) {
         Objects.requireNonNull(request, "GenerateVietQrRequest must not be null");
 
-        // Idempotency check: lookup existing order
+        // Idempotency check: lookup existing order first
         if (request.getIdempotencyKey() != null && !request.getIdempotencyKey().isBlank()) {
             var existing = paymentOrderRepository.findByIdempotencyKey(request.getIdempotencyKey());
             if (existing.isPresent()) {

@@ -29,7 +29,7 @@ public class BankWebhookProcessingService {
     private final CabinFolioAccountRepository folioRepository;
     private final FolioSettlementService settlementService;
 
-    @Transactional
+    @Transactional(noRollbackFor = BusinessRuleException.class)
     public WebhookProcessingResult processBankWebhook(BankWebhookPayload payload) {
         Objects.requireNonNull(payload, "BankWebhookPayload must not be null");
 
@@ -37,14 +37,18 @@ public class BankWebhookProcessingService {
         PaymentOrder order = paymentOrderRepository.findByPaymentReferenceForUpdate(payload.getPaymentReference())
                 .orElseThrow(() -> new ResourceNotFoundException("Payment order not found for ref: " + payload.getPaymentReference()));
 
-        // Idempotency: If already marked as PAID, retry folio settlement if needed and return idempotently
+        // Idempotency: If already marked as PAID, retry folio settlement if needed and return real status
         if (order.getStatus() == PaymentGatewayStatus.PAID) {
-            log.info("Payment order {} already settled, returning idempotent success", payload.getPaymentReference());
+            log.info("Payment order {} already marked as PAID, checking settlement status", payload.getPaymentReference());
+            boolean isSettled = isFolioAlreadySettled(order.getCabinNumber());
+            if (!isSettled) {
+                isSettled = attemptFolioSettlement(order, payload.getAmount());
+            }
             return WebhookProcessingResult.builder()
                     .paymentReference(order.getPaymentReference())
                     .paymentStatus(order.getStatus())
-                    .folioSettled(true)
-                    .message("Payment already processed and folio settled")
+                    .folioSettled(isSettled)
+                    .message(isSettled ? "Payment already processed and folio settled" : "Payment marked as PAID but folio settlement pending")
                     .processedAt(order.getSettledAt())
                     .build();
         }
@@ -94,8 +98,26 @@ public class BankWebhookProcessingService {
         paymentOrderRepository.save(order);
 
         // Auto settle cabin folio using actual paid amount
-        boolean folioSettled = false;
+        boolean folioSettled = attemptFolioSettlement(order, payload.getAmount());
+
+        return WebhookProcessingResult.builder()
+                .paymentReference(order.getPaymentReference())
+                .paymentStatus(PaymentGatewayStatus.PAID)
+                .folioSettled(folioSettled)
+                .message("Bank payment received and processed successfully")
+                .processedAt(order.getSettledAt())
+                .build();
+    }
+
+    private boolean isFolioAlreadySettled(String cabinNumber) {
+        return folioRepository.findByCabinNumber(cabinNumber)
+                .map(f -> f.getStatus() == FolioStatus.SETTLED || f.getStatus() == FolioStatus.CLOSED)
+                .orElse(false);
+    }
+
+    private boolean attemptFolioSettlement(PaymentOrder order, BigDecimal amount) {
         try {
+            var folioOpt = folioRepository.findByCabinNumber(order.getCabinNumber());
             if (folioOpt.isPresent()) {
                 CabinFolioAccount folio = folioOpt.get();
                 if (folio.getStatus() == FolioStatus.ACTIVE || folio.getStatus() == FolioStatus.LOCKED) {
@@ -105,26 +127,21 @@ public class BankWebhookProcessingService {
                             folio.getCabinNumber(),
                             idempotencyKey,
                             PaymentMethod.VIETQR,
-                            payload.getAmount(),
+                            amount,
                             "Settled via VietQR Bank Webhook - Ref: " + order.getPaymentReference(),
                             false,
                             "SYSTEM_VIETQR",
                             roles
                     );
-                    folioSettled = true;
-                    log.info("Successfully auto-settled folio for cabin: {} via VietQR with paid amount: {}", order.getCabinNumber(), payload.getAmount());
+                    log.info("Successfully auto-settled folio for cabin: {} via VietQR with paid amount: {}", order.getCabinNumber(), amount);
+                    return true;
+                } else if (folio.getStatus() == FolioStatus.SETTLED || folio.getStatus() == FolioStatus.CLOSED) {
+                    return true;
                 }
             }
         } catch (Exception e) {
             log.error("Failed to auto-settle folio for cabin {}: {}", order.getCabinNumber(), e.getMessage(), e);
         }
-
-        return WebhookProcessingResult.builder()
-                .paymentReference(order.getPaymentReference())
-                .paymentStatus(PaymentGatewayStatus.PAID)
-                .folioSettled(folioSettled)
-                .message("Bank payment received and processed successfully")
-                .processedAt(order.getSettledAt())
-                .build();
+        return false;
     }
 }
