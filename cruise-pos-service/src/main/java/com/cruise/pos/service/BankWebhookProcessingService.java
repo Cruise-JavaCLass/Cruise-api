@@ -40,9 +40,16 @@ public class BankWebhookProcessingService {
         // Idempotency: If already marked as PAID, retry folio settlement if needed and return real status
         if (order.getStatus() == PaymentGatewayStatus.PAID) {
             log.info("Payment order {} already marked as PAID, checking settlement status", payload.getPaymentReference());
+            if (order.getBankTransactionId() != null && !Objects.equals(order.getBankTransactionId(), payload.getTransactionId())) {
+                throw new BusinessRuleException("Transaction ID mismatch for already paid order: expected " + order.getBankTransactionId() + " but received " + payload.getTransactionId());
+            }
+            BigDecimal expectedAmount = order.getConfirmedAmount() != null ? order.getConfirmedAmount() : order.getAmount();
+            if (payload.getAmount() != null && payload.getAmount().compareTo(expectedAmount) != 0) {
+                throw new BusinessRuleException("Payment amount mismatch for already paid order: expected " + expectedAmount + " but received " + payload.getAmount());
+            }
             boolean isSettled = isFolioAlreadySettled(order.getCabinNumber());
             if (!isSettled) {
-                isSettled = attemptFolioSettlement(order, payload.getAmount());
+                isSettled = attemptFolioSettlement(order, expectedAmount);
             }
             return WebhookProcessingResult.builder()
                     .paymentReference(order.getPaymentReference())
@@ -94,6 +101,7 @@ public class BankWebhookProcessingService {
 
         order.setStatus(PaymentGatewayStatus.PAID);
         order.setBankTransactionId(payload.getTransactionId());
+        order.setConfirmedAmount(payload.getAmount());
         order.setSettledAt(Instant.now());
         paymentOrderRepository.save(order);
 

@@ -67,6 +67,9 @@ public class PaymentOrder extends BaseEntity {
     @Column(name = "bank_transaction_id", length = 128)
     private String bankTransactionId;
 
+    @Column(name = "confirmed_amount", precision = 12, scale = 2)
+    private BigDecimal confirmedAmount;
+
     @Column(name = "settled_at")
     private Instant settledAt;
 
