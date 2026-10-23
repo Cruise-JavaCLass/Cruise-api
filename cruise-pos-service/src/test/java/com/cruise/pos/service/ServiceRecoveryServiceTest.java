@@ -133,6 +133,7 @@ class ServiceRecoveryServiceTest {
         assertThat(dto.severity()).isEqualTo(ServiceRecoverySeverity.CRITICAL_DIRECTOR_ESCALATION);
         assertThat(dto.escalatedAt()).isNotNull();
         assertThat(dto.escalationReason()).contains("Director meeting");
+        assertThat(dto.slaDueAt()).isBeforeOrEqualTo(Instant.now().plus(3, ChronoUnit.HOURS));
     }
 
     @Test
@@ -150,7 +151,7 @@ class ServiceRecoveryServiceTest {
     @Test
     @DisplayName("issueObcVoucher: creates voucher and updates case status to COMPENSATION_OFFERED")
     void testIssueObcVoucher() {
-        when(caseRepository.findById(1L)).thenReturn(Optional.of(sampleCase));
+        when(caseRepository.findByIdWithLock(1L)).thenReturn(Optional.of(sampleCase));
         when(voucherRepository.findByCaseId(1L)).thenReturn(Collections.emptyList());
         when(voucherRepository.save(any(ServiceRecoveryObcVoucher.class))).thenAnswer(inv -> {
             ServiceRecoveryObcVoucher v = inv.getArgument(0);
@@ -182,7 +183,7 @@ class ServiceRecoveryServiceTest {
     @DisplayName("issueObcVoucher: throws IllegalStateException if case is already resolved or closed")
     void testIssueObcVoucher_ResolvedCaseThrows() {
         sampleCase.setStatus(ServiceRecoveryCaseStatus.RESOLVED);
-        when(caseRepository.findById(1L)).thenReturn(Optional.of(sampleCase));
+        when(caseRepository.findByIdWithLock(1L)).thenReturn(Optional.of(sampleCase));
 
         IssueObcVoucherRequest req = new IssueObcVoucherRequest(
                 BigDecimal.valueOf(50.00),
@@ -199,7 +200,7 @@ class ServiceRecoveryServiceTest {
     @Test
     @DisplayName("issueObcVoucher: throws IllegalStateException if an active voucher already exists for the case")
     void testIssueObcVoucher_DuplicateActiveVoucherThrows() {
-        when(caseRepository.findById(1L)).thenReturn(Optional.of(sampleCase));
+        when(caseRepository.findByIdWithLock(1L)).thenReturn(Optional.of(sampleCase));
         ServiceRecoveryObcVoucher existing = ServiceRecoveryObcVoucher.builder()
                 .status(ObcVoucherStatus.ISSUED)
                 .build();
