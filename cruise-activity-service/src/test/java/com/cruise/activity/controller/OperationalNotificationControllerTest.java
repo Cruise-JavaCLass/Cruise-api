@@ -19,6 +19,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Instant;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -65,6 +66,7 @@ class OperationalNotificationControllerTest {
         when(operationalNotificationService.broadcastOperationalNotification(any())).thenReturn(event);
 
         mockMvc.perform(post("/api/operations/notifications/broadcast")
+                        .header("X-Caller-Role", "OFFICER")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isCreated())
@@ -75,11 +77,63 @@ class OperationalNotificationControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/operations/notifications/stream connects to SSE emitter")
-    void testSubscribeOperationalAlertStream() throws Exception {
-        when(broadcaster.subscribe()).thenReturn(new SseEmitter());
+    @DisplayName("POST /api/operations/notifications/broadcast rejects passenger callers with 403 Forbidden")
+    void testBroadcastOperationalAlertRejectsPassengerCaller() throws Exception {
+        OperationalBroadcastRequest req = OperationalBroadcastRequest.builder()
+                .title("Fake Emergency")
+                .message("All passengers abandon ship")
+                .category(NotificationCategory.CRITICAL)
+                .scope(NotificationScope.ALL)
+                .build();
 
-        mockMvc.perform(get("/api/operations/notifications/stream"))
+        mockMvc.perform(post("/api/operations/notifications/broadcast")
+                        .header("X-Caller-Role", "PASSENGER")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("POST /api/operations/notifications/broadcast with title > 200 chars returns 400 Bad Request")
+    void testBroadcastRejectsOversizedTitle() throws Exception {
+        OperationalBroadcastRequest req = OperationalBroadcastRequest.builder()
+                .title("T".repeat(201))
+                .message("Valid message")
+                .category(NotificationCategory.OPERATIONAL)
+                .scope(NotificationScope.ALL)
+                .build();
+
+        mockMvc.perform(post("/api/operations/notifications/broadcast")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /api/operations/notifications/broadcast with message > 1000 chars returns 400 Bad Request")
+    void testBroadcastRejectsOversizedMessage() throws Exception {
+        OperationalBroadcastRequest req = OperationalBroadcastRequest.builder()
+                .title("Valid Title")
+                .message("M".repeat(1001))
+                .category(NotificationCategory.OPERATIONAL)
+                .scope(NotificationScope.ALL)
+                .build();
+
+        mockMvc.perform(post("/api/operations/notifications/broadcast")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("GET /api/operations/notifications/stream connects to SSE emitter with headers")
+    void testSubscribeOperationalAlertStream() throws Exception {
+        when(broadcaster.subscribe(eq("CREW"), eq(7), eq("AFT"))).thenReturn(new SseEmitter());
+
+        mockMvc.perform(get("/api/operations/notifications/stream")
+                        .header("X-Caller-Role", "CREW")
+                        .header("X-Deck", "7")
+                        .header("X-Zone", "AFT"))
                 .andExpect(status().isOk());
     }
 }
