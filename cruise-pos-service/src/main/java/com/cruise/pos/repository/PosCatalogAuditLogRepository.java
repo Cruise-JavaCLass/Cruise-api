@@ -24,8 +24,11 @@ public interface PosCatalogAuditLogRepository extends JpaRepository<PosCatalogAu
     Page<PosCatalogAuditLog> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
     /**
-     * Returns product IDs reassigned away from a specific outlet since a given timestamp.
+     * Returns product IDs reassigned away from a specific outlet since a given timestamp,
+     * or formerly global products restricted to a different outlet.
      */
-    @Query("SELECT a.productId FROM PosCatalogAuditLog a WHERE a.action = 'OUTLET_REASSIGNED' AND a.oldValue = :outletIdStr AND a.createdAt >= :since")
+    @Query("SELECT a.productId FROM PosCatalogAuditLog a " +
+           "WHERE a.action = 'OUTLET_REASSIGNED' AND a.createdAt >= :since " +
+           "AND (a.oldValue = :outletIdStr OR (a.oldValue = 'GLOBAL' AND a.newValue <> :outletIdStr))")
     List<Long> findReassignedProductIdsForOutlet(@Param("outletIdStr") String outletIdStr, @Param("since") Instant since);
 }

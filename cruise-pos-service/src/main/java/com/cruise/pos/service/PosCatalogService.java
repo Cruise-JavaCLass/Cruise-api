@@ -240,6 +240,28 @@ public class PosCatalogService {
         String newValue = priceChanged ? (updated.getBasePrice() != null ? updated.getBasePrice().toString() : null) : "Product updated";
         String performedBy = resolveCurrentPrincipal();
 
+        if (oldOutletId != null && updated.getOutletId() != null && !Objects.equals(oldOutletId, updated.getOutletId())) {
+            auditLogRepository.save(com.cruise.pos.entity.PosCatalogAuditLog.builder()
+                    .productId(updated.getId())
+                    .sku(updated.getSku())
+                    .action("OUTLET_REASSIGNED")
+                    .oldValue(String.valueOf(oldOutletId))
+                    .newValue(String.valueOf(updated.getOutletId()))
+                    .performedBy(performedBy)
+                    .reason("Product moved from outlet " + oldOutletId + " to " + updated.getOutletId())
+                    .build());
+        } else if (oldOutletId == null && updated.getOutletId() != null) {
+            auditLogRepository.save(com.cruise.pos.entity.PosCatalogAuditLog.builder()
+                    .productId(updated.getId())
+                    .sku(updated.getSku())
+                    .action("OUTLET_REASSIGNED")
+                    .oldValue("GLOBAL")
+                    .newValue(String.valueOf(updated.getOutletId()))
+                    .performedBy(performedBy)
+                    .reason("Global product restricted to outlet " + updated.getOutletId())
+                    .build());
+        }
+
 
         auditLogRepository.save(com.cruise.pos.entity.PosCatalogAuditLog.builder()
                 .productId(updated.getId())

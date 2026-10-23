@@ -21,6 +21,8 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.zip.GZIPOutputStream;
 
 @Service
@@ -115,6 +117,11 @@ public class PosOfflineSyncService {
         Instant threshold = (since != null) ? since : syncTimestamp.minus(7, ChronoUnit.DAYS);
         List<PosProduct> changedEntities = productRepository.findUpdatedProductsSince(outletId, threshold);
 
+        Map<Long, ProductDetailDto> packageProductsById = currentPackage.getProducts() != null
+                ? currentPackage.getProducts().stream()
+                        .collect(Collectors.toMap(ProductDetailDto::getId, Function.identity(), (a, b) -> a))
+                : Collections.emptyMap();
+
         List<ProductDetailDto> updatedProducts = new ArrayList<>();
         List<Long> deletedProductIds = new ArrayList<>();
 
@@ -122,23 +129,31 @@ public class PosOfflineSyncService {
             if (p.getStatus() == ProductStatus.ARCHIVED) {
                 deletedProductIds.add(p.getId());
             } else {
-                updatedProducts.add(catalogService.getProductById(p.getId()));
+                ProductDetailDto dto = packageProductsById.get(p.getId());
+                updatedProducts.add(dto != null ? dto : catalogService.getProductById(p.getId()));
             }
         }
 
         if (outletId != null) {
+            Set<Long> updatedIds = updatedProducts.stream()
+                    .map(ProductDetailDto::getId)
+                    .collect(Collectors.toSet());
             List<Long> reassignedIds = auditLogRepository.findReassignedProductIdsForOutlet(String.valueOf(outletId), threshold);
             if (reassignedIds != null) {
                 for (Long rId : reassignedIds) {
-                    if (rId != null && !deletedProductIds.contains(rId)) {
+                    if (rId != null && !updatedIds.contains(rId) && !deletedProductIds.contains(rId)) {
                         deletedProductIds.add(rId);
                     }
                 }
             }
         }
 
-        List<CategoryDto> currentCategories = catalogService.getCategories(outletId);
-        List<HappyHourRuleDto> happyHourRules = pricingEngine.getRulesByOutlet(outletId);
+        List<CategoryDto> currentCategories = currentPackage.getCategories() != null
+                ? currentPackage.getCategories()
+                : catalogService.getCategories(outletId);
+        List<HappyHourRuleDto> happyHourRules = currentPackage.getHappyHourRules() != null
+                ? currentPackage.getHappyHourRules()
+                : pricingEngine.getRulesByOutlet(outletId);
 
         return PosDeltaCatalogChangefeedDto.builder()
                 .fromVersionHash(clientVersionHash)
@@ -325,6 +340,16 @@ public class PosOfflineSyncService {
                             .newValue(String.valueOf(outletId))
                             .performedBy(request.getPerformedBy() != null ? request.getPerformedBy() : "MANIFEST_SYNC")
                             .reason("Product moved from outlet " + oldOutletId + " to " + outletId)
+                            .build());
+                } else if (oldOutletId == null) {
+                    auditLogRepository.save(PosCatalogAuditLog.builder()
+                            .productId(product.getId())
+                            .sku(product.getSku())
+                            .action("OUTLET_REASSIGNED")
+                            .oldValue("GLOBAL")
+                            .newValue(String.valueOf(outletId))
+                            .performedBy(request.getPerformedBy() != null ? request.getPerformedBy() : "MANIFEST_SYNC")
+                            .reason("Global product restricted to outlet " + outletId)
                             .build());
                 }
                 product.setOutletId(outletId);
