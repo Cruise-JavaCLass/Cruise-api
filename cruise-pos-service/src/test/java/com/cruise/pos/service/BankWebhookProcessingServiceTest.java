@@ -15,9 +15,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -53,7 +57,9 @@ class BankWebhookProcessingServiceTest {
 
     @BeforeEach
     void setUp() {
-        lenient().when(transactionManager.getTransaction(any())).thenReturn(mock(org.springframework.transaction.TransactionStatus.class));
+        lenient().when(transactionManager.getTransaction(argThat(def ->
+                def != null && def.getPropagationBehavior() == TransactionDefinition.PROPAGATION_REQUIRES_NEW
+        ))).thenReturn(mock(TransactionStatus.class));
 
         pendingOrder = PaymentOrder.builder()
                 .paymentReference("PAY-100")
@@ -92,6 +98,10 @@ class BankWebhookProcessingServiceTest {
         assertThat(pendingOrder.getConfirmedAmount()).isEqualByComparingTo(BigDecimal.valueOf(1500000.00));
 
         verify(paymentOrderRepository).save(pendingOrder);
+        ArgumentCaptor<TransactionDefinition> defCaptor = ArgumentCaptor.forClass(TransactionDefinition.class);
+        verify(transactionManager).getTransaction(defCaptor.capture());
+        assertThat(defCaptor.getValue().getPropagationBehavior())
+                .isEqualTo(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         verify(settlementService).settle(
                 eq("CABIN-801"),
                 contains("VIETQR-PAY-100"),
