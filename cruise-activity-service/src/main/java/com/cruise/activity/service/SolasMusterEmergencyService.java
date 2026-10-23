@@ -5,6 +5,7 @@ import com.cruise.activity.dto.SolasMusterIncidentDto;
 import com.cruise.activity.entity.SolasMusterCheckin;
 import com.cruise.activity.entity.SolasMusterIncident;
 import com.cruise.activity.enums.MusterStatus;
+import com.cruise.activity.exception.MusterIncidentNotActiveException;
 import com.cruise.activity.exception.ResourceNotFoundException;
 import com.cruise.activity.repository.PassengerRepository;
 import com.cruise.activity.repository.SolasMusterCheckinRepository;
@@ -55,17 +56,12 @@ public class SolasMusterEmergencyService {
     }
 
     @Transactional
-    public SolasMusterCheckinRequest getCheckinDetails(Long checkinId) {
-        return null;
-    }
-
-    @Transactional
     public SolasMusterIncidentDto checkinPassengerToMusterStation(SolasMusterCheckinRequest req) {
         SolasMusterIncident incident = incidentRepository.findByIdForUpdate(req.getIncidentId())
                 .orElseThrow(() -> new ResourceNotFoundException("Muster incident not found: " + req.getIncidentId()));
 
         if (incident.getStatus() != MusterStatus.ACTIVE_MUSTER && incident.getStatus() != MusterStatus.DRILL_IN_PROGRESS) {
-            throw new IllegalStateException("Muster incident is not active (current status: " + incident.getStatus() + ")");
+            throw new MusterIncidentNotActiveException("Muster incident is not active (current status: " + incident.getStatus() + ")");
         }
 
         if (!passengerRepository.existsById(req.getPassengerId())) {
@@ -112,7 +108,7 @@ public class SolasMusterEmergencyService {
                 .orElseThrow(() -> new ResourceNotFoundException("Muster incident not found: " + incidentId));
 
         if (incident.getStatus() != MusterStatus.ACTIVE_MUSTER && incident.getStatus() != MusterStatus.DRILL_IN_PROGRESS) {
-            throw new IllegalStateException("Cannot declare ALL_CLEAR for incident in status: " + incident.getStatus());
+            throw new MusterIncidentNotActiveException("Cannot declare ALL_CLEAR for incident in status: " + incident.getStatus());
         }
 
         incident.setStatus(MusterStatus.ALL_CLEAR);
