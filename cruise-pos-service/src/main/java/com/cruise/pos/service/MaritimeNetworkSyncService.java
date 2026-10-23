@@ -6,18 +6,29 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class MaritimeNetworkSyncService {
 
+    private static final int MAX_TRACKED_DEVICES = 10_000;
+    private static final long COOLDOWN_MS = 400;
+
     private final PosTransactionService transactionService;
 
-    // Rate limiting tracking: deviceId -> lastSyncTimestampMs
-    private final Map<String, Long> deviceRateLimitMap = new ConcurrentHashMap<>();
+    // Rate limiting tracking: deviceId -> lastSyncTimestampMs (bounded LRU map)
+    private final Map<String, Long> deviceRateLimitMap = Collections.synchronizedMap(
+            new LinkedHashMap<>(16, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
+                    return size() > MAX_TRACKED_DEVICES;
+                }
+            }
+    );
 
     public NetworkHeartbeatResponse pingHeartbeat(Long clientTimestamp, Long clientReportedLatencyMs) {
         long start = System.currentTimeMillis();
@@ -61,12 +72,19 @@ public class MaritimeNetworkSyncService {
     public AdaptiveChunkSyncResponse ingestAdaptiveChunk(AdaptiveChunkSyncRequest request) {
         String deviceId = request.getDeviceId();
         long nowMs = System.currentTimeMillis();
-
-        // Adaptive rate limiting check: if latency is high (> 1000ms), enforce min 500ms cooldown per device
-        Long lastSyncMs = deviceRateLimitMap.get(deviceId);
         long latency = request.getReportedLatencyMs() != null ? request.getReportedLatencyMs() : 0L;
 
-        if (latency > 1000 && lastSyncMs != null && (nowMs - lastSyncMs < 400)) {
+        // Atomic rate-limiting check and timestamp update using compute
+        boolean[] limited = {false};
+        deviceRateLimitMap.compute(deviceId, (k, last) -> {
+            if (latency > 1000 && last != null && (nowMs - last < COOLDOWN_MS)) {
+                limited[0] = true;
+                return last;
+            }
+            return nowMs;
+        });
+
+        if (limited[0]) {
             log.warn("Rate limiting active on device {} due to high latency ({}ms)", deviceId, latency);
             return AdaptiveChunkSyncResponse.builder()
                     .deviceId(deviceId)
@@ -80,8 +98,6 @@ public class MaritimeNetworkSyncService {
                     .nextBackoffMs(1000)
                     .build();
         }
-
-        deviceRateLimitMap.put(deviceId, nowMs);
 
         // Forward to transactionService.processBatchSync
         BatchSyncRequest batchReq = BatchSyncRequest.builder()
@@ -105,9 +121,9 @@ public class MaritimeNetworkSyncService {
                 .processedUuids(batchResp.getProcessedUuids())
                 .duplicateUuids(batchResp.getDuplicateUuids())
                 .failedReasons(batchResp.getFailedReasons())
+                .rateLimited(false)
                 .nextRecommendedChunkSize(nextSize)
                 .nextBackoffMs(backoffMs)
-                .rateLimited(false)
                 .build();
     }
 

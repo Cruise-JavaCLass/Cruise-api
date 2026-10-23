@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -37,6 +38,7 @@ public class AdaptiveChunkSyncRequest {
     private Instant clientSyncTimestamp;
 
     @NotEmpty(message = "Transactions chunk must not be empty")
+    @Size(max = 100, message = "Transactions chunk cannot exceed 100 items under maritime link policy")
     @Valid
     private List<CreateTransactionRequest> transactions;
 }
