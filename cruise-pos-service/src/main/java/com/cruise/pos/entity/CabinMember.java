@@ -7,7 +7,9 @@ import lombok.*;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "pos_cabin_members", indexes = {
+@Table(name = "pos_cabin_members",
+        uniqueConstraints = @UniqueConstraint(name = "uk_member_cabin_passenger", columnNames = {"cabin_number", "passenger_id"}),
+        indexes = {
         @Index(name = "idx_member_cabin", columnList = "cabin_number"),
         @Index(name = "idx_member_passenger", columnList = "passenger_id")
 })

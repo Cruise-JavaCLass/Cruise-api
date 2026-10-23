@@ -23,6 +23,7 @@ public class CabinCreditLimitEngine {
 
     private final CabinFolioAccountRepository folioRepository;
     private final CabinMemberRepository memberRepository;
+    private final CabinBillingSplitService billingSplitService;
 
     @Transactional(readOnly = true)
     public CabinCreditLimitCheckResponse checkCreditLimit(String cabinNumber, CabinCreditLimitCheckRequest request) {
@@ -62,8 +63,13 @@ public class CabinCreditLimitEngine {
         }
 
         // 3. Member Signer & Individual Limit Check
+        billingSplitService.ensureSeededCabinMembers(cabinNumber);
         if (request.getPassengerId() != null) {
             Optional<CabinMember> memberOpt = memberRepository.findByCabinNumberAndPassengerId(cabinNumber, request.getPassengerId());
+            if (memberOpt.isEmpty()) {
+                return buildLockedResponse(cabinNumber, request.getPassengerId(), requested, folio,
+                        "Hành khách không thuộc phòng " + cabinNumber + "!");
+            }
             if (memberOpt.isPresent()) {
                 CabinMember member = memberOpt.get();
 

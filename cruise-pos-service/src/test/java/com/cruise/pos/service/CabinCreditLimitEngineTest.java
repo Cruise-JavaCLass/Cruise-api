@@ -30,6 +30,9 @@ class CabinCreditLimitEngineTest {
     @Mock
     private CabinMemberRepository memberRepository;
 
+    @Mock
+    private CabinBillingSplitService billingSplitService;
+
     @InjectMocks
     private CabinCreditLimitEngine creditLimitEngine;
 

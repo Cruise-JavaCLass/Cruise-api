@@ -34,7 +34,6 @@ public class PosSignature extends BaseEntity {
     @Column(name = "signer_name", nullable = false, length = 128)
     private String signerName;
 
-    @Lob
     @Column(name = "signature_image_base64", nullable = false, columnDefinition = "TEXT")
     private String signatureImageBase64;
 

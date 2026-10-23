@@ -102,7 +102,7 @@ class CabinBillingSplitServiceTest {
     @Test
     @DisplayName("Should successfully archive valid signature with SHA-256 checksum and audit log")
     void testArchiveSignatureSuccess() {
-        String base64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAACWAQMAAABp4";
+        String base64 = "data:image/png;base64,VkFMSURfVEVTVF9ESUdJVEFMX1NJR05BVFVSRV9QQVlMT0FEX0ZPUl9VTklUX1RFU1RJTkc=";
         ArchiveSignatureRequest req = ArchiveSignatureRequest.builder()
                 .transactionUuid("TX-SPLIT-001")
                 .transactionId(999L)

@@ -34,7 +34,7 @@ public class CabinBillingSplitService {
     private final PosAuditLogRepository auditLogRepository;
     private final PosFolioService folioService;
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<CabinMemberDto> getCabinMembers(String cabinNumber) {
         ensureSeededCabinMembers(cabinNumber);
         List<CabinMember> members = memberRepository.findByCabinNumber(cabinNumber);
@@ -47,9 +47,17 @@ public class CabinBillingSplitService {
             throw new DuplicateResourceException("Signature already archived for transaction: " + request.getTransactionUuid());
         }
 
-        String base64 = request.getSignatureImageBase64().trim();
-        if (base64.isBlank() || base64.length() < 30) {
+        String rawBase64 = request.getSignatureImageBase64().trim();
+        if (rawBase64.isBlank() || rawBase64.length() < 30 || rawBase64.length() > 2_000_000) {
             throw new BusinessRuleException("Chữ ký số không hợp lệ hoặc để trống!");
+        }
+
+        // Strip data URI prefix if present (e.g., data:image/png;base64,...)
+        String base64 = rawBase64.replaceFirst("^data:image/[^;]+;base64,", "");
+        try {
+            java.util.Base64.getDecoder().decode(base64);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessRuleException("Định dạng dữ liệu chữ ký Base64 không hợp lệ!");
         }
 
         String checksum = calculateSha256(base64);
@@ -219,11 +227,14 @@ public class CabinBillingSplitService {
                 .build();
     }
 
-    private void ensureSeededCabinMembers(String cabinNumber) {
+    public void ensureSeededCabinMembers(String cabinNumber) {
         if (!memberRepository.existsByCabinNumber(cabinNumber)) {
             CabinFolioAccount folio = folioRepository.findByCabinNumber(cabinNumber).orElse(null);
-            String primaryName = folio != null ? folio.getPrimaryGuestName() : "Primary Guest";
-            Long primaryPid = folio != null && folio.getPassengerId() != null ? folio.getPassengerId() : 101L;
+            if (folio == null || folio.getPassengerId() == null) {
+                return;
+            }
+            String primaryName = folio.getPrimaryGuestName() != null ? folio.getPrimaryGuestName() : "Primary Guest";
+            Long primaryPid = folio.getPassengerId();
 
             memberRepository.save(CabinMember.builder()
                     .cabinNumber(cabinNumber)
@@ -233,28 +244,6 @@ public class CabinBillingSplitService {
                     .isMinor(false)
                     .isAuthorizedSigner(true)
                     .individualCreditLimit(BigDecimal.valueOf(1000.00))
-                    .individualBalance(BigDecimal.ZERO)
-                    .build());
-
-            memberRepository.save(CabinMember.builder()
-                    .cabinNumber(cabinNumber)
-                    .passengerId(primaryPid + 1)
-                    .guestName(primaryName + " (Spouse)")
-                    .age(35)
-                    .isMinor(false)
-                    .isAuthorizedSigner(true)
-                    .individualCreditLimit(BigDecimal.valueOf(500.00))
-                    .individualBalance(BigDecimal.ZERO)
-                    .build());
-
-            memberRepository.save(CabinMember.builder()
-                    .cabinNumber(cabinNumber)
-                    .passengerId(primaryPid + 2)
-                    .guestName(primaryName + " (Junior)")
-                    .age(12)
-                    .isMinor(true)
-                    .isAuthorizedSigner(false)
-                    .individualCreditLimit(BigDecimal.valueOf(100.00))
                     .individualBalance(BigDecimal.ZERO)
                     .build());
         }
