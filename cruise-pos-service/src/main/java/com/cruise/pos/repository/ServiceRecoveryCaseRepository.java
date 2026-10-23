@@ -19,6 +19,12 @@ public interface ServiceRecoveryCaseRepository extends JpaRepository<ServiceReco
 
     Optional<ServiceRecoveryCase> findByCaseNumber(String caseNumber);
 
+    boolean existsByCaseNumber(String caseNumber);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM ServiceRecoveryCase c WHERE c.id = :caseId")
+    Optional<ServiceRecoveryCase> findByIdWithLock(@Param("caseId") Long caseId);
+
     List<ServiceRecoveryCase> findByCabinNumberOrderByCreatedAtDesc(String cabinNumber);
 
     List<ServiceRecoveryCase> findByPassengerIdOrderByCreatedAtDesc(Long passengerId);

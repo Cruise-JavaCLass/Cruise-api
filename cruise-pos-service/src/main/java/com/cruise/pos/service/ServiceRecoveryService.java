@@ -41,7 +41,10 @@ public class ServiceRecoveryService {
                 request.cabinNumber(), request.passengerName(), request.rootCause(), request.severity());
 
         String datePrefix = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
-        String caseNumber = "SRC-" + datePrefix + "-" + (1000 + secureRandom.nextInt(9000));
+        String caseNumber;
+        do {
+            caseNumber = "SRC-" + datePrefix + "-" + (1000 + secureRandom.nextInt(9000));
+        } while (caseRepository.existsByCaseNumber(caseNumber));
 
         Instant now = Instant.now();
         Instant slaDueAt = computeSlaDueDate(request.severity(), now);
@@ -106,7 +109,12 @@ public class ServiceRecoveryService {
 
         recoveryCase.setStatus(ServiceRecoveryCaseStatus.ESCALATED);
         recoveryCase.setSeverity(ServiceRecoverySeverity.CRITICAL_DIRECTOR_ESCALATION);
-        recoveryCase.setEscalatedAt(Instant.now());
+        Instant now = Instant.now();
+        Instant criticalSla = computeSlaDueDate(ServiceRecoverySeverity.CRITICAL_DIRECTOR_ESCALATION, now);
+        if (recoveryCase.getSlaDueAt() == null || criticalSla.isBefore(recoveryCase.getSlaDueAt())) {
+            recoveryCase.setSlaDueAt(criticalSla);
+        }
+        recoveryCase.setEscalatedAt(now);
         recoveryCase.setEscalationReason(request.escalationReason());
 
         ServiceRecoveryCase saved = caseRepository.save(recoveryCase);
@@ -150,7 +158,8 @@ public class ServiceRecoveryService {
     public ServiceRecoveryObcVoucherDto issueObcVoucher(Long caseId, IssueObcVoucherRequest request, String authorizedBy) {
         log.info("Issuing OBC compensation voucher for caseId={}, amount=${}, authorizedBy={}",
                 caseId, request.creditAmount(), authorizedBy);
-        ServiceRecoveryCase recoveryCase = findCaseOrThrow(caseId);
+        ServiceRecoveryCase recoveryCase = caseRepository.findByIdWithLock(caseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Service recovery case not found with id: " + caseId));
 
         if (recoveryCase.getStatus() == ServiceRecoveryCaseStatus.CLOSED || recoveryCase.getStatus() == ServiceRecoveryCaseStatus.RESOLVED) {
             throw new IllegalStateException("Cannot issue voucher for case in status: " + recoveryCase.getStatus());
@@ -204,7 +213,7 @@ public class ServiceRecoveryService {
         return toVoucherDto(savedVoucher);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = BusinessRuleException.class)
     public ClaimObcVoucherResponse claimObcVoucher(String voucherCode, String actor) {
         log.info("Claiming OBC voucherCode={} to folio, actor={}", voucherCode, actor);
         ServiceRecoveryObcVoucher voucher = voucherRepository.findByVoucherCodeWithLock(voucherCode)
