@@ -83,6 +83,30 @@ class PassengerReviewControllerTest {
     }
 
     @Test
+    @DisplayName("submitReview throws AccessDeniedException when caller passenger ID header is missing")
+    void testSubmitReviewMissingCallerId() {
+        SubmitPassengerReviewRequest request = SubmitPassengerReviewRequest.builder()
+                .passengerId(101L)
+                .passengerName("Alice")
+                .cabinNumber("CABIN-701")
+                .category(FeedbackCategory.CABIN_SERVICE)
+                .rating(5)
+                .build();
+
+        assertThatThrownBy(() -> controller.submitReview(null, null, request))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Yêu cầu định danh người gửi đánh giá");
+    }
+
+    @Test
+    @DisplayName("getAnalytics rejects NON_ADMIN or unauthorized roles with AccessDeniedException")
+    void testGetAnalyticsRejectsNonAdminRole() {
+        assertThatThrownBy(() -> controller.getAnalytics("NON_ADMIN"))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Yêu cầu quyền SYSTEM_ADMIN");
+    }
+
+    @Test
     @DisplayName("getAnalytics returns aggregated CSAT metrics for SYSTEM_ADMIN")
     void testGetAnalytics() {
         FeedbackAnalyticsDto analytics = FeedbackAnalyticsDto.builder()

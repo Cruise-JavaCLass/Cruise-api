@@ -4,6 +4,7 @@ import com.cruise.activity.dto.FeedbackAnalyticsDto;
 import com.cruise.activity.dto.PassengerServiceReviewResponse;
 import com.cruise.activity.dto.SubmitPassengerReviewRequest;
 import com.cruise.activity.dto.TriageReviewRequest;
+import com.cruise.activity.entity.Passenger;
 import com.cruise.activity.entity.PassengerServiceReview;
 import com.cruise.activity.enums.FeedbackCategory;
 import com.cruise.activity.enums.FeedbackStatus;
@@ -49,6 +50,7 @@ class PassengerReviewServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(passengerRepository.findByIdForUpdate(any())).thenReturn(Optional.of(mock(Passenger.class)));
         validRequest = SubmitPassengerReviewRequest.builder()
                 .passengerId(101L)
                 .passengerName("Alice Wonder")
@@ -117,6 +119,16 @@ class PassengerReviewServiceTest {
                 .hasMessageContaining("Quá nhiều lượt gửi");
 
         verify(reviewRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("submitReview throws ResourceNotFoundException when passenger does not exist")
+    void testSubmitReviewThrowsWhenPassengerNotFound() {
+        when(passengerRepository.findByIdForUpdate(101L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reviewService.submitReview(validRequest))
+                .isInstanceOf(com.cruise.activity.exception.ResourceNotFoundException.class)
+                .hasMessageContaining("Passenger not found with id: 101");
     }
 
     @Test
