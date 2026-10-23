@@ -4,6 +4,7 @@ import com.cruise.activity.dto.BlacklistRfidCardRequest;
 import com.cruise.activity.dto.BlacklistRfidCardResponse;
 import com.cruise.activity.dto.BulkRfidIngestionRequest;
 import com.cruise.activity.dto.BulkRfidIngestionResponse;
+import com.cruise.activity.dto.RfidInventoryDashboardDto;
 import com.cruise.activity.entity.Passenger;
 import com.cruise.activity.entity.RfidCardInventory;
 import com.cruise.activity.enums.RfidCardStatus;
@@ -16,6 +17,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
 import java.util.Collections;
 import java.util.List;
@@ -241,5 +244,41 @@ class RfidCardManagementServiceTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> rfidService.blacklistCard(request))
                 .isInstanceOf(com.cruise.activity.exception.BusinessRuleException.class)
                 .hasMessageContaining("Cannot unambiguously identify assigned passenger");
+    }
+
+    @Test
+    @DisplayName("getDashboardMetrics: returns counts and recent inventory cards")
+    void testGetDashboardMetrics() {
+        when(rfidRepository.countByStatus(RfidCardStatus.AVAILABLE)).thenReturn(50L);
+        when(rfidRepository.countByStatus(RfidCardStatus.ISSUED)).thenReturn(30L);
+        when(rfidRepository.countByStatus(RfidCardStatus.BLACKLISTED)).thenReturn(10L);
+        when(rfidRepository.countByStatus(RfidCardStatus.LOST_REPORTED)).thenReturn(5L);
+        when(rfidRepository.countByStatus(RfidCardStatus.DAMAGED)).thenReturn(5L);
+        when(rfidRepository.count()).thenReturn(100L);
+
+        RfidCardInventory card = RfidCardInventory.builder().cardUid("UID-RECENT").build();
+        when(rfidRepository.findAll(any(Pageable.class))).thenReturn(new PageImpl<>(List.of(card)));
+        when(rfidRepository.findAllActiveBlacklistedUids()).thenReturn(List.of("UID-BLACK"));
+
+        RfidInventoryDashboardDto dto = rfidService.getDashboardMetrics();
+
+        assertThat(dto).isNotNull();
+        assertThat(dto.getTotalCards()).isEqualTo(100L);
+        assertThat(dto.getAvailableCards()).isEqualTo(50L);
+        assertThat(dto.getIssuedCards()).isEqualTo(30L);
+        assertThat(dto.getLostOrBlacklistedCards()).isEqualTo(15L);
+        assertThat(dto.getRecentCards()).hasSize(1);
+        assertThat(dto.getActiveBlacklistUids()).contains("UID-BLACK");
+    }
+
+    @Test
+    @DisplayName("getActiveBlacklistedUids: delegates to repository query")
+    void testGetActiveBlacklistedUids() {
+        when(rfidRepository.findAllActiveBlacklistedUids()).thenReturn(List.of("UID-1", "UID-2"));
+
+        List<String> result = rfidService.getActiveBlacklistedUids();
+
+        assertThat(result).containsExactly("UID-1", "UID-2");
+        verify(rfidRepository).findAllActiveBlacklistedUids();
     }
 }
