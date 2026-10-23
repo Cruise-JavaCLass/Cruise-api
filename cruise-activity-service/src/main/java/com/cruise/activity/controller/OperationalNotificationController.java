@@ -13,6 +13,11 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+/**
+ * REST controller for operational announcements & real-time SSE stream gateway.
+ * Architecture Note: Operates behind the API Gateway trust boundary where upstream API Gateway
+ * authenticates JWT identities and injects trusted X-Caller-Role headers before forwarding downstream.
+ */
 @RestController
 @RequestMapping("/api/operations/notifications")
 @RequiredArgsConstructor
