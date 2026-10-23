@@ -44,7 +44,7 @@ public class PosManagerAuthService {
         }
     }
 
-    public boolean verifyRefundApproval(String managerId, String managerPin) {
+    public synchronized boolean verifyRefundApproval(String managerId, String managerPin) {
         if (managerId == null || managerId.isBlank() || managerPin == null || managerPin.isBlank()) {
             return false;
         }
