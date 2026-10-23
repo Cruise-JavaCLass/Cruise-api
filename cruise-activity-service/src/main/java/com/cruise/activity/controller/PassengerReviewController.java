@@ -27,14 +27,16 @@ public class PassengerReviewController {
             @RequestHeader(value = "X-Caller-Role", required = false) String callerRole,
             @Valid @RequestBody SubmitPassengerReviewRequest request
     ) {
-        if (callerPassengerId != null) {
-            boolean isStaffOrAdmin = callerRole != null && (
-                    callerRole.toUpperCase().contains("STAFF") ||
-                    callerRole.toUpperCase().contains("ADMIN")
-            );
-            if (!isStaffOrAdmin && !callerPassengerId.equals(request.getPassengerId())) {
-                throw new AccessDeniedException("Hành khách chỉ được gửi đánh giá cho chính mình");
-            }
+        if (callerPassengerId == null) {
+            throw new AccessDeniedException("Yêu cầu định danh người gửi đánh giá (X-Caller-Id)");
+        }
+        boolean isStaffOrAdmin = callerRole != null && (
+                "SYSTEM_ADMIN".equalsIgnoreCase(callerRole.trim()) ||
+                "ADMIN".equalsIgnoreCase(callerRole.trim()) ||
+                "STAFF".equalsIgnoreCase(callerRole.trim())
+        );
+        if (!isStaffOrAdmin && !callerPassengerId.equals(request.getPassengerId())) {
+            throw new AccessDeniedException("Hành khách chỉ được gửi đánh giá cho chính mình");
         }
         log.info("Received passenger service review for passenger: {}, rating: {}", request.getPassengerId(), request.getRating());
         PassengerServiceReviewResponse response = reviewService.submitReview(request);
@@ -76,11 +78,8 @@ public class PassengerReviewController {
     }
 
     private void verifyAdminAuthorization(String callerRole) {
-        if (callerRole == null || callerRole.isBlank()) {
-            throw new AccessDeniedException("Yêu cầu quyền SYSTEM_ADMIN để truy cập quản trị đánh giá");
-        }
-        String upper = callerRole.toUpperCase();
-        if (!upper.contains("ADMIN") && !upper.contains("STAFF")) {
+        if (callerRole == null || !java.util.Set.of("SYSTEM_ADMIN", "ADMIN", "STAFF")
+                .contains(callerRole.trim().toUpperCase())) {
             throw new AccessDeniedException("Yêu cầu quyền SYSTEM_ADMIN để truy cập quản trị đánh giá");
         }
     }

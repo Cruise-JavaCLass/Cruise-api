@@ -46,9 +46,9 @@ public class PassengerReviewService {
         Objects.requireNonNull(request, "SubmitPassengerReviewRequest must not be null");
 
         // Serialize review submissions per passenger
-        if (request.getPassengerId() != null) {
-            passengerRepository.findByIdForUpdate(request.getPassengerId());
-        }
+        passengerRepository.findByIdForUpdate(request.getPassengerId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Passenger not found with id: " + request.getPassengerId()));
 
         // Anti-spam validation: no more than 5 reviews submitted in past hour by same passenger
         Instant oneHourAgo = Instant.now().minus(1, ChronoUnit.HOURS);
