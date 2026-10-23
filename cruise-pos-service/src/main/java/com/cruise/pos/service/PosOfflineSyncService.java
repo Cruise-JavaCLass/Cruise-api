@@ -93,6 +93,7 @@ public class PosOfflineSyncService {
      */
     @Transactional(readOnly = true)
     public PosDeltaCatalogChangefeedDto getDeltaChangefeed(Long outletId, String clientVersionHash, Instant since) {
+        Instant syncTimestamp = Instant.now();
         PosOfflineCatalogPackageDto currentPackage = exportOfflinePackage(outletId);
         String currentEtag = currentPackage.getEtag();
 
@@ -100,7 +101,7 @@ public class PosOfflineSyncService {
             return PosDeltaCatalogChangefeedDto.builder()
                     .fromVersionHash(clientVersionHash)
                     .currentVersionHash(currentEtag)
-                    .syncTimestamp(Instant.now())
+                    .syncTimestamp(syncTimestamp)
                     .outletId(outletId)
                     .requiresFullSnapshot(false)
                     .updatedProducts(Collections.emptyList())
@@ -110,7 +111,8 @@ public class PosOfflineSyncService {
                     .build();
         }
 
-        Instant threshold = (since != null) ? since : Instant.now().minus(7, ChronoUnit.DAYS);
+        boolean requiresFullSnapshot = (clientVersionHash == null || clientVersionHash.isBlank() || since == null);
+        Instant threshold = (since != null) ? since : syncTimestamp.minus(7, ChronoUnit.DAYS);
         List<PosProduct> changedEntities = productRepository.findUpdatedProductsSince(outletId, threshold);
 
         List<ProductDetailDto> updatedProducts = new ArrayList<>();
@@ -124,15 +126,26 @@ public class PosOfflineSyncService {
             }
         }
 
+        if (outletId != null) {
+            List<Long> reassignedIds = auditLogRepository.findReassignedProductIdsForOutlet(String.valueOf(outletId), threshold);
+            if (reassignedIds != null) {
+                for (Long rId : reassignedIds) {
+                    if (rId != null && !deletedProductIds.contains(rId)) {
+                        deletedProductIds.add(rId);
+                    }
+                }
+            }
+        }
+
         List<CategoryDto> currentCategories = catalogService.getCategories(outletId);
         List<HappyHourRuleDto> happyHourRules = pricingEngine.getRulesByOutlet(outletId);
 
         return PosDeltaCatalogChangefeedDto.builder()
                 .fromVersionHash(clientVersionHash)
                 .currentVersionHash(currentEtag)
-                .syncTimestamp(Instant.now())
+                .syncTimestamp(syncTimestamp)
                 .outletId(outletId)
-                .requiresFullSnapshot(clientVersionHash == null || clientVersionHash.isBlank())
+                .requiresFullSnapshot(requiresFullSnapshot)
                 .updatedProducts(updatedProducts)
                 .deletedProductIds(deletedProductIds)
                 .updatedCategories(currentCategories)
@@ -301,9 +314,25 @@ public class PosOfflineSyncService {
             if (item.getDescription() != null) product.setDescription(item.getDescription());
             product.setTaxCategory(tax);
             product.setCategoryId(categoryId);
-            if (outletId != null) product.setOutletId(outletId);
+            if (outletId != null) {
+                Long oldOutletId = product.getOutletId();
+                if (oldOutletId != null && !outletId.equals(oldOutletId)) {
+                    auditLogRepository.save(PosCatalogAuditLog.builder()
+                            .productId(product.getId())
+                            .sku(product.getSku())
+                            .action("OUTLET_REASSIGNED")
+                            .oldValue(String.valueOf(oldOutletId))
+                            .newValue(String.valueOf(outletId))
+                            .performedBy(request.getPerformedBy() != null ? request.getPerformedBy() : "MANIFEST_SYNC")
+                            .reason("Product moved from outlet " + oldOutletId + " to " + outletId)
+                            .build());
+                }
+                product.setOutletId(outletId);
+            }
             if (item.getStockQuantity() != null) product.setStockQuantity(item.getStockQuantity());
             if (item.getImageUrl() != null) product.setImageUrl(item.getImageUrl());
+            if (item.getHappyHourEligible() != null) product.setHappyHourEligible(item.getHappyHourEligible());
+            if (item.getHappyHourDiscountPercent() != null) product.setHappyHourDiscountPercent(item.getHappyHourDiscountPercent());
         } else {
             product = PosProduct.builder()
                     .sku(item.getSku())
@@ -320,6 +349,8 @@ public class PosOfflineSyncService {
                     .is86ed(false)
                     .stockQuantity(item.getStockQuantity() != null ? item.getStockQuantity() : 100)
                     .imageUrl(item.getImageUrl())
+                    .happyHourEligible(item.getHappyHourEligible() != null ? item.getHappyHourEligible() : true)
+                    .happyHourDiscountPercent(item.getHappyHourDiscountPercent() != null ? item.getHappyHourDiscountPercent() : BigDecimal.ZERO)
                     .build();
         }
 
