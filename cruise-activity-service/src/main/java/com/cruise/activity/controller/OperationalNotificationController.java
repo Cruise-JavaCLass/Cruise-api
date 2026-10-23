@@ -2,6 +2,7 @@ package com.cruise.activity.controller;
 
 import com.cruise.activity.dto.OperationalBroadcastRequest;
 import com.cruise.activity.dto.OperationalNotificationEventDto;
+import com.cruise.activity.exception.AccessDeniedException;
 import com.cruise.activity.service.OperationalNotificationBroadcaster;
 import com.cruise.activity.service.OperationalNotificationService;
 import com.cruise.common.dto.ApiResponse;
@@ -24,8 +25,12 @@ public class OperationalNotificationController {
      * Subscribes to operational alerts via Server-Sent Events (SSE).
      */
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter subscribeOperationalAlertStream() {
-        return broadcaster.subscribe();
+    public SseEmitter subscribeOperationalAlertStream(
+            @RequestHeader(value = "X-Caller-Role", required = false) String callerRole,
+            @RequestHeader(value = "X-Deck", required = false) Integer deck,
+            @RequestHeader(value = "X-Zone", required = false) String zone
+    ) {
+        return broadcaster.subscribe(callerRole, deck, zone);
     }
 
     /**
@@ -34,8 +39,15 @@ public class OperationalNotificationController {
     @PostMapping("/broadcast")
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<OperationalNotificationEventDto> broadcastOperationalAlert(
+            @RequestHeader(value = "X-Caller-Role", required = false) String callerRole,
             @Valid @RequestBody OperationalBroadcastRequest request
     ) {
+        if (callerRole != null) {
+            String upper = callerRole.toUpperCase();
+            if (upper.contains("PASSENGER") || upper.contains("GUEST")) {
+                throw new AccessDeniedException("Chỉ nhân viên hoặc hệ thống mới có quyền phát thông báo vận hành");
+            }
+        }
         OperationalNotificationEventDto result = operationalNotificationService.broadcastOperationalNotification(request);
         return ApiResponse.ok("Phát thông báo vận hành thành công", result);
     }

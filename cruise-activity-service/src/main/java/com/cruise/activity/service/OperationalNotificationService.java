@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -39,6 +41,9 @@ public class OperationalNotificationService {
             String metadataStr = null;
             if (request.getMetadata() != null && !request.getMetadata().isEmpty()) {
                 metadataStr = request.getMetadata().toString();
+                if (metadataStr.length() > 500) {
+                    metadataStr = metadataStr.substring(0, 500);
+                }
             }
 
             List<PassengerNotification> batch = new ArrayList<>();
@@ -76,8 +81,17 @@ public class OperationalNotificationService {
                 .metadata(request.getMetadata())
                 .build();
 
-        // Push real-time to active SSE connections
-        broadcaster.broadcast(event);
+        // Push real-time to active SSE connections after transaction commit
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    broadcaster.broadcast(event);
+                }
+            });
+        } else {
+            broadcaster.broadcast(event);
+        }
 
         return event;
     }
