@@ -33,8 +33,6 @@ class OperationalNotificationBroadcasterTest {
     @Test
     @DisplayName("broadcast sends events matching subscriber scope")
     void testBroadcastScopeFiltering() {
-        OperationalNotificationBroadcaster broadcaster = new OperationalNotificationBroadcaster();
-
         OperationalNotificationBroadcaster.SubscriberContext crewContext =
                 new OperationalNotificationBroadcaster.SubscriberContext(mock(SseEmitter.class), "CREW", 7, "AFT");
         OperationalNotificationBroadcaster.SubscriberContext passengerContext =

@@ -136,4 +136,56 @@ class OperationalNotificationControllerTest {
                         .header("X-Zone", "AFT"))
                 .andExpect(status().isOk());
     }
+
+    @Test
+    @DisplayName("POST /api/operations/notifications/broadcast rejects missing caller role with 403 Forbidden")
+    void testBroadcastRejectsMissingCallerRole() throws Exception {
+        OperationalBroadcastRequest req = OperationalBroadcastRequest.builder()
+                .title("Valid Emergency Alert")
+                .message("Valid alert message body")
+                .category(NotificationCategory.CRITICAL)
+                .scope(NotificationScope.ALL)
+                .build();
+
+        mockMvc.perform(post("/api/operations/notifications/broadcast")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("POST /api/operations/notifications/broadcast rejects DECK scope without targetDeck with 400 Bad Request")
+    void testBroadcastRejectsDeckScopeWithoutTargetDeck() throws Exception {
+        OperationalBroadcastRequest req = OperationalBroadcastRequest.builder()
+                .title("Deck Evacuation")
+                .message("Please proceed to muster station")
+                .category(NotificationCategory.CRITICAL)
+                .scope(NotificationScope.DECK)
+                .targetDeck(null)
+                .build();
+
+        mockMvc.perform(post("/api/operations/notifications/broadcast")
+                        .header("X-Caller-Role", "OFFICER")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /api/operations/notifications/broadcast rejects ZONE scope without targetZone with 400 Bad Request")
+    void testBroadcastRejectsZoneScopeWithoutTargetZone() throws Exception {
+        OperationalBroadcastRequest req = OperationalBroadcastRequest.builder()
+                .title("Zone Maintenance")
+                .message("Maintenance in progress")
+                .category(NotificationCategory.OPERATIONAL)
+                .scope(NotificationScope.ZONE)
+                .targetZone("   ")
+                .build();
+
+        mockMvc.perform(post("/api/operations/notifications/broadcast")
+                        .header("X-Caller-Role", "OFFICER")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest());
+    }
 }
