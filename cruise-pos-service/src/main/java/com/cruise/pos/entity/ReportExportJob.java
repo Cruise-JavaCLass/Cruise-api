@@ -41,6 +41,10 @@ public class ReportExportJob extends BaseEntity {
     @Column(name = "file_size_bytes")
     private Long fileSizeBytes;
 
+    @Lob
+    @Column(name = "file_data")
+    private byte[] fileData;
+
     @Column(name = "error_message", length = 500)
     private String errorMessage;
 
