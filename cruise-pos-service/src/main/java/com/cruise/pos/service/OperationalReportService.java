@@ -417,8 +417,11 @@ public class OperationalReportService {
                 stream.newLineAtOffset(0, -15);
                 if (report.getBreakdown() != null) {
                     for (var b : report.getBreakdown()) {
+                        String safeLabel = b.getLabel() != null
+                                ? b.getLabel().replaceAll("[\r\n]", " ")
+                                : "";
                         stream.showText(String.format(Locale.US, "%s | %d | $%.2f | $%.2f | %.2f%%",
-                                b.getLabel(), b.getTransactionCount(), b.getGrossRevenue(), b.getNetRevenue(), b.getRevenuePercentage()));
+                                safeLabel, b.getTransactionCount(), b.getGrossRevenue(), b.getNetRevenue(), b.getRevenuePercentage()));
                         stream.newLineAtOffset(0, -15);
                     }
                 }

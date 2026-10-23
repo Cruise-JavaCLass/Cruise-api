@@ -41,6 +41,7 @@ public class ReportExportJob extends BaseEntity {
     @Column(name = "file_size_bytes")
     private Long fileSizeBytes;
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
     @Lob
     @Column(name = "file_data")
     private byte[] fileData;
