@@ -71,8 +71,14 @@ public class GuestPackageEntitlement extends BaseEntity {
     public boolean isApplicable(String category, BigDecimal itemPrice) {
         if (status != EntitlementStatus.ACTIVE) return false;
         if (getRemainingQuota() <= 0) return false;
+        Instant now = Instant.now();
+        if (validFrom != null && now.isBefore(validFrom)) return false;
+        if (validTo != null && now.isAfter(validTo)) return false;
         if (eligibleCategory != null && !eligibleCategory.equalsIgnoreCase(category) && !"ALL".equalsIgnoreCase(eligibleCategory)) {
             return false;
+        }
+        if (maxItemPriceCap != null && maxItemPriceCap.compareTo(BigDecimal.ZERO) > 0 && itemPrice != null) {
+            // Note: If itemPrice exceeds maxItemPriceCap, it may be partially covered up to the cap or check rule
         }
         return true;
     }

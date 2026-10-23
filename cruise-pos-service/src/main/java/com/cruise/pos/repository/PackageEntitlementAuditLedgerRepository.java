@@ -15,5 +15,9 @@ public interface PackageEntitlementAuditLedgerRepository extends JpaRepository<P
 
     List<PackageEntitlementAuditLedger> findByEntitlementIdOrderByTimestampDesc(Long entitlementId);
 
+    List<PackageEntitlementAuditLedger> findByTransactionIdAndEntitlementId(String transactionId, Long entitlementId);
+
+    boolean existsByTransactionIdAndOperationTypeAndEntitlementId(String transactionId, String operationType, Long entitlementId);
+
     Page<PackageEntitlementAuditLedger> findAllByOrderByTimestampDesc(Pageable pageable);
 }

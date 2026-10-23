@@ -57,7 +57,7 @@ class PackageEntitlementLedgerServiceTest {
     @Test
     @DisplayName("deductEntitlementQuota successfully updates used quota and writes audit ledger")
     void testDeductSuccess() {
-        when(entitlementRepository.findById(10L)).thenReturn(Optional.of(entitlement));
+        when(entitlementRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(entitlement));
 
         EntitlementDeductRequest request = EntitlementDeductRequest.builder()
                 .passengerId(101L)
@@ -81,7 +81,7 @@ class PackageEntitlementLedgerServiceTest {
     @Test
     @DisplayName("deductEntitlementQuota throws BusinessRuleException when exceeding quota")
     void testDeductQuotaExceeded() {
-        when(entitlementRepository.findById(10L)).thenReturn(Optional.of(entitlement));
+        when(entitlementRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(entitlement));
 
         EntitlementDeductRequest request = EntitlementDeductRequest.builder()
                 .passengerId(101L)
@@ -102,7 +102,13 @@ class PackageEntitlementLedgerServiceTest {
     void testRollbackSuccess() {
         entitlement.setUsedQuota(3);
         entitlement.setStatus(EntitlementStatus.EXHAUSTED);
-        when(entitlementRepository.findById(10L)).thenReturn(Optional.of(entitlement));
+        when(entitlementRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(entitlement));
+        when(auditLedgerRepository.findByTransactionIdAndEntitlementId("TX-1234", 10L))
+                .thenReturn(List.of(PackageEntitlementAuditLedger.builder()
+                        .entitlementId(10L)
+                        .operationType("DEDUCTION")
+                        .quotaChanged(2)
+                        .build()));
 
         EntitlementRollbackRequest request = EntitlementRollbackRequest.builder()
                 .passengerId(101L)

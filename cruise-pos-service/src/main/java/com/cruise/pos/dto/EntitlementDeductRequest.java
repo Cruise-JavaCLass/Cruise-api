@@ -1,6 +1,8 @@
 package com.cruise.pos.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -21,6 +23,7 @@ public class EntitlementDeductRequest {
     private String transactionId;
 
     @NotNull(message = "Deduction items must not be null")
+    @Valid
     private List<DeductItem> items;
 
     @Data
@@ -32,6 +35,7 @@ public class EntitlementDeductRequest {
         private Long entitlementId;
         private String productName;
         @NotNull(message = "Units to deduct must not be null")
+        @Positive(message = "Units to deduct must be positive")
         private Integer units;
         private BigDecimal amountCovered;
     }

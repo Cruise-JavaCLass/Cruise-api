@@ -30,9 +30,40 @@ public class PackageEntitlementLedgerService {
     public void deductEntitlementQuota(EntitlementDeductRequest request) {
         Objects.requireNonNull(request, "EntitlementDeductRequest must not be null");
 
+        Instant now = Instant.now();
+
         for (EntitlementDeductRequest.DeductItem item : request.getItems()) {
-            GuestPackageEntitlement entitlement = entitlementRepository.findById(item.getEntitlementId())
+            // Idempotency check for deduction
+            if (request.getTransactionId() != null && !request.getTransactionId().isBlank()) {
+                boolean alreadyApplied = auditLedgerRepository.existsByTransactionIdAndOperationTypeAndEntitlementId(
+                        request.getTransactionId(), "DEDUCTION", item.getEntitlementId());
+                if (alreadyApplied) {
+                    log.info("Deduction already processed for txId={}, entitlementId={}, skipping",
+                            request.getTransactionId(), item.getEntitlementId());
+                    continue;
+                }
+            }
+
+            GuestPackageEntitlement entitlement = entitlementRepository.findByIdForUpdate(item.getEntitlementId())
                     .orElseThrow(() -> new ResourceNotFoundException("Entitlement not found: " + item.getEntitlementId()));
+
+            // Passenger ownership verification
+            if (!Objects.equals(entitlement.getPassengerId(), request.getPassengerId())) {
+                throw new BusinessRuleException("Entitlement does not belong to passenger " + request.getPassengerId());
+            }
+
+            // Status verification
+            if (entitlement.getStatus() != EntitlementStatus.ACTIVE) {
+                throw new BusinessRuleException("Entitlement is not active (Status: " + entitlement.getStatus() + ")");
+            }
+
+            // Validity window check
+            if (entitlement.getValidFrom() != null && now.isBefore(entitlement.getValidFrom())) {
+                throw new BusinessRuleException("Entitlement is not yet valid");
+            }
+            if (entitlement.getValidTo() != null && now.isAfter(entitlement.getValidTo())) {
+                throw new BusinessRuleException("Entitlement has expired");
+            }
 
             if (entitlement.getRemainingQuota() < item.getUnits()) {
                 throw new BusinessRuleException("Insufficient quota for entitlement: " + entitlement.getPackageName());
@@ -65,11 +96,48 @@ public class PackageEntitlementLedgerService {
         Objects.requireNonNull(request, "EntitlementRollbackRequest must not be null");
 
         for (EntitlementRollbackRequest.RollbackItem item : request.getItems()) {
-            GuestPackageEntitlement entitlement = entitlementRepository.findById(item.getEntitlementId())
+            // Idempotency check for rollback
+            if (request.getTransactionId() != null && !request.getTransactionId().isBlank()) {
+                boolean alreadyApplied = auditLedgerRepository.existsByTransactionIdAndOperationTypeAndEntitlementId(
+                        request.getTransactionId(), "ROLLBACK", item.getEntitlementId());
+                if (alreadyApplied) {
+                    log.info("Rollback already processed for txId={}, entitlementId={}, skipping",
+                            request.getTransactionId(), item.getEntitlementId());
+                    continue;
+                }
+            }
+
+            GuestPackageEntitlement entitlement = entitlementRepository.findByIdForUpdate(item.getEntitlementId())
                     .orElseThrow(() -> new ResourceNotFoundException("Entitlement not found: " + item.getEntitlementId()));
 
-            int newUsed = Math.max(0, entitlement.getUsedQuota() - item.getUnits());
-            entitlement.setUsedQuota(newUsed);
+            // Passenger ownership verification
+            if (!Objects.equals(entitlement.getPassengerId(), request.getPassengerId())) {
+                throw new BusinessRuleException("Entitlement does not belong to passenger " + request.getPassengerId());
+            }
+
+            // Verify prior deduction units under this transaction
+            int unitsToRollback = item.getUnits();
+            if (request.getTransactionId() != null && !request.getTransactionId().isBlank()) {
+                List<PackageEntitlementAuditLedger> logs = auditLedgerRepository
+                        .findByTransactionIdAndEntitlementId(request.getTransactionId(), item.getEntitlementId());
+                int netDeducted = 0;
+                for (PackageEntitlementAuditLedger entry : logs) {
+                    if ("DEDUCTION".equals(entry.getOperationType())) {
+                        netDeducted += entry.getQuotaChanged();
+                    } else if ("ROLLBACK".equals(entry.getOperationType())) {
+                        netDeducted -= Math.abs(entry.getQuotaChanged());
+                    }
+                }
+                if (netDeducted <= 0) {
+                    throw new BusinessRuleException("No prior deductions found for transaction " + request.getTransactionId() + " to rollback");
+                }
+                if (unitsToRollback > netDeducted) {
+                    throw new BusinessRuleException("Cannot rollback " + unitsToRollback + " units; only " + netDeducted + " units were deducted in transaction " + request.getTransactionId());
+                }
+            }
+
+            int actualRestored = Math.min(unitsToRollback, entitlement.getUsedQuota());
+            entitlement.setUsedQuota(entitlement.getUsedQuota() - actualRestored);
             if (entitlement.getStatus() == EntitlementStatus.EXHAUSTED && entitlement.getRemainingQuota() > 0) {
                 entitlement.setStatus(EntitlementStatus.ACTIVE);
             }
@@ -80,13 +148,13 @@ public class PackageEntitlementLedgerService {
                     .passengerId(request.getPassengerId())
                     .transactionId(request.getTransactionId())
                     .operationType("ROLLBACK")
-                    .quotaChanged(-item.getUnits())
+                    .quotaChanged(-actualRestored)
                     .amountCovered(BigDecimal.ZERO)
                     .timestamp(Instant.now())
                     .notes("Quota rolled back: " + item.getReason())
                     .build();
             auditLedgerRepository.save(logEntry);
-            log.info("Rolled back quota {} for passenger {} on pkg {}", item.getUnits(), request.getPassengerId(), entitlement.getPackageName());
+            log.info("Rolled back quota {} for passenger {} on pkg {}", actualRestored, request.getPassengerId(), entitlement.getPackageName());
         }
     }
 
@@ -100,6 +168,8 @@ public class PackageEntitlementLedgerService {
             if (a.getValidTo() != null && b.getValidTo() != null) {
                 return a.getValidTo().compareTo(b.getValidTo());
             }
+            if (a.getValidTo() != null) return -1;
+            if (b.getValidTo() != null) return 1;
             return Long.compare(a.getId(), b.getId());
         });
         return activeList;

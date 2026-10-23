@@ -23,8 +23,24 @@ public class PackageEntitlementRuleEngine {
     public EntitlementEvaluateResponse evaluateCartEntitlements(EntitlementEvaluateRequest request) {
         Objects.requireNonNull(request, "EntitlementEvaluateRequest must not be null");
 
-        List<GuestPackageEntitlement> activePackages = entitlementRepository
+        List<GuestPackageEntitlement> fetched = entitlementRepository
                 .findActiveEntitlementsOrderByPriority(request.getPassengerId());
+
+        List<GuestPackageEntitlement> activePackages = new ArrayList<>(fetched != null ? fetched : Collections.emptyList());
+
+        // Sort packages consistent with collision resolution: Priority desc, then validTo asc, then id asc
+        activePackages.sort((a, b) -> {
+            int pCompare = Integer.compare(b.getPriorityLevel(), a.getPriorityLevel());
+            if (pCompare != 0) return pCompare;
+            if (a.getValidTo() != null && b.getValidTo() != null) {
+                return a.getValidTo().compareTo(b.getValidTo());
+            }
+            if (a.getValidTo() != null) return -1;
+            if (b.getValidTo() != null) return 1;
+            Long idA = a.getId() != null ? a.getId() : 0L;
+            Long idB = b.getId() != null ? b.getId() : 0L;
+            return Long.compare(idA, idB);
+        });
 
         // Map to keep track of available virtual quota during evaluation
         Map<Long, Integer> virtualQuotaMap = new HashMap<>();
@@ -41,60 +57,52 @@ public class PackageEntitlementRuleEngine {
                 BigDecimal gross = item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
                 originalTotal = originalTotal.add(gross);
 
-                // Find matching package
-                GuestPackageEntitlement matchedPkg = null;
+                int remainingQty = item.getQuantity();
+                BigDecimal totalItemCovered = BigDecimal.ZERO;
+                String lastAppliedPkgName = null;
+                Long lastAppliedEntitlementId = null;
+                int totalQuotaDeducted = 0;
+
+                // Loop through applicable packages until covered or no quota left
                 for (GuestPackageEntitlement pkg : activePackages) {
-                    int remaining = virtualQuotaMap.getOrDefault(pkg.getId(), 0);
-                    if (remaining > 0 && pkg.isApplicable(item.getCategory(), item.getUnitPrice())) {
-                        matchedPkg = pkg;
-                        break;
+                    if (remainingQty <= 0) break;
+
+                    int availableQuota = virtualQuotaMap.getOrDefault(pkg.getId(), 0);
+                    if (availableQuota > 0 && pkg.isApplicable(item.getCategory(), item.getUnitPrice())) {
+                        int unitsToCover = Math.min(remainingQty, availableQuota);
+                        virtualQuotaMap.put(pkg.getId(), availableQuota - unitsToCover);
+                        remainingQty -= unitsToCover;
+                        totalQuotaDeducted += unitsToCover;
+
+                        lastAppliedPkgName = pkg.getPackageName();
+                        lastAppliedEntitlementId = pkg.getId();
+
+                        BigDecimal cap = pkg.getMaxItemPriceCap();
+                        BigDecimal coveredPerUnit = (cap != null && cap.compareTo(BigDecimal.ZERO) > 0)
+                                ? item.getUnitPrice().min(cap)
+                                : item.getUnitPrice();
+                        BigDecimal coveredPart = coveredPerUnit.multiply(BigDecimal.valueOf(unitsToCover));
+                        totalItemCovered = totalItemCovered.add(coveredPart);
                     }
                 }
 
-                if (matchedPkg != null) {
-                    int availableQuota = virtualQuotaMap.get(matchedPkg.getId());
-                    int coveredUnits = Math.min(item.getQuantity(), availableQuota);
-                    virtualQuotaMap.put(matchedPkg.getId(), availableQuota - coveredUnits);
+                packageDiscountTotal = packageDiscountTotal.add(totalItemCovered);
+                BigDecimal itemOutOfPocket = gross.subtract(totalItemCovered).max(BigDecimal.ZERO);
+                boolean fullyCovered = itemOutOfPocket.compareTo(BigDecimal.ZERO) == 0;
 
-                    BigDecimal unitPrice = item.getUnitPrice();
-                    BigDecimal cap = matchedPkg.getMaxItemPriceCap();
-
-                    BigDecimal coveredPerUnit = (cap != null && cap.compareTo(BigDecimal.ZERO) > 0)
-                            ? unitPrice.min(cap)
-                            : unitPrice;
-
-                    BigDecimal itemCovered = coveredPerUnit.multiply(BigDecimal.valueOf(coveredUnits));
-                    BigDecimal itemOutOfPocket = gross.subtract(itemCovered);
-                    packageDiscountTotal = packageDiscountTotal.add(itemCovered);
-
-                    boolean fullyCovered = itemOutOfPocket.compareTo(BigDecimal.ZERO) == 0;
-
-                    itemResults.add(EntitlementEvaluateResponse.ItemEntitlementResult.builder()
-                            .productId(item.getProductId())
-                            .productName(item.getProductName())
-                            .quantity(item.getQuantity())
-                            .unitPrice(item.getUnitPrice())
-                            .grossAmount(gross)
-                            .coveredAmount(itemCovered)
-                            .outOfPocketAmount(itemOutOfPocket)
-                            .fullyCovered(fullyCovered)
-                            .appliedPackageName(matchedPkg.getPackageName())
-                            .appliedEntitlementId(matchedPkg.getId())
-                            .quotaDeducted(coveredUnits)
-                            .build());
-                } else {
-                    itemResults.add(EntitlementEvaluateResponse.ItemEntitlementResult.builder()
-                            .productId(item.getProductId())
-                            .productName(item.getProductName())
-                            .quantity(item.getQuantity())
-                            .unitPrice(item.getUnitPrice())
-                            .grossAmount(gross)
-                            .coveredAmount(BigDecimal.ZERO)
-                            .outOfPocketAmount(gross)
-                            .fullyCovered(false)
-                            .quotaDeducted(0)
-                            .build());
-                }
+                itemResults.add(EntitlementEvaluateResponse.ItemEntitlementResult.builder()
+                        .productId(item.getProductId())
+                        .productName(item.getProductName())
+                        .quantity(item.getQuantity())
+                        .unitPrice(item.getUnitPrice())
+                        .grossAmount(gross)
+                        .coveredAmount(totalItemCovered)
+                        .outOfPocketAmount(itemOutOfPocket)
+                        .fullyCovered(fullyCovered)
+                        .appliedPackageName(lastAppliedPkgName)
+                        .appliedEntitlementId(lastAppliedEntitlementId)
+                        .quotaDeducted(totalQuotaDeducted)
+                        .build());
             }
         }
 

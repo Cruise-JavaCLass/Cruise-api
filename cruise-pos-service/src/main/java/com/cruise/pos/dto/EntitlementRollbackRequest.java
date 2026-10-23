@@ -1,6 +1,8 @@
 package com.cruise.pos.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,6 +22,7 @@ public class EntitlementRollbackRequest {
     private String transactionId;
 
     @NotNull(message = "Rollback items must not be null")
+    @Valid
     private List<RollbackItem> items;
 
     @Data
@@ -30,6 +33,7 @@ public class EntitlementRollbackRequest {
         @NotNull(message = "Entitlement ID must not be null")
         private Long entitlementId;
         @NotNull(message = "Units to rollback must not be null")
+        @Positive(message = "Units to rollback must be positive")
         private Integer units;
         private String reason;
     }
