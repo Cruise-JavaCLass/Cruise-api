@@ -19,11 +19,14 @@ import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.zip.GZIPInputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -332,5 +335,161 @@ class PosOfflineSyncServiceTest {
         assertThat(existing.getBasePrice()).isEqualByComparingTo(new BigDecimal("12.50"));
         verify(modifierRepository).deleteByProductId(555L);
         verify(modifierRepository).save(any(PosProductModifier.class));
+    }
+
+    @Test
+    @DisplayName("exportGzipCatalogPackage produces valid gzip compressed payload")
+    void testExportGzipCatalogPackage() throws Exception {
+        OutletDto outlet = OutletDto.builder()
+                .code("BAR-POOL")
+                .name("Pool Bar")
+                .build();
+
+        when(catalogService.getOutlets()).thenReturn(List.of(outlet));
+        when(catalogService.getCategories(1L)).thenReturn(Collections.emptyList());
+        when(pricingEngine.getRulesByOutlet(1L)).thenReturn(Collections.emptyList());
+        when(productRepository.findActiveCatalogByOutlet(1L)).thenReturn(Collections.emptyList());
+
+        byte[] gzipBytes = offlineSyncService.exportGzipCatalogPackage(1L);
+        assertThat(gzipBytes).isNotNull();
+        assertThat(gzipBytes.length).isGreaterThan(0);
+
+        try (GZIPInputStream gis = new GZIPInputStream(new ByteArrayInputStream(gzipBytes))) {
+            String uncompressedJson = new String(gis.readAllBytes(), StandardCharsets.UTF_8);
+            assertThat(uncompressedJson).contains("BAR-POOL");
+            assertThat(uncompressedJson).contains("Pool Bar");
+        }
+    }
+
+    @Test
+    @DisplayName("getDeltaChangefeed returns empty when clientVersionHash matches current ETag")
+    void testGetDeltaChangefeedMatchingEtag() {
+        when(catalogService.getOutlets()).thenReturn(Collections.emptyList());
+        when(catalogService.getCategories(1L)).thenReturn(Collections.emptyList());
+        when(pricingEngine.getRulesByOutlet(1L)).thenReturn(Collections.emptyList());
+        when(productRepository.findActiveCatalogByOutlet(1L)).thenReturn(Collections.emptyList());
+
+        PosOfflineCatalogPackageDto pkg = offlineSyncService.exportOfflinePackage(1L);
+        String currentEtag = pkg.getEtag();
+
+        PosDeltaCatalogChangefeedDto delta = offlineSyncService.getDeltaChangefeed(1L, currentEtag, Instant.now());
+        assertThat(delta.getFromVersionHash()).isEqualTo(currentEtag);
+        assertThat(delta.getCurrentVersionHash()).isEqualTo(currentEtag);
+        assertThat(delta.isRequiresFullSnapshot()).isFalse();
+        assertThat(delta.getUpdatedProducts()).isEmpty();
+        assertThat(delta.getDeletedProductIds()).isEmpty();
+        assertThat(delta.getSyncTimestamp()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("getDeltaChangefeed requiresFullSnapshot when since timestamp is null")
+    void testGetDeltaChangefeedRequiresFullSnapshotWhenSinceIsNull() {
+        when(catalogService.getOutlets()).thenReturn(Collections.emptyList());
+        when(catalogService.getCategories(1L)).thenReturn(Collections.emptyList());
+        when(pricingEngine.getRulesByOutlet(1L)).thenReturn(Collections.emptyList());
+        when(productRepository.findActiveCatalogByOutlet(1L)).thenReturn(Collections.emptyList());
+        when(productRepository.findUpdatedProductsSince(eq(1L), any(Instant.class))).thenReturn(Collections.emptyList());
+
+        PosDeltaCatalogChangefeedDto delta = offlineSyncService.getDeltaChangefeed(1L, "\"older-hash\"", null);
+        assertThat(delta.isRequiresFullSnapshot()).isTrue();
+    }
+
+    @Test
+    @DisplayName("getDeltaChangefeed splits updated and archived products and includes reassigned outlet products")
+    void testGetDeltaChangefeedWithUpdatesDeletionsAndReassigned() {
+        when(catalogService.getOutlets()).thenReturn(Collections.emptyList());
+        when(catalogService.getCategories(1L)).thenReturn(Collections.emptyList());
+        when(pricingEngine.getRulesByOutlet(1L)).thenReturn(Collections.emptyList());
+        when(productRepository.findActiveCatalogByOutlet(1L)).thenReturn(Collections.emptyList());
+
+        Instant since = Instant.now().minusSeconds(3600);
+
+        PosProduct activeProd = PosProduct.builder().sku("SKU-ACTIVE").status(ProductStatus.ACTIVE).build();
+        activeProd.setId(101L);
+        PosProduct archivedProd = PosProduct.builder().sku("SKU-ARCH").status(ProductStatus.ARCHIVED).build();
+        archivedProd.setId(102L);
+
+        when(productRepository.findUpdatedProductsSince(eq(1L), eq(since))).thenReturn(List.of(activeProd, archivedProd));
+        when(catalogService.getProductById(101L)).thenReturn(ProductDetailDto.builder().id(101L).sku("SKU-ACTIVE").build());
+        when(auditLogRepository.findReassignedProductIdsForOutlet(eq("1"), eq(since))).thenReturn(List.of(103L));
+
+        PosDeltaCatalogChangefeedDto delta = offlineSyncService.getDeltaChangefeed(1L, "\"different-hash\"", since);
+        assertThat(delta.isRequiresFullSnapshot()).isFalse();
+        assertThat(delta.getUpdatedProducts()).hasSize(1);
+        assertThat(delta.getUpdatedProducts().get(0).getId()).isEqualTo(101L);
+        assertThat(delta.getDeletedProductIds()).containsExactlyInAnyOrder(102L, 103L);
+    }
+
+    @Test
+    @DisplayName("bulkImportProducts preserves happy hour fields on insert and update, and logs outlet reassignment")
+    void testBulkImportProductsPreservesHappyHourAndLogsReassignment() {
+        PosProduct existing = PosProduct.builder()
+                .sku("EXISTING-BEV")
+                .name("Old Drink")
+                .basePrice(new BigDecimal("10.00"))
+                .outletId(1L)
+                .status(ProductStatus.ACTIVE)
+                .build();
+        existing.setId(201L);
+
+        PosOutlet outlet2 = PosOutlet.builder()
+                .code("OUTLET-2")
+                .name("Outlet 2")
+                .outletType(OutletType.BAR)
+                .isActive(true)
+                .build();
+        outlet2.setId(2L);
+
+        when(outletRepository.findAll()).thenReturn(List.of(outlet2));
+        when(productRepository.findBySku("EXISTING-BEV")).thenReturn(Optional.of(existing));
+        when(productRepository.findBySku("NEW-BEV")).thenReturn(Optional.empty());
+        when(productRepository.save(any(PosProduct.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        BulkProductImportItem updateItem = BulkProductImportItem.builder()
+                .sku("EXISTING-BEV")
+                .name("Updated Drink")
+                .basePrice(new BigDecimal("12.00"))
+                .categoryCode("BEV")
+                .outletCode("OUTLET-2")
+                .happyHourEligible(true)
+                .happyHourDiscountPercent(new BigDecimal("25.00"))
+                .build();
+
+        BulkProductImportItem newItem = BulkProductImportItem.builder()
+                .sku("NEW-BEV")
+                .name("Special Cocktail")
+                .basePrice(new BigDecimal("15.00"))
+                .categoryCode("BEV")
+                .outletCode("OUTLET-2")
+                .happyHourEligible(false)
+                .happyHourDiscountPercent(BigDecimal.ZERO)
+                .build();
+
+        BulkCatalogImportRequest request = BulkCatalogImportRequest.builder()
+                .supplierManifestNumber("MANIFEST-HH")
+                .products(List.of(updateItem, newItem))
+                .build();
+
+        when(categoryRepository.save(any(PosCategory.class))).thenAnswer(inv -> {
+            PosCategory c = inv.getArgument(0);
+            c.setId(10L);
+            return c;
+        });
+
+        BulkImportResponse response = offlineSyncService.bulkImportProducts(request);
+        assertThat(response.getSuccessCount()).isEqualTo(2);
+
+        // Verify existing updated product happy hour and outlet
+        assertThat(existing.getOutletId()).isEqualTo(2L);
+        assertThat(existing.getHappyHourEligible()).isTrue();
+        assertThat(existing.getHappyHourDiscountPercent()).isEqualByComparingTo(new BigDecimal("25.00"));
+
+        // Verify audit log for OUTLET_REASSIGNED
+        verify(auditLogRepository).save(argThat(log ->
+                "OUTLET_REASSIGNED".equals(log.getAction()) &&
+                "1".equals(log.getOldValue()) &&
+                "2".equals(log.getNewValue()) &&
+                Long.valueOf(201L).equals(log.getProductId())
+        ));
     }
 }
