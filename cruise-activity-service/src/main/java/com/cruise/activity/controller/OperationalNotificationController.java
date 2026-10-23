@@ -42,11 +42,9 @@ public class OperationalNotificationController {
             @RequestHeader(value = "X-Caller-Role", required = false) String callerRole,
             @Valid @RequestBody OperationalBroadcastRequest request
     ) {
-        if (callerRole != null) {
-            String upper = callerRole.toUpperCase();
-            if (upper.contains("PASSENGER") || upper.contains("GUEST")) {
-                throw new AccessDeniedException("Chỉ nhân viên hoặc hệ thống mới có quyền phát thông báo vận hành");
-            }
+        if (callerRole == null || !java.util.Set.of("CREW", "STAFF", "OFFICER", "ADMIN", "SYSTEM")
+                .contains(callerRole.trim().toUpperCase())) {
+            throw new AccessDeniedException("Chỉ nhân viên hoặc hệ thống mới có quyền phát thông báo vận hành");
         }
         OperationalNotificationEventDto result = operationalNotificationService.broadcastOperationalNotification(request);
         return ApiResponse.ok("Phát thông báo vận hành thành công", result);

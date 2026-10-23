@@ -37,6 +37,18 @@ public class OperationalBroadcastRequest {
 
     private String targetZone;
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @jakarta.validation.constraints.AssertTrue(message = "Phạm vi DECK yêu cầu targetDeck")
+    public boolean isDeckTargetValid() {
+        return scope != NotificationScope.DECK || targetDeck != null;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @jakarta.validation.constraints.AssertTrue(message = "Phạm vi ZONE yêu cầu targetZone")
+    public boolean isZoneTargetValid() {
+        return scope != NotificationScope.ZONE || (targetZone != null && !targetZone.isBlank());
+    }
+
     @Size(max = 300, message = "Đường dẫn thao tác tối đa 300 ký tự")
     private String actionUrl;
 
