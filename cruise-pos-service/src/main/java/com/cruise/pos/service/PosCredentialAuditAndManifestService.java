@@ -28,6 +28,11 @@ public class PosCredentialAuditAndManifestService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordAudit(String stationId, String cashierId, CredentialType credentialType, String maskedIdentifier, String result, String failureReason) {
         try {
+            String sanitizedFailureReason = failureReason;
+            if (sanitizedFailureReason != null && sanitizedFailureReason.length() > 255) {
+                sanitizedFailureReason = sanitizedFailureReason.substring(0, 255);
+            }
+
             PosCredentialAuditLog logEntry = PosCredentialAuditLog.builder()
                     .stationId(stationId)
                     .cashierId(cashierId)
@@ -35,7 +40,7 @@ public class PosCredentialAuditAndManifestService {
                     .maskedIdentifier(maskedIdentifier)
                     .timestamp(Instant.now())
                     .result(result)
-                    .failureReason(failureReason)
+                    .failureReason(sanitizedFailureReason)
                     .build();
             auditLogRepository.save(logEntry);
             log.info("Recorded credential audit log: identifier={}, result={}, station={}", maskedIdentifier, result, stationId);

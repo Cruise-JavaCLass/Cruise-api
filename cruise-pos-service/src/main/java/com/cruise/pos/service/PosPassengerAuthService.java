@@ -15,7 +15,6 @@ import com.cruise.pos.repository.PosCredentialRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Objects;
@@ -77,7 +76,6 @@ public class PosPassengerAuthService {
         return "*".repeat(len - 4) + suffix;
     }
 
-    @Transactional(readOnly = true)
     public PassengerIdentificationResponse identify(IdentifyPassengerRequest request) {
         Objects.requireNonNull(request, "IdentifyPassengerRequest must not be null");
         ParsedCredential parsed = parseRawCredential(request.getRawCredential());
