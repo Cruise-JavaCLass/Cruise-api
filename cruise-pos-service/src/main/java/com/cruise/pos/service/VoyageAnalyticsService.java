@@ -305,14 +305,9 @@ public class VoyageAnalyticsService {
                 ? String.join(",", request.ccEmails()).replaceAll("[\\r\\n]", " ")
                 : "none";
 
-        log.info("Executive booklet email queued for dispatch to {} for voyage {} ({})",
-                safeRecipient, voyageNumber, safeItinerary);
-        recordAudit(
-                "EXECUTIVE_BOOKLET_EMAILED",
-                actor,
-                "Dispatched executive summary booklet for voyage " + voyageNumber + " to " + safeRecipient,
-                "itinerary=" + safeItinerary + ", cc=" + safeCc
-        );
+        log.warn("Executive booklet email dispatch requested for voyage {} to {}, but outbound mail service is not configured",
+                voyageNumber, safeRecipient);
+        throw new BusinessRuleException("Executive email delivery is unavailable: outbound mail dispatch service is not configured on vessel environment");
     }
 
     private String sanitizePdfText(String text) {

@@ -272,7 +272,7 @@ class VoyageAnalyticsServiceTest {
     }
 
     @Test
-    @DisplayName("dispatchExecutiveEmail: records audit log and confirms email queued")
+    @DisplayName("dispatchExecutiveEmail: throws BusinessRuleException when outbound mail service is unconfigured")
     void testDispatchExecutiveEmail() {
         VoyageFinancialClosure closure = VoyageFinancialClosure.builder()
                 .voyageNumber("VOY-EMAIL-01")
@@ -286,9 +286,11 @@ class VoyageAnalyticsServiceTest {
                 java.util.List.of("controller@cruise.com")
         );
 
-        voyageAnalyticsService.dispatchExecutiveEmail("VOY-EMAIL-01", request, "EXECUTIVE_CONTROLLER");
+        assertThatThrownBy(() -> voyageAnalyticsService.dispatchExecutiveEmail("VOY-EMAIL-01", request, "EXECUTIVE_CONTROLLER"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("outbound mail dispatch service is not configured");
 
-        verify(auditLogRepository).save(any(PosAuditLog.class));
+        verify(auditLogRepository, never()).save(any(PosAuditLog.class));
     }
 
     @Test
