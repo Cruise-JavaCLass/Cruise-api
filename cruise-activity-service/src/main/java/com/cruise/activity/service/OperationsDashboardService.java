@@ -42,13 +42,10 @@ public class OperationsDashboardService {
                 ? Math.round(((double) checkedInPassengers / totalPassengers) * 10000.0) / 100.0
                 : 0.0;
 
-        List<OnboardActivity> allActivities = activityRepository.findAll();
-        long scheduledActivities = allActivities.stream()
-                .filter(a -> a.getStatus() == ActivityStatus.SCHEDULED)
-                .count();
-        long activeActivities = allActivities.stream()
-                .filter(a -> a.getStatus() == ActivityStatus.SCHEDULED || a.getStatus() == ActivityStatus.IN_PROGRESS)
-                .count();
+        long scheduledActivities = activityRepository.countByActiveTrueAndStatus(ActivityStatus.SCHEDULED);
+        long activeActivities = activityRepository.countByActiveTrueAndStatusIn(
+                List.of(ActivityStatus.SCHEDULED, ActivityStatus.IN_PROGRESS)
+        );
 
         long totalRegistrations = registrationRepository.count();
         long totalExcursions = excursionRepository.count();
@@ -57,9 +54,11 @@ public class OperationsDashboardService {
         LocalDate today = getOperationalToday();
         long departingExcursionsToday = excursionRepository.countByExcursionDateAndActiveTrue(today);
 
-        Map<String, Long> activitiesByCategory = allActivities.stream()
-                .filter(a -> a.getCategory() != null && !a.getCategory().isBlank())
-                .collect(Collectors.groupingBy(OnboardActivity::getCategory, Collectors.counting()));
+        Map<String, Long> activitiesByCategory = activityRepository.countActiveActivitiesGroupedByCategory().stream()
+                .collect(Collectors.toMap(
+                        row -> (String) row[0],
+                        row -> ((Number) row[1]).longValue()
+                ));
 
         long feedbackCount = feedbackRepository.count();
         Double dbAvg = feedbackCount > 0 ? feedbackRepository.findAverageRating() : null;
@@ -87,14 +86,20 @@ public class OperationsDashboardService {
         List<OnboardActivity> activities = activityRepository.findLiveActivities(
                 List.of(ActivityStatus.SCHEDULED, ActivityStatus.IN_PROGRESS)
         );
+        List<Long> activityIds = activities.stream().map(OnboardActivity::getId).toList();
+        Map<Long, Integer> checkedInByActivityId = activityIds.isEmpty() ? Collections.emptyMap() :
+                attendanceRepository.countCheckedInGroupedByActivityId(activityIds, ActivityAttendanceStatus.CHECKED_IN).stream()
+                        .collect(Collectors.toMap(
+                                row -> (Long) row[0],
+                                row -> ((Number) row[1]).intValue()
+                        ));
+
         List<OperationsLiveRadarDto.ActivityAttendanceRadarItem> activityItems = new ArrayList<>();
 
         for (OnboardActivity a : activities) {
             int capacity = a.getMaxCapacity() != null ? a.getMaxCapacity() : 50;
             int registered = a.getCurrentParticipants() != null ? a.getCurrentParticipants() : 0;
-            int checkedIn = (int) attendanceRepository.countByActivityIdAndStatusAndActiveTrue(
-                    a.getId(), ActivityAttendanceStatus.CHECKED_IN
-            );
+            int checkedIn = checkedInByActivityId.getOrDefault(a.getId(), 0);
             double occupancy = capacity > 0 ? Math.round(((double) checkedIn / capacity) * 1000.0) / 10.0 : 0.0;
 
             activityItems.add(OperationsLiveRadarDto.ActivityAttendanceRadarItem.builder()
@@ -114,13 +119,21 @@ public class OperationsDashboardService {
                 List.of(ExcursionStatus.SCHEDULED, ExcursionStatus.OPEN_FOR_BOOKING, ExcursionStatus.IN_PROGRESS),
                 today
         );
+        List<Long> excursionIds = excursions.stream().map(ShoreExcursion::getId).toList();
+        Map<Long, Integer> presentByExcursionId = excursionIds.isEmpty() ? Collections.emptyMap() :
+                excursionPassengerRepository.countCheckedInGroupedByExcursionId(excursionIds).stream()
+                        .collect(Collectors.toMap(
+                                row -> (Long) row[0],
+                                row -> ((Number) row[1]).intValue()
+                        ));
+
         List<OperationsLiveRadarDto.ExcursionDepartureRadarItem> excursionItems = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now(getOperationalZoneId());
 
         for (ShoreExcursion e : excursions) {
             int maxPart = e.getMaxCapacity() != null ? e.getMaxCapacity() : 100;
             int booked = e.getCurrentParticipants() != null ? e.getCurrentParticipants() : 0;
-            int present = (int) excursionPassengerRepository.countCheckedInByExcursionId(e.getId());
+            int present = presentByExcursionId.getOrDefault(e.getId(), 0);
             boolean departingSoon = calculateIsDepartingSoon(e, now);
 
             excursionItems.add(OperationsLiveRadarDto.ExcursionDepartureRadarItem.builder()
