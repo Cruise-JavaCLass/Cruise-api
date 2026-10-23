@@ -52,6 +52,21 @@ class MaritimeNetworkSyncControllerTest {
     }
 
     @Test
+    @DisplayName("pingHeartbeat works with null query parameters")
+    void testPingHeartbeatNullParams() {
+        NetworkHeartbeatResponse mockResp = NetworkHeartbeatResponse.builder()
+                .satelliteLinkStatus("EXCELLENT")
+                .build();
+
+        when(networkSyncService.pingHeartbeat(null, null)).thenReturn(mockResp);
+
+        ApiResponse<NetworkHeartbeatResponse> response = controller.pingHeartbeat(null, null);
+
+        assertThat(response).isNotNull();
+        verify(networkSyncService).pingHeartbeat(null, null);
+    }
+
+    @Test
     @DisplayName("ingestAdaptiveChunk returns processed sync response")
     void testIngestAdaptiveChunk() {
         AdaptiveChunkSyncResponse mockResp = AdaptiveChunkSyncResponse.builder()
@@ -74,6 +89,29 @@ class MaritimeNetworkSyncControllerTest {
 
         assertThat(response).isNotNull();
         assertThat(response.getData().getProcessedCount()).isEqualTo(10);
+        verify(networkSyncService).ingestAdaptiveChunk(request);
+    }
+
+    @Test
+    @DisplayName("ingestAdaptiveChunk logs correctly when transactions list is null")
+    void testIngestAdaptiveChunkNullTransactions() {
+        AdaptiveChunkSyncResponse mockResp = AdaptiveChunkSyncResponse.builder()
+                .deviceId("DEV-NULL-TX")
+                .processedCount(0)
+                .build();
+
+        when(networkSyncService.ingestAdaptiveChunk(any())).thenReturn(mockResp);
+
+        AdaptiveChunkSyncRequest request = AdaptiveChunkSyncRequest.builder()
+                .deviceId("DEV-NULL-TX")
+                .chunkIndex(1)
+                .totalChunks(1)
+                .transactions(null)
+                .build();
+
+        ApiResponse<AdaptiveChunkSyncResponse> response = controller.ingestAdaptiveChunk(request);
+
+        assertThat(response).isNotNull();
         verify(networkSyncService).ingestAdaptiveChunk(request);
     }
 }
