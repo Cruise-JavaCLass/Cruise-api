@@ -106,6 +106,7 @@ public class PosOfflineSyncService {
                     .syncTimestamp(syncTimestamp)
                     .outletId(outletId)
                     .requiresFullSnapshot(false)
+                    .updatedOutlets(Collections.emptyList())
                     .updatedProducts(Collections.emptyList())
                     .deletedProductIds(Collections.emptyList())
                     .updatedCategories(Collections.emptyList())
@@ -148,6 +149,9 @@ public class PosOfflineSyncService {
             }
         }
 
+        List<OutletDto> currentOutlets = currentPackage.getOutlets() != null
+                ? currentPackage.getOutlets()
+                : catalogService.getOutlets();
         List<CategoryDto> currentCategories = currentPackage.getCategories() != null
                 ? currentPackage.getCategories()
                 : catalogService.getCategories(outletId);
@@ -161,6 +165,7 @@ public class PosOfflineSyncService {
                 .syncTimestamp(syncTimestamp)
                 .outletId(outletId)
                 .requiresFullSnapshot(requiresFullSnapshot)
+                .updatedOutlets(currentOutlets)
                 .updatedProducts(updatedProducts)
                 .deletedProductIds(deletedProductIds)
                 .updatedCategories(currentCategories)

@@ -21,6 +21,9 @@ public class PosDeltaCatalogChangefeedDto {
     private boolean requiresFullSnapshot;
 
     @Builder.Default
+    private List<OutletDto> updatedOutlets = new ArrayList<>();
+
+    @Builder.Default
     private List<ProductDetailDto> updatedProducts = new ArrayList<>();
 
     @Builder.Default

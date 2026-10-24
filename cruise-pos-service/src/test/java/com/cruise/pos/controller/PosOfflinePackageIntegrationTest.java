@@ -128,6 +128,9 @@ class PosOfflinePackageIntegrationTest {
                 .syncTimestamp(Instant.now())
                 .outletId(1L)
                 .requiresFullSnapshot(false)
+                .updatedOutlets(List.of(
+                        OutletDto.builder().id(1L).code("OUT-01").name("Pool Bar").build()
+                ))
                 .updatedProducts(List.of(
                         ProductDetailDto.builder()
                                 .id(10L)
@@ -147,7 +150,8 @@ class PosOfflinePackageIntegrationTest {
                 .andExpect(jsonPath("$.data.fromVersionHash").value("\"old-hash\""))
                 .andExpect(jsonPath("$.data.currentVersionHash").value("\"new-hash\""))
                 .andExpect(jsonPath("$.data.updatedProducts[0].sku").value("SKU-10"))
-                .andExpect(jsonPath("$.data.deletedProductIds[0]").value(99));
+                .andExpect(jsonPath("$.data.deletedProductIds[0]").value(99))
+                .andExpect(jsonPath("$.data.updatedOutlets[0].code").value("OUT-01"));
     }
 
     /**

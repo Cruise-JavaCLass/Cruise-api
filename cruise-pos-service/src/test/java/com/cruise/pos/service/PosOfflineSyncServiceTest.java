@@ -376,6 +376,7 @@ class PosOfflineSyncServiceTest {
         assertThat(delta.getFromVersionHash()).isEqualTo(currentEtag);
         assertThat(delta.getCurrentVersionHash()).isEqualTo(currentEtag);
         assertThat(delta.isRequiresFullSnapshot()).isFalse();
+        assertThat(delta.getUpdatedOutlets()).isEmpty();
         assertThat(delta.getUpdatedProducts()).isEmpty();
         assertThat(delta.getDeletedProductIds()).isEmpty();
         assertThat(delta.getSyncTimestamp()).isNotNull();
@@ -397,7 +398,8 @@ class PosOfflineSyncServiceTest {
     @Test
     @DisplayName("getDeltaChangefeed splits updated and archived products and includes reassigned outlet products")
     void testGetDeltaChangefeedWithUpdatesDeletionsAndReassigned() {
-        when(catalogService.getOutlets()).thenReturn(Collections.emptyList());
+        OutletDto mockOutlet = OutletDto.builder().id(1L).code("POOL_BAR").name("Pool Bar").build();
+        when(catalogService.getOutlets()).thenReturn(List.of(mockOutlet));
         when(catalogService.getCategories(1L)).thenReturn(Collections.emptyList());
         when(pricingEngine.getRulesByOutlet(1L)).thenReturn(Collections.emptyList());
         when(productRepository.findActiveCatalogByOutlet(1L)).thenReturn(Collections.emptyList());
@@ -418,6 +420,27 @@ class PosOfflineSyncServiceTest {
         assertThat(delta.getUpdatedProducts()).hasSize(1);
         assertThat(delta.getUpdatedProducts().get(0).getId()).isEqualTo(101L);
         assertThat(delta.getDeletedProductIds()).containsExactlyInAnyOrder(102L, 103L);
+        assertThat(delta.getUpdatedOutlets()).hasSize(1);
+        assertThat(delta.getUpdatedOutlets().get(0).getCode()).isEqualTo("POOL_BAR");
+    }
+
+    @Test
+    @DisplayName("getDeltaChangefeed includes current outlets in delta response to prevent stale terminals")
+    void testGetDeltaChangefeedIncludesCurrentOutlets() {
+        OutletDto outlet1 = OutletDto.builder().id(1L).code("POOL_BAR").name("Pool Bar").build();
+        OutletDto outlet2 = OutletDto.builder().id(2L).code("MAIN_DINING").name("Main Dining").build();
+        when(catalogService.getOutlets()).thenReturn(List.of(outlet1, outlet2));
+        when(catalogService.getCategories(1L)).thenReturn(Collections.emptyList());
+        when(pricingEngine.getRulesByOutlet(1L)).thenReturn(Collections.emptyList());
+        when(productRepository.findActiveCatalogByOutlet(1L)).thenReturn(Collections.emptyList());
+        when(productRepository.findUpdatedProductsSince(eq(1L), any(Instant.class))).thenReturn(Collections.emptyList());
+
+        Instant since = Instant.now().minusSeconds(1800);
+        PosDeltaCatalogChangefeedDto delta = offlineSyncService.getDeltaChangefeed(1L, "\"stale-hash\"", since);
+
+        assertThat(delta.isRequiresFullSnapshot()).isFalse();
+        assertThat(delta.getUpdatedOutlets()).hasSize(2);
+        assertThat(delta.getUpdatedOutlets()).extracting(OutletDto::getCode).containsExactly("POOL_BAR", "MAIN_DINING");
     }
 
     @Test
