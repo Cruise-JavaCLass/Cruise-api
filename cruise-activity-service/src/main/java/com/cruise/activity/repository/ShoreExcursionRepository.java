@@ -1,6 +1,7 @@
 package com.cruise.activity.repository;
 
 import com.cruise.activity.entity.ShoreExcursion;
+import com.cruise.activity.enums.ExcursionStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -11,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -27,7 +29,15 @@ public interface ShoreExcursionRepository extends JpaRepository<ShoreExcursion, 
 
     List<ShoreExcursion> findByTourIdAndDayNumberAndActiveTrueOrderByGatheringTimeAsc(Long tourId, Integer dayNumber);
 
-    List<ShoreExcursion> findByTourIdAndStatusAndActiveTrueOrderByGatheringTimeAsc(Long tourId, com.cruise.activity.enums.ExcursionStatus status);
+    List<ShoreExcursion> findByTourIdAndStatusAndActiveTrueOrderByGatheringTimeAsc(Long tourId, ExcursionStatus status);
+
+    long countByExcursionDateAndActiveTrue(LocalDate excursionDate);
+
+    @Query("SELECT e FROM ShoreExcursion e WHERE e.active = true AND e.status IN (:statuses) AND e.excursionDate >= :fromDate ORDER BY e.excursionDate ASC, e.departureTime ASC")
+    List<ShoreExcursion> findLiveUpcomingExcursions(
+            @Param("statuses") Collection<ExcursionStatus> statuses,
+            @Param("fromDate") LocalDate fromDate
+    );
 
     @Query("SELECT e FROM ShoreExcursion e WHERE e.tourId = :tourId AND e.active = true " +
             "AND (:portId IS NULL OR e.portId = :portId) " +

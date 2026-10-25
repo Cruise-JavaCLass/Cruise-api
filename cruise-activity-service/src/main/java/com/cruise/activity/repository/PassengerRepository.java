@@ -35,6 +35,7 @@ public interface PassengerRepository extends JpaRepository<Passenger, Long> {
     List<Passenger> findByTourIdAndCheckInStatusAndActiveTrue(Long tourId, CheckInStatus checkInStatus);
 
     Optional<Passenger> findByRfidTag(String rfidTag);
+    List<Passenger> findAllByRfidTagIgnoreCase(String rfidTag);
 
     Optional<Passenger> findByRfidTagAndActiveTrue(String rfidTag);
 
