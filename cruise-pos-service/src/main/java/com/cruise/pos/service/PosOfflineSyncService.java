@@ -13,11 +13,17 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.zip.GZIPOutputStream;
 
 @Service
 @RequiredArgsConstructor
@@ -67,6 +73,104 @@ public class PosOfflineSyncService {
         pkg.setEtag(etag);
 
         return pkg;
+    }
+
+    /**
+     * Generates a GZIP compressed byte array of the full catalog snapshot package.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportGzipCatalogPackage(Long outletId) throws IOException {
+        PosOfflineCatalogPackageDto pkg = exportOfflinePackage(outletId);
+        byte[] jsonBytes = objectMapper.writeValueAsBytes(pkg);
+
+        ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+        try (GZIPOutputStream gzipStream = new GZIPOutputStream(byteStream)) {
+            gzipStream.write(jsonBytes);
+        }
+        return byteStream.toByteArray();
+    }
+
+    /**
+     * Calculates delta catalog updates since a given version or timestamp.
+     */
+    @Transactional(readOnly = true)
+    public PosDeltaCatalogChangefeedDto getDeltaChangefeed(Long outletId, String clientVersionHash, Instant since) {
+        Instant syncTimestamp = Instant.now();
+        PosOfflineCatalogPackageDto currentPackage = exportOfflinePackage(outletId);
+        String currentEtag = currentPackage.getEtag();
+
+        if (clientVersionHash != null && clientVersionHash.equals(currentEtag)) {
+            return PosDeltaCatalogChangefeedDto.builder()
+                    .fromVersionHash(clientVersionHash)
+                    .currentVersionHash(currentEtag)
+                    .syncTimestamp(syncTimestamp)
+                    .outletId(outletId)
+                    .requiresFullSnapshot(false)
+                    .updatedOutlets(Collections.emptyList())
+                    .updatedProducts(Collections.emptyList())
+                    .deletedProductIds(Collections.emptyList())
+                    .updatedCategories(Collections.emptyList())
+                    .updatedHappyHourRules(Collections.emptyList())
+                    .build();
+        }
+
+        boolean requiresFullSnapshot = (clientVersionHash == null || clientVersionHash.isBlank() || since == null);
+        Instant threshold = (since != null) ? since : syncTimestamp.minus(7, ChronoUnit.DAYS);
+        List<PosProduct> changedEntities = productRepository.findUpdatedProductsSince(outletId, threshold);
+
+        Map<Long, ProductDetailDto> packageProductsById = currentPackage.getProducts() != null
+                ? currentPackage.getProducts().stream()
+                        .collect(Collectors.toMap(ProductDetailDto::getId, Function.identity(), (a, b) -> a))
+                : Collections.emptyMap();
+
+        List<ProductDetailDto> updatedProducts = new ArrayList<>();
+        List<Long> deletedProductIds = new ArrayList<>();
+
+        for (PosProduct p : changedEntities) {
+            if (p.getStatus() == ProductStatus.ARCHIVED) {
+                deletedProductIds.add(p.getId());
+            } else {
+                ProductDetailDto dto = packageProductsById.get(p.getId());
+                updatedProducts.add(dto != null ? dto : catalogService.getProductById(p.getId()));
+            }
+        }
+
+        if (outletId != null) {
+            Set<Long> updatedIds = updatedProducts.stream()
+                    .map(ProductDetailDto::getId)
+                    .collect(Collectors.toSet());
+            List<Long> reassignedIds = auditLogRepository.findReassignedProductIdsForOutlet(String.valueOf(outletId), threshold);
+            if (reassignedIds != null) {
+                for (Long rId : reassignedIds) {
+                    if (rId != null && !updatedIds.contains(rId) && !deletedProductIds.contains(rId)) {
+                        deletedProductIds.add(rId);
+                    }
+                }
+            }
+        }
+
+        List<OutletDto> currentOutlets = currentPackage.getOutlets() != null
+                ? currentPackage.getOutlets()
+                : catalogService.getOutlets();
+        List<CategoryDto> currentCategories = currentPackage.getCategories() != null
+                ? currentPackage.getCategories()
+                : catalogService.getCategories(outletId);
+        List<HappyHourRuleDto> happyHourRules = currentPackage.getHappyHourRules() != null
+                ? currentPackage.getHappyHourRules()
+                : pricingEngine.getRulesByOutlet(outletId);
+
+        return PosDeltaCatalogChangefeedDto.builder()
+                .fromVersionHash(clientVersionHash)
+                .currentVersionHash(currentEtag)
+                .syncTimestamp(syncTimestamp)
+                .outletId(outletId)
+                .requiresFullSnapshot(requiresFullSnapshot)
+                .updatedOutlets(currentOutlets)
+                .updatedProducts(updatedProducts)
+                .deletedProductIds(deletedProductIds)
+                .updatedCategories(currentCategories)
+                .updatedHappyHourRules(happyHourRules)
+                .build();
     }
 
     /**
@@ -230,9 +334,35 @@ public class PosOfflineSyncService {
             if (item.getDescription() != null) product.setDescription(item.getDescription());
             product.setTaxCategory(tax);
             product.setCategoryId(categoryId);
-            if (outletId != null) product.setOutletId(outletId);
+            if (outletId != null) {
+                Long oldOutletId = product.getOutletId();
+                if (oldOutletId != null && !outletId.equals(oldOutletId)) {
+                    auditLogRepository.save(PosCatalogAuditLog.builder()
+                            .productId(product.getId())
+                            .sku(product.getSku())
+                            .action("OUTLET_REASSIGNED")
+                            .oldValue(String.valueOf(oldOutletId))
+                            .newValue(String.valueOf(outletId))
+                            .performedBy(request.getPerformedBy() != null ? request.getPerformedBy() : "MANIFEST_SYNC")
+                            .reason("Product moved from outlet " + oldOutletId + " to " + outletId)
+                            .build());
+                } else if (oldOutletId == null) {
+                    auditLogRepository.save(PosCatalogAuditLog.builder()
+                            .productId(product.getId())
+                            .sku(product.getSku())
+                            .action("OUTLET_REASSIGNED")
+                            .oldValue("GLOBAL")
+                            .newValue(String.valueOf(outletId))
+                            .performedBy(request.getPerformedBy() != null ? request.getPerformedBy() : "MANIFEST_SYNC")
+                            .reason("Global product restricted to outlet " + outletId)
+                            .build());
+                }
+                product.setOutletId(outletId);
+            }
             if (item.getStockQuantity() != null) product.setStockQuantity(item.getStockQuantity());
             if (item.getImageUrl() != null) product.setImageUrl(item.getImageUrl());
+            if (item.getHappyHourEligible() != null) product.setHappyHourEligible(item.getHappyHourEligible());
+            if (item.getHappyHourDiscountPercent() != null) product.setHappyHourDiscountPercent(item.getHappyHourDiscountPercent());
         } else {
             product = PosProduct.builder()
                     .sku(item.getSku())
@@ -249,7 +379,7 @@ public class PosOfflineSyncService {
                     .is86ed(false)
                     .stockQuantity(item.getStockQuantity() != null ? item.getStockQuantity() : 100)
                     .imageUrl(item.getImageUrl())
-                    .happyHourEligible(item.getHappyHourEligible() != null ? item.getHappyHourEligible() : false)
+                    .happyHourEligible(item.getHappyHourEligible() != null ? item.getHappyHourEligible() : true)
                     .happyHourDiscountPercent(item.getHappyHourDiscountPercent() != null ? item.getHappyHourDiscountPercent() : BigDecimal.ZERO)
                     .build();
         }
