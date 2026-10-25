@@ -152,7 +152,6 @@ public class PosCatalogService {
             throw new DuplicateResourceException("Mã SKU '" + req.getSku() + "' hoặc mã vạch đã tồn tại trong hệ thống");
         }
 
-        List<ProductModifierDto> savedModifiers = new ArrayList<>();
         if (req.getModifiers() != null && !req.getModifiers().isEmpty()) {
             for (ProductModifierDto mDto : req.getModifiers()) {
                 PosProductModifier mod = PosProductModifier.builder()
@@ -165,7 +164,7 @@ public class PosCatalogService {
                         .displayOrder(mDto.getDisplayOrder() != null ? mDto.getDisplayOrder() : 0)
                         .status("ACTIVE")
                         .build();
-                savedModifiers.add(toModifierDto(modifierRepository.save(mod)));
+                modifierRepository.save(mod);
             }
         }
 
@@ -239,6 +238,28 @@ public class PosCatalogService {
         String oldValue = priceChanged ? (oldPrice != null ? oldPrice.toString() : null) : null;
         String newValue = priceChanged ? (updated.getBasePrice() != null ? updated.getBasePrice().toString() : null) : "Product updated";
         String performedBy = resolveCurrentPrincipal();
+
+        if (oldOutletId != null && updated.getOutletId() != null && !Objects.equals(oldOutletId, updated.getOutletId())) {
+            auditLogRepository.save(com.cruise.pos.entity.PosCatalogAuditLog.builder()
+                    .productId(updated.getId())
+                    .sku(updated.getSku())
+                    .action("OUTLET_REASSIGNED")
+                    .oldValue(String.valueOf(oldOutletId))
+                    .newValue(String.valueOf(updated.getOutletId()))
+                    .performedBy(performedBy)
+                    .reason("Product moved from outlet " + oldOutletId + " to " + updated.getOutletId())
+                    .build());
+        } else if (oldOutletId == null && updated.getOutletId() != null) {
+            auditLogRepository.save(com.cruise.pos.entity.PosCatalogAuditLog.builder()
+                    .productId(updated.getId())
+                    .sku(updated.getSku())
+                    .action("OUTLET_REASSIGNED")
+                    .oldValue("GLOBAL")
+                    .newValue(String.valueOf(updated.getOutletId()))
+                    .performedBy(performedBy)
+                    .reason("Global product restricted to outlet " + updated.getOutletId())
+                    .build());
+        }
 
 
         auditLogRepository.save(com.cruise.pos.entity.PosCatalogAuditLog.builder()

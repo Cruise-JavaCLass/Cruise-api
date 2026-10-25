@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -64,4 +65,12 @@ public interface PosProductRepository extends JpaRepository<PosProduct, Long> {
            "(:outletId IS NULL OR p.outletId IS NULL OR p.outletId = :outletId) AND " +
            "p.status <> 'ARCHIVED' ORDER BY p.displayOrder ASC, p.name ASC")
     List<PosProduct> findActiveCatalogByOutlet(@Param("outletId") Long outletId);
+
+    /**
+     * Returns products updated or created after a given timestamp for delta sync.
+     */
+    @Query("SELECT p FROM PosProduct p WHERE " +
+           "(:outletId IS NULL OR p.outletId IS NULL OR p.outletId = :outletId) AND " +
+           "p.updatedAt >= :since ORDER BY p.updatedAt ASC")
+    List<PosProduct> findUpdatedProductsSince(@Param("outletId") Long outletId, @Param("since") Instant since);
 }
