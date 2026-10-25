@@ -36,6 +36,8 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/pos/auth/manifest/**").hasAnyRole("POS_STAFF", "OPERATIONS_MANAGER", "SYSTEM_ADMIN")
+                        .requestMatchers("/api/admin/voyage-lifecycle/**").hasAnyRole("OPERATIONS_MANAGER", "SYSTEM_ADMIN", "ADMIN")
+                        .requestMatchers("/api/admin/voyages/**").hasAnyRole("OPERATIONS_MANAGER", "SYSTEM_ADMIN", "EXECUTIVE_CONTROLLER", "EXECUTIVE_DIRECTOR", "ADMIN", "MANAGER")
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
