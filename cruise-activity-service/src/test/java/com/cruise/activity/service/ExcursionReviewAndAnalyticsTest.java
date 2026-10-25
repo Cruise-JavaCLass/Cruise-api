@@ -348,4 +348,119 @@ class ExcursionReviewAndAnalyticsTest {
         List<ProviderScorecardDto> scorecards = opsAnalyticsService.getProviderScorecards();
         assertThat(scorecards).hasSize(1);
     }
+
+    @Test
+    @DisplayName("Provider Scorecard Performance Tiers: HIGH_RISK")
+    void providerScorecard_HighRisk() {
+        ExcursionReview r1 = ExcursionReview.builder()
+                .excursionId(1L)
+                .ratingOverall(2)
+                .isFlagged(false)
+                .build();
+
+        when(excursionRepository.findAll()).thenReturn(List.of(mockExcursion));
+        when(reviewRepository.findAll()).thenReturn(List.of(r1));
+
+        List<ProviderScorecardDto> scorecards = opsAnalyticsService.getProviderScorecards();
+        assertThat(scorecards).hasSize(1);
+        assertThat(scorecards.get(0).performanceTier()).isEqualTo("HIGH_RISK");
+    }
+
+    @Test
+    @DisplayName("Provider Scorecard Performance Tiers: NEEDS_IMPROVEMENT (by flagged count)")
+    void providerScorecard_NeedsImprovementFlagged() {
+        ExcursionReview r1 = ExcursionReview.builder().excursionId(1L).ratingOverall(5).isFlagged(true).build();
+        ExcursionReview r2 = ExcursionReview.builder().excursionId(1L).ratingOverall(5).isFlagged(true).build();
+        ExcursionReview r3 = ExcursionReview.builder().excursionId(1L).ratingOverall(5).isFlagged(true).build();
+
+        when(excursionRepository.findAll()).thenReturn(List.of(mockExcursion));
+        when(reviewRepository.findAll()).thenReturn(List.of(r1, r2, r3));
+
+        List<ProviderScorecardDto> scorecards = opsAnalyticsService.getProviderScorecards();
+        assertThat(scorecards).hasSize(1);
+        assertThat(scorecards.get(0).performanceTier()).isEqualTo("NEEDS_IMPROVEMENT");
+    }
+
+    @Test
+    @DisplayName("Provider Scorecard Performance Tiers: GOOD")
+    void providerScorecard_Good() {
+        ExcursionReview r1 = ExcursionReview.builder().excursionId(1L).ratingOverall(4).isFlagged(false).build();
+
+        when(excursionRepository.findAll()).thenReturn(List.of(mockExcursion));
+        when(reviewRepository.findAll()).thenReturn(List.of(r1));
+
+        List<ProviderScorecardDto> scorecards = opsAnalyticsService.getProviderScorecards();
+        assertThat(scorecards).hasSize(1);
+        assertThat(scorecards.get(0).performanceTier()).isEqualTo("GOOD");
+    }
+
+    @Test
+    @DisplayName("Provider Scorecard Performance Tiers: UNRATED")
+    void providerScorecard_Unrated() {
+        when(excursionRepository.findAll()).thenReturn(List.of(mockExcursion));
+        when(reviewRepository.findAll()).thenReturn(List.of());
+
+        List<ProviderScorecardDto> scorecards = opsAnalyticsService.getProviderScorecards();
+        assertThat(scorecards).hasSize(1);
+        assertThat(scorecards.get(0).performanceTier()).isEqualTo("UNRATED");
+    }
+
+    @Test
+    @DisplayName("Provider Scorecard Performance Tiers: NEEDS_IMPROVEMENT (fallback)")
+    void providerScorecard_NeedsImprovementFallback() {
+        ExcursionReview r1 = ExcursionReview.builder().excursionId(1L).ratingOverall(3).isFlagged(false).build();
+
+        when(excursionRepository.findAll()).thenReturn(List.of(mockExcursion));
+        when(reviewRepository.findAll()).thenReturn(List.of(r1));
+
+        List<ProviderScorecardDto> scorecards = opsAnalyticsService.getProviderScorecards();
+        assertThat(scorecards).hasSize(1);
+        assertThat(scorecards.get(0).performanceTier()).isEqualTo("NEEDS_IMPROVEMENT");
+    }
+
+    @Test
+    @DisplayName("Ops KPI Analytics: Handle Null Ratings")
+    void opsKpi_NullRatings() {
+        ExcursionReview r1 = ExcursionReview.builder()
+                .excursionId(1L)
+                .passengerId(201L)
+                .ratingOverall(null)
+                .ratingGuide(null)
+                .ratingBus(null)
+                .ratingValue(null)
+                .isFlagged(false)
+                .build();
+        r1.setId(1L);
+
+        ExcursionGuide guide = ExcursionGuide.builder()
+                .excursionId(1L)
+                .fullName("Guide One")
+                .guideCode("G1")
+                .role(GuideRole.LEAD)
+                .rating(null)
+                .build();
+        guide.setId(10L);
+
+        when(excursionRepository.findAll()).thenReturn(List.of(mockExcursion));
+        when(reviewRepository.findAll()).thenReturn(List.of(r1));
+        when(guideRepository.findAll()).thenReturn(List.of(guide));
+
+        ExcursionOpsKpiResponse kpi = opsAnalyticsService.getOpsKpiMetrics();
+
+        assertThat(kpi.totalExcursions()).isEqualTo(1L);
+        assertThat(kpi.totalReviews()).isEqualTo(1L);
+        assertThat(kpi.averageOverallRating()).isEqualTo(0.0);
+        assertThat(kpi.averageGuideRating()).isEqualTo(0.0);
+        assertThat(kpi.averageBusRating()).isEqualTo(0.0);
+        assertThat(kpi.averageValueRating()).isEqualTo(0.0);
+
+        assertThat(kpi.providerScorecards()).hasSize(1);
+        assertThat(kpi.providerScorecards().get(0).averageRating()).isEqualTo(0.0);
+        assertThat(kpi.providerScorecards().get(0).averageGuideRating()).isEqualTo(0.0);
+        assertThat(kpi.providerScorecards().get(0).averageBusRating()).isEqualTo(0.0);
+        assertThat(kpi.providerScorecards().get(0).averageValueRating()).isEqualTo(0.0);
+
+        assertThat(kpi.guideRatings()).hasSize(1);
+        assertThat(kpi.guideRatings().get(0).averageRating()).isEqualTo(5.0); // default value
+    }
 }
