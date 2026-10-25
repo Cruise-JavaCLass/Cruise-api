@@ -29,6 +29,14 @@ public interface ActivityAttendanceRepository extends JpaRepository<ActivityAtte
 
     long countByActivityIdAndStatusAndActiveTrue(Long activityId, ActivityAttendanceStatus status);
 
+    @Query("SELECT a.activityId, COUNT(a) FROM ActivityAttendance a " +
+            "WHERE a.activityId IN :activityIds AND a.status = :status AND a.active = true " +
+            "GROUP BY a.activityId")
+    List<Object[]> countCheckedInGroupedByActivityId(
+            @Param("activityIds") java.util.Collection<Long> activityIds,
+            @Param("status") ActivityAttendanceStatus status
+    );
+
     long countByActivityIdAndIsWalkInTrueAndActiveTrue(Long activityId);
 
     @Query("SELECT a FROM ActivityAttendance a WHERE a.activityId = :activityId AND a.active = true " +
