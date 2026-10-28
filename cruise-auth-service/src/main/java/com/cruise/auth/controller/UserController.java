@@ -55,6 +55,12 @@ public class UserController {
                         .body(ApiResponse.error("User not found: " + username)));
     }
 
+    @DeleteMapping("/{username}")
+    public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable String username) {
+        userService.deleteUserByUsername(username);
+        return ResponseEntity.ok(ApiResponse.ok("User deleted successfully", null));
+    }
+
     private com.cruise.auth.dto.UserResponseDto mapToResponseDto(User user) {
         return com.cruise.auth.dto.UserResponseDto.builder()
                 .id(user.getId())

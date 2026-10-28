@@ -269,7 +269,35 @@
               ]
             },
             "description": "Obtain fresh access token using refresh token."
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "    var json = pm.response.json();",
+                  "    pm.test('Refresh rotation returns valid tokens', function () {",
+                  "        pm.expect(json).to.be.an('object');",
+                  "        var token = (json.data && json.data.accessToken) || json.accessToken || (json.data && json.data.token) || json.token;",
+                  "        pm.expect(token, 'Access token must be present').to.be.a('string').and.not.empty;",
+                  "        pm.environment.set('jwt_token', token);",
+                  "        var newRefreshToken = (json.data && json.data.refreshToken) || json.refreshToken;",
+                  "        if (newRefreshToken) {",
+                  "            pm.environment.set('refresh_token', newRefreshToken);",
+                  "        }",
+                  "        console.log('Successfully rotated and saved jwt_token and refresh_token!');",
+                  "    });",
+                  "} catch (e) {",
+                  "    pm.test('Token refresh response contains valid tokens', function () {",
+                  "        pm.expect.fail('Failed to parse refresh response: ' + e.message);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Verify User Password",
@@ -319,7 +347,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"ops.officer.{{$randomInt}}\",\n  \"password\": \"opsPassword123!\",\n  \"fullName\": \"Ops First Officer {{$randomInt}}\",\n  \"email\": \"officer.{{$randomInt}}@grandpearlvoyager.com\",\n  \"role\": \"OPERATIONS_MANAGER\",\n  \"active\": true\n}"
+              "raw": "{\n  \"username\": \"ops.officer.{{$randomInt}}\",\n  \"password\": \"TempPass_{{$randomUUID}}!\",\n  \"fullName\": \"Ops First Officer {{$randomInt}}\",\n  \"email\": \"officer.{{$randomInt}}@grandpearlvoyager.com\",\n  \"role\": \"OPERATIONS_MANAGER\",\n  \"active\": true\n}"
             },
             "url": {
               "raw": "{{authUrl}}/api/auth/users",
@@ -332,8 +360,22 @@
                 "users"
               ]
             },
-            "description": "Register new crew member with unique dynamic username and email."
-          }
+            "description": "Register new crew member with unique dynamic username and per-run password."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "    var reqBody = JSON.parse(pm.request.body.raw);",
+                  "    pm.environment.set('created_staff_username', reqBody.username);",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Get User By Username",
@@ -346,7 +388,7 @@
               }
             ],
             "url": {
-              "raw": "{{authUrl}}/api/auth/users/admin",
+              "raw": "{{authUrl}}/api/auth/users/{{created_staff_username}}",
               "host": [
                 "{{authUrl}}"
               ],
@@ -354,11 +396,47 @@
                 "api",
                 "auth",
                 "users",
-                "admin"
+                "{{created_staff_username}}"
               ]
             },
             "description": "Retrieve staff profile by username."
           }
+        },
+        {
+          "name": "Cleanup Test Staff User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{authUrl}}/api/auth/users/{{created_staff_username}}",
+              "host": [
+                "{{authUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users",
+                "{{created_staff_username}}"
+              ]
+            },
+            "description": "Clean up created test staff user account."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.environment.unset('created_staff_username');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Logout & Revoke Token",

@@ -53,4 +53,8 @@ public class UserService {
     public List<User> getUsersByRole(Role role) {
         return userRepository.findByRole(role);
     }
+
+    public void deleteUserByUsername(String username) {
+        userRepository.findByUsername(username).ifPresent(userRepository::delete);
+    }
 }

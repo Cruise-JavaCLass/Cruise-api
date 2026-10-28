@@ -44,14 +44,14 @@ Orchestrating mission-critical nautical compliance, SOLAS Chapter III real-time 
 <summary><b>📑 Table of Contents (Click to explore)</b></summary>
 
 - [1. Executive Architectural Overview](#executive-architectural-overview)
-- [2. Microservices Topology & Bounded Contexts](#microservices-topology--bounded-contexts)
-- [3. System Architecture & Topology Diagram](#system-architecture--topology-diagram)
+- [2. Microservices Topology & Bounded Contexts](#microservices-topology-bounded-contexts)
+- [3. System Architecture & Topology Diagram](#system-architecture-topology-diagram)
 - [4. Mission-Critical Maritime Specifications](#mission-critical-maritime-specifications)
 - [5. One-Click Developer Orchestration](#one-click-developer-orchestration)
 - [6. Automated Postman Enterprise Test Suite](#automated-postman-enterprise-test-suite)
-- [7. Complete REST API Matrix (37 Endpoints)](#complete-rest-api-matrix-37-endpoints)
-- [8. Quality Assurance, SonarCloud & CI/CD](#quality-assurance-sonarcloud--cicd)
-- [9. Governance & License](#governance--license)
+- [7. Complete REST API Matrix (38 Endpoints)](#complete-rest-api-matrix-38-endpoints)
+- [8. Quality Assurance, SonarCloud & CI/CD](#quality-assurance-sonarcloud-cicd)
+- [9. Governance & License](#governance-license)
 
 </details>
 
@@ -67,6 +67,7 @@ Orchestrating mission-critical nautical compliance, SOLAS Chapter III real-time 
 
 ---
 
+<a id="microservices-topology-bounded-contexts"></a>
 ## 🧩 2. Microservices Topology & Bounded Contexts
 
 Each bounded context maintains absolute domain autonomy, backed by its dedicated PostgreSQL database schema to enforce transactional isolation.
@@ -147,6 +148,7 @@ Each bounded context maintains absolute domain autonomy, backed by its dedicated
 
 ---
 
+<a id="system-architecture-topology-diagram"></a>
 ## 📐 3. System Architecture & Topology Diagram
 
 ```mermaid
@@ -303,7 +305,8 @@ npx --yes newman run docs/postman/Cruise_Management_System_v1.0.0.postman_collec
 
 ---
 
-## 📋 7. Complete REST API Matrix (37 Endpoints)
+<a id="complete-rest-api-matrix-38-endpoints"></a>
+## 📑 7. Complete REST API Matrix (38 Endpoints)
 
 <details open>
 <summary><b>00 - Gateway & System Monitoring (Port 8080)</b></summary>
@@ -384,6 +387,7 @@ npx --yes newman run docs/postman/Cruise_Management_System_v1.0.0.postman_collec
 
 ---
 
+<a id="quality-assurance-sonarcloud-cicd"></a>
 ## 🧪 8. Quality Assurance, SonarCloud & CI/CD
 
 The codebase is enforced with strict quality gates across GitHub Actions and SonarCloud:
@@ -406,6 +410,7 @@ The codebase is enforced with strict quality gates across GitHub Actions and Son
 
 ---
 
+<a id="governance-license"></a>
 ## 📜 9. Governance & License
 
 Distributed under the [MIT License](./LICENSE).  

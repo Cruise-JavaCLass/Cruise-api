@@ -23,15 +23,8 @@ if not exist "%JAVABIN%" (
 )
 echo Java Runtime: %JAVABIN%
 
-REM 3. Stop any existing processes occupying ports 8080-8084 to prevent conflicts
-echo [1/7] Cleaning up previous processes on ports 8080-8084...
-for %%P in (8080 8081 8082 8083 8084) do (
-    for /f "tokens=5" %%a in ('netstat -aon ^| findstr /R /C:":%%P[ ]" ^| findstr LISTENING') do (
-        taskkill /F /PID %%a >nul 2>&1
-    )
-)
-
-REM 4. Validate that all 5 microservice JARs exist before launching
+REM 3. Validate that all 5 microservice JARs exist before stopping running processes or launching
+echo [1/7] Validating packaged service JAR artifacts...
 set "MISSING_JARS=0"
 for %%M in (
     "cruise-gateway\target\cruise-gateway-0.0.1-SNAPSHOT.jar"
@@ -53,24 +46,36 @@ if "%MISSING_JARS%"=="1" (
     exit /b 1
 )
 
+REM 4. Stop any existing processes occupying ports 8080-8084 to prevent conflicts
+echo [2/7] Cleaning up previous processes on ports 8080-8084...
+for %%P in (8080 8081 8082 8083 8084) do (
+    for /f "tokens=5" %%a in ('netstat -aon ^| findstr /R /C:":%%P[ ]" ^| findstr LISTENING') do (
+        taskkill /F /PID %%a >nul 2>&1
+    )
+)
+
 REM 5. Ensure Docker PostgreSQL is running and healthy
-echo [2/7] Ensuring PostgreSQL container is running and healthy...
+echo [3/7] Ensuring PostgreSQL container is running and healthy...
 docker compose up -d --wait
+if errorlevel 1 (
+    echo [ERROR] Docker Compose failed to start healthy PostgreSQL container!
+    exit /b 1
+)
 
 REM 6. Launch all 5 Microservices cleanly
-echo [3/7] Launching cruise-gateway on port 8080...
+echo [4/7] Launching cruise-gateway on port 8080...
 start "Cruise-Gateway [8080]" cmd /k "%JAVABIN% -jar cruise-gateway\target\cruise-gateway-0.0.1-SNAPSHOT.jar"
 
-echo [4/7] Launching cruise-auth-service on port 8081...
+echo [5/7] Launching cruise-auth-service on port 8081...
 start "Cruise-Auth [8081]" cmd /k "%JAVABIN% -jar cruise-auth-service\target\cruise-auth-service-0.0.1-SNAPSHOT.jar"
 
-echo [5/7] Launching cruise-itinerary-service on port 8082...
+echo [6/7] Launching cruise-itinerary-service on port 8082...
 start "Cruise-Itinerary [8082]" cmd /k "%JAVABIN% -jar cruise-itinerary-service\target\cruise-itinerary-service-0.0.1-SNAPSHOT.jar"
 
-echo [6/7] Launching cruise-activity-service on port 8083...
+echo [7/7] Launching cruise-activity-service on port 8083...
 start "Cruise-Activity [8083]" cmd /k "%JAVABIN% -jar cruise-activity-service\target\cruise-activity-service-0.0.1-SNAPSHOT.jar"
 
-echo [7/7] Launching cruise-pos-service on port 8084...
+echo Launching cruise-pos-service on port 8084...
 start "Cruise-POS [8084]" cmd /k "%JAVABIN% -jar cruise-pos-service\target\cruise-pos-service-0.0.1-SNAPSHOT.jar"
 
 echo ========================================================
