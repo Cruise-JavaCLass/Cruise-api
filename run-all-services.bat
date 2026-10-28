@@ -13,14 +13,41 @@ if not defined CRUISE_QR_SECRET (
     for /f "tokens=*" %%a in ('powershell -NoProfile -Command "[System.Guid]::NewGuid().ToString('N') + [System.Guid]::NewGuid().ToString('N')"') do set "CRUISE_QR_SECRET=%%a"
 )
 
-REM 2. Detect Java runtime
-set "JAVABIN=C:\PROGRA~1\Android\ANDROI~1\jbr\bin\java.exe"
-if not exist "%JAVABIN%" (
-    for %%I in ("%JAVA_HOME%\bin\java.exe") do set "JAVABIN=%%~sI"
+REM 2. Detect Java runtime (check JAVA_HOME, Android Studio JBR, and PATH for Java 21 compatibility)
+set "JAVABIN="
+
+if defined JAVA_HOME (
+    if exist "%JAVA_HOME%\bin\java.exe" (
+        "%JAVA_HOME%\bin\java.exe" -version 2>&1 | findstr /i "version" | findstr /R /C:"\"21[\.\"]" >nul
+        if not errorlevel 1 (
+            set "JAVABIN=%JAVA_HOME%\bin\java.exe"
+        )
+    )
 )
-if not exist "%JAVABIN%" (
-    set "JAVABIN=java"
+
+if not defined JAVABIN (
+    if exist "C:\PROGRA~1\Android\ANDROI~1\jbr\bin\java.exe" (
+        "C:\PROGRA~1\Android\ANDROI~1\jbr\bin\java.exe" -version 2>&1 | findstr /i "version" | findstr /R /C:"\"21[\.\"]" >nul
+        if not errorlevel 1 (
+            set "JAVABIN=C:\PROGRA~1\Android\ANDROI~1\jbr\bin\java.exe"
+        )
+    )
 )
+
+if not defined JAVABIN (
+    java -version 2>&1 | findstr /i "version" | findstr /R /C:"\"21[\.\"]" >nul
+    if not errorlevel 1 (
+        set "JAVABIN=java"
+    )
+)
+
+if not defined JAVABIN (
+    echo.
+    echo [ERROR] Java 21 LTS runtime not found!
+    echo Please install Java 21 LTS or set JAVA_HOME pointing to a valid JDK 21 installation.
+    exit /b 1
+)
+
 echo Java Runtime: %JAVABIN%
 
 REM 3. Validate that all 5 microservice JARs exist before stopping running processes or launching
@@ -54,12 +81,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM 5. Stop any existing processes occupying ports 8080-8084 (verifying PID ownership before kill)
+REM 5. Stop any existing Cruise processes occupying ports 8080-8084 (verifying PID ownership before kill)
 echo [3/7] Cleaning up previous processes on ports 8080-8084...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ports = 8080..8084; foreach ($p in $ports) { try { $conns = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction Stop; foreach ($c in $conns) { Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue } } catch { if ($_.CategoryInfo.Category -ne 'ObjectNotFound') { Write-Error $_; exit 1 } } }"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ports = 8080..8084; $conflict = $false; foreach ($p in $ports) { try { $conns = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction Stop; if ($conns) { foreach ($c in $conns) { Write-Host """[ERROR] Port $p is still held by PID $($c.OwningProcess)"""; $conflict = $true } } } catch { if ($_.CategoryInfo.Category -ne 'ObjectNotFound') { Write-Error $_; exit 1 } } }; if ($conflict) { exit 1 }"
+call "%~dp0stop-all-services.bat"
 if errorlevel 1 (
-    echo [FATAL] Cannot start services due to occupied ports.
+    echo [FATAL] Cannot start services due to occupied ports or active non-Cruise processes.
     exit /b 1
 )
 
