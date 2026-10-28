@@ -149,6 +149,19 @@ class UserControllerTest {
     }
 
     @Test
+    @DisplayName("DELETE /api/auth/users/{username} returns 401 Unauthorized when token is invalid")
+    void shouldReturnUnauthorizedWhenDeleteUserWithInvalidToken() throws Exception {
+        when(jwtService.validateToken("bad-token")).thenReturn(false);
+
+        mockMvc.perform(delete("/api/auth/users/testuser")
+                        .header("Authorization", "Bearer bad-token"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Invalid or expired authentication token"));
+        org.mockito.Mockito.verify(userService, org.mockito.Mockito.never()).deleteUserByUsername("testuser");
+    }
+
+    @Test
     @DisplayName("DELETE /api/auth/users/{username} returns 403 Forbidden when caller is not an administrator")
     void shouldReturnForbiddenWhenDeleteUserNonAdmin() throws Exception {
         when(jwtService.validateToken("staff-token")).thenReturn(true);
@@ -159,6 +172,7 @@ class UserControllerTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("Access denied: Administrator privileges required"));
+        org.mockito.Mockito.verify(userService, org.mockito.Mockito.never()).deleteUserByUsername("testuser");
     }
 
     @Test
@@ -172,5 +186,6 @@ class UserControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("User deleted successfully"));
+        org.mockito.Mockito.verify(userService).deleteUserByUsername("testuser");
     }
 }
