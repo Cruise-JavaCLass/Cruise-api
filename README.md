@@ -43,20 +43,21 @@ Orchestrating mission-critical nautical compliance, SOLAS Chapter III real-time 
 <details>
 <summary><b>📑 Table of Contents (Click to explore)</b></summary>
 
-- [1. Executive Architectural Overview](#-1-executive-architectural-overview)
-- [2. Microservices Topology & Bounded Contexts](#-2-microservices-topology--bounded-contexts)
-- [3. System Architecture & Topology Diagram](#-3-system-architecture--topology-diagram)
-- [4. Mission-Critical Maritime Specifications](#-4-mission-critical-maritime-specifications)
-- [5. One-Click Developer Orchestration](#-5-one-click-developer-orchestration)
-- [6. Automated Postman Enterprise Test Suite](#-6-automated-postman-enterprise-test-suite)
-- [7. Complete REST API Matrix (37 Endpoints)](#-7-complete-rest-api-matrix-37-endpoints)
-- [8. Quality Assurance, SonarCloud & CI/CD](#-8-quality-assurance-sonarcloud--cicd)
-- [9. Governance & License](#-9-governance--license)
+- [1. Executive Architectural Overview](#executive-architectural-overview)
+- [2. Microservices Topology & Bounded Contexts](#microservices-topology--bounded-contexts)
+- [3. System Architecture & Topology Diagram](#system-architecture--topology-diagram)
+- [4. Mission-Critical Maritime Specifications](#mission-critical-maritime-specifications)
+- [5. One-Click Developer Orchestration](#one-click-developer-orchestration)
+- [6. Automated Postman Enterprise Test Suite](#automated-postman-enterprise-test-suite)
+- [7. Complete REST API Matrix (37 Endpoints)](#complete-rest-api-matrix-37-endpoints)
+- [8. Quality Assurance, SonarCloud & CI/CD](#quality-assurance-sonarcloud--cicd)
+- [9. Governance & License](#governance--license)
 
 </details>
 
 ---
 
+<a id="executive-architectural-overview"></a>
 ## 🏛️ 1. Executive Architectural Overview
 
 `Cruise-api` serves as the centralized computational backbone for the **Grand Pearl Voyager** luxury cruise management fleet. Engineered with Spring Boot and Java 21, the system decouples complex maritime logistics into **5 autonomous, loosely coupled microservices** bound together by standardized REST contracts and isolated database schemas.
@@ -195,6 +196,7 @@ graph TD
 
 ---
 
+<a id="mission-critical-maritime-specifications"></a>
 ## ⚓ 4. Mission-Critical Maritime Specifications
 
 ### A. SOLAS Chapter III Regulation 19 Compliance
@@ -203,8 +205,8 @@ In accordance with the **International Convention for the Safety of Life at Sea 
 - **All-Aboard Watchdog:** `AllAboardWatchdogController` maintains a real-time countdown sync between shore excursion attendance rosters and ship departure schedules to eliminate abandoned passengers.
 
 ### B. High-Security Dynamic QR Passes
-- Issued through `QrTokenService` utilizing an HMAC-SHA256 signature with an ephemeral **60-second Time-To-Live (TTL)**.
-- Prevents screenshot sharing, ticket scalping, and unauthorized access to VIP lounges or high-capacity tender boats.
+- Issued through `QrTokenService` utilizing an HMAC-SHA256 signature with an ephemeral **60-second Time-To-Live (TTL)**. The signing key is supplied via the `CRUISE_QR_SECRET` environment variable (with local test fallback restricted to the `dev` profile).
+- The 60-second TTL limits the replay window, mitigating ticket scalping and unauthorized access to VIP lounges or high-capacity tender boats.
 
 ### C. Voyage Global Lifecycle Finite State Machine
 Every voyage adheres to a strict, transactional sequence enforced across all endpoints:
@@ -223,18 +225,23 @@ stateDiagram-v2
 
 ---
 
+<a id="one-click-developer-orchestration"></a>
 ## ⚡ 5. One-Click Developer Orchestration
 
 ### Prerequisites
 - **JDK 21 LTS** (`java -version` returns Java 21)
 - **Docker Desktop** running (for PostgreSQL 18)
+- **Node.js & npm** (Node.js 18+ for running Newman CLI via `npx newman`)
 - **Postman Desktop** (for visual test execution)
 
 ### 🚀 1-Click Launch (Recommended)
 You can launch the entire infrastructure in seconds using the idempotent root scripts:
 
 ```cmd
-:: Launch PostgreSQL and all 5 Microservices in dedicated, titled consoles
+:: 1. Package all microservices (required on clean checkout)
+.\mvnw.cmd clean package -DskipTests
+
+:: 2. Launch PostgreSQL and all 5 Microservices in dedicated, titled consoles
 run-all-services.bat
 
 :: Stop all running microservices and release ports cleanly
@@ -242,7 +249,7 @@ stop-all-services.bat
 ```
 
 > [!TIP]
-> **Idempotent Automation:** `run-all-services.bat` automatically terminates any stale processes lingering on ports `8080-8084`, ensures Docker PostgreSQL is healthy, injects the `CRUISE_QR_SECRET`, and spins up all 5 services cleanly.
+> **Idempotent Automation:** `run-all-services.bat` automatically terminates any stale processes lingering on ports `8080-8084`, validates that all packaged JARs exist in `target/`, waits for the Docker PostgreSQL container to become healthy via `docker compose up -d --wait`, ensures `CRUISE_QR_SECRET` is set, and spins up all 5 microservices cleanly.
 
 ---
 
@@ -264,6 +271,7 @@ docker compose up -d
 
 ---
 
+<a id="automated-postman-enterprise-test-suite"></a>
 ## 📬 6. Automated Postman Enterprise Test Suite
 
 The project includes an enterprise-grade automated Postman test suite located in [`docs/postman/`](./docs/postman/):
@@ -272,6 +280,7 @@ The project includes an enterprise-grade automated Postman test suite located in
 - 🌐 **Environment:** [`Cruise_Local.postman_environment.json`](./docs/postman/Cruise_Local.postman_environment.json)
 
 ### Pre-Configured Environment Variables:
+
 | Variable | Value | Description |
 |---|---|---|
 | `baseUrl` | `http://localhost:8080/api` | Gateway Unified API Base URL |

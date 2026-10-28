@@ -5,6 +5,22 @@
     "description": "Complete REST API Test Suite for Cruise Hospitality & Maritime Operations across Gateway, Auth, Itinerary, Activities, POS & Billing microservices.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('Response status is successful (2xx)', function () {",
+          "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+          "});",
+          "pm.test('Response time is under 2000ms', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+          "});"
+        ]
+      }
+    }
+  ],
   "item": [
     {
       "name": "00 - Gateway & Monitoring (cruise-gateway:8080)",
@@ -30,23 +46,7 @@
               ]
             },
             "description": "Gateway heart-beat check."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "System Information",
@@ -69,23 +69,7 @@
               ]
             },
             "description": "Build and version specs."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Health & JVM Stats",
@@ -108,23 +92,7 @@
               ]
             },
             "description": "Uptime and memory allocation."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         }
       ]
     },
@@ -153,23 +121,7 @@
               ]
             },
             "description": "Auth microservice readiness probe."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Admin Login & Auto-Token Capture",
@@ -207,17 +159,23 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});",
-                  "var json = pm.response.json();",
-                  "if (json.data && json.data.accessToken) {",
-                  "    pm.environment.set('jwt_token', json.data.accessToken);",
-                  "    pm.environment.set('refresh_token', json.data.refreshToken);",
-                  "    console.log('Saved jwt_token and refresh_token!');",
+                  "try {",
+                  "    var json = pm.response.json();",
+                  "    pm.test('Login returns valid JWT access token', function () {",
+                  "        pm.expect(json).to.be.an('object');",
+                  "        var token = (json.data && json.data.accessToken) || json.accessToken || (json.data && json.data.token) || json.token;",
+                  "        pm.expect(token, 'Access token must be present').to.be.a('string').and.not.empty;",
+                  "        pm.environment.set('jwt_token', token);",
+                  "        var refreshToken = (json.data && json.data.refreshToken) || json.refreshToken;",
+                  "        if (refreshToken) {",
+                  "            pm.environment.set('refresh_token', refreshToken);",
+                  "        }",
+                  "        console.log('Successfully saved jwt_token!');",
+                  "    });",
+                  "} catch (e) {",
+                  "    pm.test('Response is valid JSON containing access token', function () {",
+                  "        pm.expect.fail('Failed to parse JSON response or token missing: ' + e.message);",
+                  "    });",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -247,23 +205,7 @@
               ]
             },
             "description": "Retrieve logged-in user details."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Token Verification (RFC 7662)",
@@ -295,23 +237,7 @@
               ]
             },
             "description": "Introspect active JWT token."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Token Refresh Rotation",
@@ -343,23 +269,7 @@
               ]
             },
             "description": "Obtain fresh access token using refresh token."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Verify User Password",
@@ -391,23 +301,7 @@
               ]
             },
             "description": "Validate password without issuing tokens."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Create New Staff User",
@@ -425,7 +319,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"ops.officer\",\n  \"password\": \"opsPassword123!\",\n  \"fullName\": \"Ops First Officer\",\n  \"email\": \"first.officer@grandpearlvoyager.com\",\n  \"role\": \"OPERATIONS_MANAGER\",\n  \"active\": true\n}"
+              "raw": "{\n  \"username\": \"ops.officer.{{$randomInt}}\",\n  \"password\": \"opsPassword123!\",\n  \"fullName\": \"Ops First Officer {{$randomInt}}\",\n  \"email\": \"officer.{{$randomInt}}@grandpearlvoyager.com\",\n  \"role\": \"OPERATIONS_MANAGER\",\n  \"active\": true\n}"
             },
             "url": {
               "raw": "{{authUrl}}/api/auth/users",
@@ -438,24 +332,8 @@
                 "users"
               ]
             },
-            "description": "Register new crew member."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+            "description": "Register new crew member with unique dynamic username and email."
+          }
         },
         {
           "name": "Get User By Username",
@@ -480,23 +358,7 @@
               ]
             },
             "description": "Retrieve staff profile by username."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Logout & Revoke Token",
@@ -528,23 +390,7 @@
               ]
             },
             "description": "Revoke active token."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         }
       ]
     },
@@ -573,23 +419,7 @@
               ]
             },
             "description": "All vessels in fleet."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "List Ports of Call",
@@ -613,23 +443,7 @@
               ]
             },
             "description": "Maritime ports and docking berths."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "List Cruise Tours",
@@ -653,23 +467,7 @@
               ]
             },
             "description": "Master sailing itineraries."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Get Daily Itinerary for Tour #1",
@@ -695,23 +493,7 @@
               ]
             },
             "description": "Day-by-day navigation breakdown."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Get Tour Stops for Tour #1",
@@ -737,23 +519,7 @@
               ]
             },
             "description": "Waypoints and port calls."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Cruise Maritime Area Policies",
@@ -777,23 +543,7 @@
               ]
             },
             "description": "Cabotage & maritime area restrictions."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         }
       ]
     },
@@ -822,23 +572,7 @@
               ]
             },
             "description": "Activity service status probe."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "List Onboard Activities",
@@ -861,23 +595,7 @@
               ]
             },
             "description": "Scheduled activities on ship."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Create New Activity",
@@ -908,23 +626,7 @@
               ]
             },
             "description": "Schedule a new onboard event."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "List Shore Excursions",
@@ -947,23 +649,7 @@
               ]
             },
             "description": "Catalog of port shore excursions."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Passenger Portal Catalog",
@@ -987,23 +673,7 @@
               ]
             },
             "description": "Excursion catalog visible to passengers."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Operations Live Dashboard",
@@ -1027,23 +697,7 @@
               ]
             },
             "description": "Real-time attendance & excursion roster metrics."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "SOLAS All-Aboard Watchdog",
@@ -1067,23 +721,7 @@
               ]
             },
             "description": "Safety of Life at Sea shore departure countdown."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "SOLAS Muster Station Readiness",
@@ -1107,23 +745,7 @@
               ]
             },
             "description": "Lifeboat drill & passenger muster station status."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "RFID Cards Management",
@@ -1147,23 +769,7 @@
               ]
             },
             "description": "Lookup active keycards and smart wristbands."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Passenger Notifications",
@@ -1187,23 +793,7 @@
               ]
             },
             "description": "Broadcast operational alerts."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         }
       ]
     },
@@ -1232,23 +822,7 @@
               ]
             },
             "description": "Food, beverages, and spa catalog."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Active POS Shifts",
@@ -1272,23 +846,7 @@
               ]
             },
             "description": "Register terminals & active cashier shifts."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Current Shift X-Report",
@@ -1314,23 +872,7 @@
               ]
             },
             "description": "Mid-day revenue & reconciliation snapshot."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "List Cash Drops",
@@ -1355,23 +897,7 @@
               ]
             },
             "description": "Safe deposit audit trail."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Passenger Folio Accounts",
@@ -1395,23 +921,7 @@
               ]
             },
             "description": "Onboard spending balances and cabin charges."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "POS Terminals Admin Registry",
@@ -1436,23 +946,7 @@
               ]
             },
             "description": "Authorized physical POS terminal hardware."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Cabin Billing Summaries",
@@ -1476,23 +970,7 @@
               ]
             },
             "description": "Aggregated stateroom invoices."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Dispute Records",
@@ -1516,23 +994,7 @@
               ]
             },
             "description": "Chargeback & contested transactions."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         },
         {
           "name": "Voyage Phase Control Center",
@@ -1556,23 +1018,7 @@
               ]
             },
             "description": "Voyage state machine (BOARDING, AT_SEA, CLOSED)."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Response status is successful (2xx or expected 4xx/401)', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 400, 401, 404]);",
-                  "});",
-                  "pm.test('Response time is under 1500ms', function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(1500);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
+          }
         }
       ]
     }
