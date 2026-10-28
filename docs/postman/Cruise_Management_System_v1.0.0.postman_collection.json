@@ -367,6 +367,7 @@
               "listen": "test",
               "script": {
                 "exec": [
+                  "pm.environment.unset('created_staff_username');",
                   "try {",
                   "    var json = pm.response.json();",
                   "    if (json.data && json.data.username) {",
