@@ -46,20 +46,20 @@ if "%MISSING_JARS%"=="1" (
     exit /b 1
 )
 
-REM 4. Stop any existing processes occupying ports 8080-8084 to prevent conflicts
-echo [2/7] Cleaning up previous processes on ports 8080-8084...
-for %%P in (8080 8081 8082 8083 8084) do (
-    for /f "tokens=5" %%a in ('netstat -aon ^| findstr /R /C:":%%P[ ]" ^| findstr LISTENING') do (
-        taskkill /F /PID %%a >nul 2>&1
-    )
-)
-
-REM 5. Ensure Docker PostgreSQL is running and healthy
-echo [3/7] Ensuring PostgreSQL container is running and healthy...
+REM 4. Ensure Docker PostgreSQL is running and healthy BEFORE terminating existing services
+echo [2/7] Ensuring PostgreSQL container is running and healthy...
 docker compose up -d --wait
 if errorlevel 1 (
     echo [ERROR] Docker Compose failed to start healthy PostgreSQL container!
     exit /b 1
+)
+
+REM 5. Stop any existing processes occupying ports 8080-8084 (verifying PID ownership before kill)
+echo [3/7] Cleaning up previous processes on ports 8080-8084...
+for %%P in (8080 8081 8082 8083 8084) do (
+    for /f "tokens=5" %%a in ('netstat -aon ^| findstr /R /C:":%%P[ ]" ^| findstr LISTENING') do (
+        taskkill /F /FI "IMAGENAME eq java.exe" /PID %%a >nul 2>&1
+    )
 )
 
 REM 6. Launch all 5 Microservices cleanly

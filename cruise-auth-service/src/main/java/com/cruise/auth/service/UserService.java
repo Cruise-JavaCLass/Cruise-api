@@ -18,15 +18,17 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public UserService(UserRepository userRepository, org.springframework.security.crypto.password.PasswordEncoder passwordEncoder) {
+    public UserService(UserRepository userRepository, org.springframework.security.crypto.password.PasswordEncoder passwordEncoder, @org.springframework.beans.factory.annotation.Autowired(required = false) JwtService jwtService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
     }
 
     public UserService(UserRepository userRepository) {
-        this(userRepository, new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder());
+        this(userRepository, new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder(), null);
     }
 
     public User registerUser(User user) {
@@ -55,6 +57,11 @@ public class UserService {
     }
 
     public void deleteUserByUsername(String username) {
-        userRepository.findByUsername(username).ifPresent(userRepository::delete);
+        userRepository.findByUsername(username).ifPresent(user -> {
+            if (jwtService != null) {
+                jwtService.revokeAllUserTokens(username);
+            }
+            userRepository.delete(user);
+        });
     }
 }

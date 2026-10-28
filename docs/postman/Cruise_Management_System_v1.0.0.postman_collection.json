@@ -368,9 +368,14 @@
               "script": {
                 "exec": [
                   "try {",
-                  "    var reqBody = JSON.parse(pm.request.body.raw);",
-                  "    pm.environment.set('created_staff_username', reqBody.username);",
-                  "} catch (e) {}"
+                  "    var json = pm.response.json();",
+                  "    if (json.data && json.data.username) {",
+                  "        pm.environment.set('created_staff_username', json.data.username);",
+                  "        console.log('Saved created_staff_username from response: ' + json.data.username);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.error('Failed to parse user creation response:', e);",
+                  "}"
                 ],
                 "type": "text/javascript"
               }
