@@ -17,6 +17,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -29,6 +30,9 @@ class UserControllerTest {
 
     @MockitoBean
     private UserService userService;
+
+    @MockitoBean
+    private com.cruise.auth.service.JwtService jwtService;
 
     @Test
     @DisplayName("POST /api/auth/users creates user and returns 201 Created")
@@ -133,5 +137,55 @@ class UserControllerTest {
                 org.springframework.http.HttpStatus.BAD_REQUEST, response.getStatusCode());
         org.junit.jupiter.api.Assertions.assertEquals(
                 "Custom bad request message", response.getBody().getMessage());
+    }
+
+    @Test
+    @DisplayName("DELETE /api/auth/users/{username} returns 401 Unauthorized when Authorization header is missing")
+    void shouldReturnUnauthorizedWhenDeleteUserWithoutToken() throws Exception {
+        mockMvc.perform(delete("/api/auth/users/testuser"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Missing or invalid Authorization header"));
+    }
+
+    @Test
+    @DisplayName("DELETE /api/auth/users/{username} returns 401 Unauthorized when token is invalid")
+    void shouldReturnUnauthorizedWhenDeleteUserWithInvalidToken() throws Exception {
+        when(jwtService.validateToken("bad-token")).thenReturn(false);
+
+        mockMvc.perform(delete("/api/auth/users/testuser")
+                        .header("Authorization", "Bearer bad-token"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Invalid or expired authentication token"));
+        org.mockito.Mockito.verify(userService, org.mockito.Mockito.never()).deleteUserByUsername("testuser");
+    }
+
+    @Test
+    @DisplayName("DELETE /api/auth/users/{username} returns 403 Forbidden when caller is not an administrator")
+    void shouldReturnForbiddenWhenDeleteUserNonAdmin() throws Exception {
+        when(jwtService.validateToken("staff-token")).thenReturn(true);
+        when(jwtService.extractRole("staff-token")).thenReturn("STAFF");
+
+        mockMvc.perform(delete("/api/auth/users/testuser")
+                        .header("Authorization", "Bearer staff-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Access denied: Administrator privileges required"));
+        org.mockito.Mockito.verify(userService, org.mockito.Mockito.never()).deleteUserByUsername("testuser");
+    }
+
+    @Test
+    @DisplayName("DELETE /api/auth/users/{username} returns 200 OK when caller is ADMIN")
+    void shouldDeleteUserSuccessfullyWhenAdmin() throws Exception {
+        when(jwtService.validateToken("admin-token")).thenReturn(true);
+        when(jwtService.extractRole("admin-token")).thenReturn("ADMIN");
+
+        mockMvc.perform(delete("/api/auth/users/testuser")
+                        .header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("User deleted successfully"));
+        org.mockito.Mockito.verify(userService).deleteUserByUsername("testuser");
     }
 }
