@@ -1,664 +1,324 @@
-# Cruise Activity and Service Management System - Backend API
+<div align="center">
 
-> **Jira Story:** [KAN-37](https://huytran20052022.atlassian.net/browse/KAN-37)  
-> **Jira Tasks:**  
-> - [KAN-38](https://huytran20052022.atlassian.net/browse/KAN-38) - *Initialize Backend Project — Khởi tạo dự án backend*  
-> - [KAN-39](https://huytran20052022.atlassian.net/browse/KAN-39) - *Implement Basic Application Entry Point — Tạo điểm khởi chạy backend*  
-> - [KAN-41](https://huytran20052022.atlassian.net/browse/KAN-41) - *Configure Database Connection Settings — Thiết lập thông tin kết nối cơ sở dữ liệu*  
-> - [KAN-51](https://huytran20052022.atlassian.net/browse/KAN-51) - *Configure Backend Testing Tools — Thiết lập công cụ kiểm thử backend*  
-> - [KAN-53](https://huytran20052022.atlassian.net/browse/KAN-53) - *Add Sample Backend Test — Tạo một test mẫu cho backend*  
-> - [KAN-54](https://huytran20052022.atlassian.net/browse/KAN-54) - *Configure Test Execution Commands — Thiết lập lệnh chạy test*  
-> - [KAN-57](https://huytran20052022.atlassian.net/browse/KAN-57) - *Configure Git Workflow and CI — Thiết lập quy trình Git và luồng CI*  
-> - [KAN-60](https://huytran20052022.atlassian.net/browse/KAN-60) - *Implement Login and Logout Endpoints — Tạo API đăng nhập và đăng xuất*  
-> - [KAN-61](https://huytran20052022.atlassian.net/browse/KAN-61) - *Implement Password Hashing and Verification — Xử lý mật khẩu an toàn*  
-> - [KAN-62](https://huytran20052022.atlassian.net/browse/KAN-62) - *Implement Authentication Token Handling — Phát hành và xác minh token*  
-> - [KAN-63](https://huytran20052022.atlassian.net/browse/KAN-63) - *Write Unit Tests for Authentication Logic — Test logic xác thực*  
-> - [KAN-64](https://huytran20052022.atlassian.net/browse/KAN-64) - *Write API Tests for Login and Logout — Test API đăng nhập và đăng xuất*  
-> - [KAN-65](https://huytran20052022.atlassian.net/browse/KAN-65) - *Test Invalid Credentials and Expired Tokens — Test thông tin sai và token hết hạn*  
-> - [KAN-87](https://huytran20052022.atlassian.net/browse/KAN-87) - *Create Cruise Ship API — Tạo API quản lý tàu du lịch*  
-> - [KAN-88](https://huytran20052022.atlassian.net/browse/KAN-88) - *Implement Ship Information Validation — Kiểm tra tính hợp lệ của thông tin tàu*  
-> - [KAN-89](https://huytran20052022.atlassian.net/browse/KAN-89) - *Write Unit Tests for Ship Business Rules — Test các quy tắc nghiệp vụ tàu du lịch*  
-> - [KAN-90](https://huytran20052022.atlassian.net/browse/KAN-90) - *Write API Tests for Ship CRUD Operations — Test các API CRUD tàu du lịch*  
-> - [KAN-96](https://huytran20052022.atlassian.net/browse/KAN-96) - *Create and Update Cruise Tour API — Tạo và cập nhật API tour du lịch*  
-> - [KAN-97](https://huytran20052022.atlassian.net/browse/KAN-97) - *Implement Tour Status Management — Quản lý trạng thái tour du lịch*  
-> - [KAN-114](https://huytran20052022.atlassian.net/browse/KAN-114) - *Implement Daily Itinerary Management API — API quản lý lịch trình theo ngày*  
-> - [KAN-116](https://huytran20052022.atlassian.net/browse/KAN-116) - *Implement Itinerary Reordering API — API sắp xếp lại thứ tự lịch trình*  
-> - [KAN-118](https://huytran20052022.atlassian.net/browse/KAN-118) - *Write Unit Tests for Daily Itinerary Management — Kiểm thử đơn vị quản lý lịch trình*  
-> - [KAN-124](https://huytran20052022.atlassian.net/browse/KAN-124) - *Implement Itinerary Change History Service — Dịch vụ ghi nhận lịch sử thay đổi hải trình*  
-> - [KAN-126](https://huytran20052022.atlassian.net/browse/KAN-126) - *Implement Itinerary Change Notification Trigger — Kích hoạt thông báo khi lịch trình thay đổi*  
-> - [KAN-128](https://huytran20052022.atlassian.net/browse/KAN-128) - *Write Integration Tests for Itinerary Updates — Kiểm thử tích hợp cho cập nhật lịch trình và audit log*  
-> - [KAN-134](https://huytran20052022.atlassian.net/browse/KAN-134) - *Create and Update Activity Endpoints — Tạo và cập nhật endpoints hoạt động trên tàu*  
-> - [KAN-135](https://huytran20052022.atlassian.net/browse/KAN-135) - *Implement Activity List and Detail Endpoints — Triển khai endpoints danh sách và chi tiết hoạt động*  
-> - [KAN-144](https://huytran20052022.atlassian.net/browse/KAN-144) - *Configure Activity Time and Location — Cấu hình thời gian và địa điểm cho hoạt động*  
-> - [KAN-146](https://huytran20052022.atlassian.net/browse/KAN-146) - *Retrieve Registered Passenger Lists — Lấy thông tin danh sách hành khách đăng ký*  
-> - [KAN-148](https://huytran20052022.atlassian.net/browse/KAN-148) - *Implement Registration List Export — Triển khai xuất danh sách hành khách đăng ký*  
-> - [KAN-149](https://huytran20052022.atlassian.net/browse/KAN-149) - *Write API Tests for Registration List Retrieval — Test API lấy danh sách đăng ký*  
-> - [KAN-150](https://huytran20052022.atlassian.net/browse/KAN-150) - *Test Filtering and Export Results — Test kết quả lọc và xuất dữ liệu*  
-> - [KAN-168](https://huytran20052022.atlassian.net/browse/KAN-168) - *Configure Excursion Price, Capacity and Schedule — Cấu hình giá, sức chứa và lịch tour bờ*  
-> - [KAN-169](https://huytran20052022.atlassian.net/browse/KAN-169) - *Implement Excursion Status Management — Quản lý trạng thái tour bờ*  
-> - [KAN-170](https://huytran20052022.atlassian.net/browse/KAN-170) - *Write Unit Tests for Excursion Rules — Test các quy tắc nghiệp vụ tour bờ*  
-> - [KAN-171](https://huytran20052022.atlassian.net/browse/KAN-171) - *Write API Tests for Excursion CRUD Operations — Test các API CRUD tour bờ*  
-> - [KAN-176](https://huytran20052022.atlassian.net/browse/KAN-176) - *Assign Passengers to Excursion Groups — Gán hành khách vào nhóm tour bờ*  
-> - [KAN-177](https://huytran20052022.atlassian.net/browse/KAN-177) - *Manage Vehicles and Tour Guides for Excursions — Quản lý phương tiện và hướng dẫn viên tour bờ*
+![Cruise Hospitality Technology Banner](./docs/assets/hero-banner.svg)
+
+<br />
+
+# 🚢 CRUISE-API
+### Enterprise Microservices Architecture & Maritime Fleet Operations Engine
+
+**An open enterprise backend ecosystem engineered for luxury cruise fleets.**  
+Orchestrating high-throughput safety-critical maritime operations, real-time SOLAS all-aboard watchdog, offline-resilient POS accounting, dynamic QR shore excursion check-in, and distributed microservices topology.
+
+<br />
+
+<p align="center">
+  <a href="https://www.oracle.com/java/">
+    <img src="https://img.shields.io/badge/Java_21_LTS-ED8B00?style=flat&logo=openjdk&logoColor=white" alt="Java 21 LTS" />
+  </a>
+  <a href="https://spring.io/projects/spring-boot">
+    <img src="https://img.shields.io/badge/Spring_Boot_4.1.2-6DB33F?style=flat&logo=springboot&logoColor=white" alt="Spring Boot 4" />
+  </a>
+  <a href="https://www.postgresql.org/">
+    <img src="https://img.shields.io/badge/PostgreSQL_18_Alpine-4169E1?style=flat&logo=postgresql&logoColor=white" alt="PostgreSQL 18" />
+  </a>
+  <a href="https://www.docker.com/">
+    <img src="https://img.shields.io/badge/Docker_Compose_v2-2496ED?style=flat&logo=docker&logoColor=white" alt="Docker Compose" />
+  </a>
+  <a href="https://www.postman.com/">
+    <img src="https://img.shields.io/badge/Postman_Suite-v1.0.0-FF6C37?style=flat&logo=postman&logoColor=white" alt="Postman Suite" />
+  </a>
+  <a href="https://sonarcloud.io/project/overview?id=Cruise-JavaCLass_Cruise-api">
+    <img src="https://img.shields.io/badge/SonarCloud-Quality_Gate_Passed-397C80?style=flat&logo=sonarcloud&logoColor=white" alt="SonarCloud" />
+  </a>
+  <a href="https://github.com/Cruise-JavaCLass/Cruise-api/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/License-MIT-C5A572?style=flat&logo=open-source-initiative&logoColor=white" alt="License" />
+  </a>
+</p>
+
+</div>
 
 ---
 
-## 1. Kiến trúc hệ thống (Microservices Architecture)
+## 🏛️ Executive Summary & Microservices Topology
 
-Dự án Backend được thiết kế theo mô hình **Multi-Module Maven Microservices**, bao gồm các dịch vụ chuyên biệt:
+`Cruise-api` is designed as a modular, resilient multi-module Maven microservices architecture. Each bounded context is isolated with its dedicated database schema, preventing domain coupling while allowing independent scaling and failover.
 
-| Module | Mô tả | Port |
-| :--- | :--- | :--- |
-| **`cruise-common`** | Thư viện dùng chung (DTO, ApiResponse, ErrorCode, Enum Role, BaseEntity) | N/A (Library) |
-| **`cruise-gateway`** | API Gateway điều hướng request cho Web Admin, Mobile App, POS Tablet | `8080` |
-| **`cruise-auth-service`** | Quản lý tài khoản, phân quyền RBAC cho các phòng ban & hành khách | `8081` |
-| **`cruise-itinerary-service`** | Quản lý tour du thuyền, lịch trình theo ngày, các cảng dừng (Ports of call) | `8082` |
-| **`cruise-activity-service`** | Quản lý hoạt động giải trí trên tàu & tour trên bờ (Shore Excursions), check-in QR/RFID | `8083` |
-| **`cruise-pos-service`** | Quản lý tài khoản phi tiền mặt, giao dịch POS, lưu trữ & đồng bộ ngoại tuyến (Offline Sync) | `8084` |
+<table>
+  <thead>
+    <tr>
+      <th>Module</th>
+      <th>Port</th>
+      <th>Database Schema</th>
+      <th>Core Maritime Responsibilities</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b><code>cruise-gateway</code></b></td>
+      <td><code>8080</code></td>
+      <td><i>None</i></td>
+      <td>
+        • Central API entry point & reverse-routing coordinator.<br />
+        • High-speed health probes (<code>/ping</code>, <code>/info</code>, <code>/health</code>).<br />
+        • JVM memory telemetry & global CORS resolution.
+      </td>
+    </tr>
+    <tr>
+      <td><b><code>cruise-auth-service</code></b></td>
+      <td><code>8081</code></td>
+      <td><code>auth_schema</code></td>
+      <td>
+        • Dual-token lifecycle (HMAC-SHA256 Access Token + Rotating Refresh Token).<br />
+        • Role-Based Access Control (RBAC) across 8 nautical officer roles.<br />
+        • RFC 7662 Token Introspection & active blacklist revocation.
+      </td>
+    </tr>
+    <tr>
+      <td><b><code>cruise-itinerary-service</code></b></td>
+      <td><code>8082</code></td>
+      <td><code>itinerary_schema</code></td>
+      <td>
+        • Fleet management (vessel dimensions, passenger capacity, cruising specs).<br />
+        • Ports of call catalog & docking berth coordination.<br />
+        • Master cruise tours, daily sailing schedules & maritime cabotage policies.
+      </td>
+    </tr>
+    <tr>
+      <td><b><code>cruise-activity-service</code></b></td>
+      <td><code>8083</code></td>
+      <td><code>activity_schema</code></td>
+      <td>
+        • Onboard entertainment, gala dinners & recreation scheduling.<br />
+        • Shore excursions (capacity locking, pricing, guide assignments).<br />
+        • <b>SOLAS Compliance:</b> All-Aboard Watchdog countdown & Muster Station drills.<br />
+        • High-security dynamic QR pass verification (60s TTL).
+      </td>
+    </tr>
+    <tr>
+      <td><b><code>cruise-pos-service</code></b></td>
+      <td><code>8084</code></td>
+      <td><code>pos_schema</code></td>
+      <td>
+        • Retail menu catalogs (dining, bars, spa, ship boutiques).<br />
+        • Cashier shift lifecycle, cash drops & mid-day X-Reports.<br />
+        • Real-time passenger folio billing, cabin stateroom charging & disputes.<br />
+        • Voyage Global State Machine (<code>EMBARKATION</code>, <code>AT_SEA</code>, <code>CLOSED</code>).
+      </td>
+    </tr>
+    <tr>
+      <td><b><code>cruise-common</code></b></td>
+      <td><i>Shared</i></td>
+      <td><i>N/A</i></td>
+      <td>
+        • Universal DTO contracts (<code>ApiResponse&lt;T&gt;</code>, pagination projections).<br />
+        • Global error codes, security annotations & domain enumerations.
+      </td>
+    </tr>
+  </tbody>
+</table>
 
 ---
 
-## 2. Yêu cầu môi trường
-* **Java:** OpenJDK 21
-* **Maven:** 3.9+ (Sử dụng sẵn script `mvnw` / `mvnw.cmd` không cần cài thêm)
-* **Docker** *(tùy chọn)*: Để chạy Database PostgreSQL qua `docker-compose up -d`
+## 📐 System Architecture Diagram
 
----
+```mermaid
+flowchart TD
+    subgraph CLIENT_TIER["🖥️ Client Layer"]
+        WEB["Cruise-web (Admin & Guest Deck - :3000)"]
+        POS["Cruise-pos (Restaurant & Bar Terminals)"]
+        SCANNER["Mobile RFID / Dynamic QR Pass Handhelds"]
+    end
 
-## 3. Hướng dẫn biên dịch và khởi chạy
+    subgraph GATEWAY_TIER["🛡️ Gateway Tier"]
+        GW["cruise-gateway (:8080)<br/>System Telemetry & Health Probe"]
+    end
 
-### Biên dịch toàn bộ các Microservices:
-```powershell
-.\mvnw compile
+    subgraph SERVICES_TIER["⚙️ Microservices Tier"]
+        AUTH["cruise-auth-service (:8081)<br/>RBAC & Dual Token Security"]
+        ITIN["cruise-itinerary-service (:8082)<br/>Fleet, Ports & Tours Engine"]
+        ACT["cruise-activity-service (:8083)<br/>Excursions, Activities & SOLAS"]
+        POS_SVC["cruise-pos-service (:8084)<br/>Folios, Shifts & Voyage Lifecycle"]
+    end
+
+    subgraph DATA_TIER["🐬 Persistence Tier (PostgreSQL 18 Docker :5432)"]
+        DB_AUTH[("auth_schema<br/>Users, Tokens, RBAC")]
+        DB_ITIN[("itinerary_schema<br/>Ships, Ports, Waypoints")]
+        DB_ACT[("activity_schema<br/>Bookings, Attendance, SOLAS")]
+        DB_POS[("pos_schema<br/>Orders, Shifts, Folios")]
+    end
+
+    CLIENT_TIER --> GW
+    CLIENT_TIER -. Direct APIs .-> SERVICES_TIER
+
+    GW --> AUTH
+    GW --> ITIN
+    GW --> ACT
+    GW --> POS_SVC
+
+    AUTH --> DB_AUTH
+    ITIN --> DB_ITIN
+    ACT --> DB_ACT
+    POS_SVC --> DB_POS
 ```
 
-### Đóng gói file JAR:
-```powershell
-.\mvnw clean package
+---
+
+## ⚡ Quickstart & 1-Click Launch Guide
+
+### Prerequisites
+- **JDK 21 LTS** installed (`java -version` returns Java 21)
+- **Docker Desktop** running (for PostgreSQL 18 container)
+- **Git** & **Postman Desktop** (optional, for visual API execution)
+
+### Option 1: 1-Click Windows Automation (Recommended)
+You can launch the entire ecosystem in 3 seconds using the pre-configured root launcher scripts:
+
+```cmd
+:: 1. Launch PostgreSQL and all 5 Microservices in dedicated consoles
+run-all-services.bat
+
+:: 2. Stop all running services cleanly when finished
+stop-all-services.bat
 ```
 
-### Khởi chạy một Microservice (Ví dụ API Gateway):
-```powershell
-cd cruise-gateway
-..\mvnw spring-boot:run
-```
-
-Hoặc trong **VS Code**:
-* Mở tab **Spring Boot Dashboard** ở thanh sidebar bên trái.
-* Nhấn nút **Play (Run/Debug)** vào service bạn muốn chạy.
+> [!TIP]
+> `run-all-services.bat` is completely **idempotent**: it automatically purges any stale processes lingering on ports `8080-8084`, starts the Docker Postgres container, injects `CRUISE_QR_SECRET`, and boots all 5 services cleanly.
 
 ---
 
-## 4. Các Endpoint kiểm tra điểm khởi chạy (Gateway Entry Points)
+### Option 2: Manual Terminal Execution
 
-Sau khi khởi chạy `cruise-gateway` (Port `8080`), các endpoint sẵn sàng phục vụ:
-
-* **`GET /api/ping`**: Kiểm tra kết nối nhanh (trả về `"pong"`).
-* **`GET /api/health`**: Kiểm tra trạng thái sức khỏe, thời gian hoạt động (uptime), dung lượng bộ nhớ JVM.
-* **`GET /api/info`**: Thông tin metadata hệ thống, phiên bản Java, Jira Story & Task.
-* **`GET /api/services`**: Bản đồ topology các Microservices đăng ký trong hệ sinh thái.
-
-### 4.1. API Xác thực (Authentication Endpoints — Login & Logout):
-Được cung cấp bởi `cruise-auth-service` (Port `8081`):
-
-* **`POST /api/auth/login`**: Đăng nhập bằng `usernameOrEmail` và `password`.
-  * **Request Body:**
-    ```json
-    {
-      "usernameOrEmail": "admin",
-      "password": "password123"
-    }
-    ```
-  * **Response:** Trả về `200 OK` kèm `accessToken` (JWT), `tokenType` (`Bearer`), `expiresIn` (86400s) và thông tin đối tượng `user` (`role`, `cabinNumber`, `rfidTag`).
-* **`POST /api/auth/logout`**: Đăng xuất an toàn.
-  * Hỗ trợ nhận token qua Header `Authorization: Bearer <token>` hoặc Request Body `{"token": "<token>"}`.
-  * Token được đưa vào danh sách thu hồi (Token Invalidation Cache) để ngăn chặn tái sử dụng.
-* **`GET /api/auth/me`**: Lấy thông tin người dùng từ phiên đăng nhập hiện tại (`Authorization: Bearer <token>`).
-
-### 4.2. Xử lý Mật khẩu An toàn (Password Hashing & Verification — KAN-61):
-Hệ thống tích hợp giải pháp quản lý mật khẩu an toàn chuẩn OWASP:
-
-* **Mã hóa băm (BCrypt Hashing):** Sử dụng `BCryptPasswordEncoder` với salt rounds chuẩn, lưu trữ mật khẩu an toàn trong cơ sở dữ liệu (`password_hash`), không bao giờ lưu trữ mật khẩu dưới dạng văn bản thuần (plain text).
-* **Kiểm tra độ mạnh mật khẩu (`PasswordValidator`):**
-  * Tối thiểu 8 ký tự, tối đa 100 ký tự.
-  * Bắt buộc có: chữ in hoa (`A-Z`), chữ thường (`a-z`), số (`0-9`), ký tự đặc biệt (`!@#$%^&*...`).
-  * Tự động từ chối danh sách mật khẩu yếu thông dụng (`password`, `12345678`, `admin123`,...).
-* **Endpoints bổ sung:**
-  * **`POST /api/auth/change-password`**: Đổi mật khẩu người dùng.
-    * Yêu cầu Header `Authorization: Bearer <token>`.
-    * Kiểm tra mật khẩu cũ, đảm bảo mật khẩu mới tuân thủ chính sách và không trùng mật khẩu cũ.
-  * **`POST /api/auth/verify-password`**: Xác minh mật khẩu thô của tài khoản (dành cho các thao tác phê duyệt nhạy cảm hoặc thanh toán POS).
-
-### 4.3. Quản lý và Xác minh Token (Authentication Token Handling — KAN-62):
-Hệ thống cung cấp cơ chế toàn diện về phát hành, xác minh, làm mới và thu hồi Token chuẩn bảo mật doanh nghiệp:
-
-* **Phát hành Cặp Token (Access Token & Refresh Token):**
-  * **Access Token:** JWT ngắn hạn (mặc định 24h) chứa đầy đủ claims định danh (`sub`, `userId`, `email`, `fullName`, `role`, `cabinNumber`, `rfidTag`, `jti`, `iat`, `exp`, `iss`).
-  * **Refresh Token:** JWT dài hạn (mặc định 7 ngày) dùng để cấp mới Access Token mà không cần đăng nhập lại.
-* **Xác minh Token & Introspection (RFC 7662):**
-  * **`POST /api/auth/verify-token`** (hoặc `/api/auth/validate-token`):
-    * Hỗ trợ nhận token qua Header `Authorization: Bearer <token>` hoặc Request Body `{"token": "..."}`.
-    * Kiểm tra chữ ký mật mã HMAC-SHA256, thời hạn hết hạn, và danh sách đen.
-    * Trả về kết quả phân tích: `valid` (true/false), `status` (`VALID`, `EXPIRED`, `REVOKED`, `INVALID_SIGNATURE`, `MALFORMED`), thời gian còn lại `remainingSeconds`, thông tin user và claims.
-* **Làm mới Token (Refresh Token Rotation):**
-  * **`POST /api/auth/refresh-token`** (hoặc `/api/auth/refresh`):
-    * Nhận `refreshToken`, xác minh tính hợp lệ và loại token `REFRESH`.
-    * Áp dụng **Token Rotation**: Thu hồi refresh token cũ ngay lập tức để phòng chống Replay Attack và cấp phát cặp token mới.
-* **Thu hồi Token (Token Revocation & Blacklist):**
-  * **`POST /api/auth/revoke-token`** (hoặc `/api/auth/token/revoke`): Thu hồi tức thời một token.
-  * **User-level Token Revocation:** Tự động vô hiệu hóa toàn bộ token cũ của người dùng khi đổi mật khẩu (`change-password`) hoặc reset phiên làm việc.
-* **Cấp phát lại Token Pair:**
-  * **`POST /api/auth/token/pair`**: Cấp mới cặp token cho phiên làm việc hiện tại (`Authorization: Bearer <token>`).
-
-### 4.4. Quản lý Tàu Du Lịch (Cruise Ship Management Endpoints — KAN-87):
-Được cung cấp bởi `cruise-itinerary-service` (Port `8082`):
-
-Hệ thống quản lý toàn diện thông tin tàu du lịch, đặc tính kỹ thuật, sức chứa và trạng thái hoạt động:
-
-* **`POST /api/itinerary/ships`**: Tạo mới tàu du lịch trong hệ thống.
-  * **Status:** `201 Created` (hoặc `400 Bad Request`, `409 Conflict` khi trùng mã `code` hoặc `name`).
-  * **Request Body:**
-    ```json
-    {
-      "name": "Halong Grand Harmony",
-      "code": "SHIP-001",
-      "operator": "Paradise Vietnam Cruises",
-      "capacity": 2400,
-      "crewCapacity": 750,
-      "totalCabins": 1100,
-      "totalDecks": 14,
-      "manufacturingYear": 2023,
-      "lengthMeters": 315.5,
-      "beamMeters": 38.0,
-      "draftMeters": 8.5,
-      "status": "ACTIVE",
-      "description": "Du thuyền 5 sao đẳng cấp quốc tế",
-      "amenities": "Sky Pool, Luxury Spa, Grand Ballroom",
-      "imageUrl": "https://cruise.com/ships/ship-001.jpg"
-    }
-    ```
-* **`GET /api/itinerary/ships`**: Lấy danh sách tàu du lịch với phân trang, tìm kiếm theo từ khóa và lọc theo trạng thái.
-  * **Query Params:** `keyword`, `status` (`ACTIVE`, `DOCKED`, `ON_VOYAGE`, `UNDER_MAINTENANCE`, `INACTIVE`), `activeOnly` (mặc định `true`), `page`, `size`, `sortBy`, `direction`.
-* **`GET /api/itinerary/ships/active`**: Lấy danh sách tất cả các tàu đang hoạt động (không phân trang, phục vụ dropdown chọn tàu).
-* **`GET /api/itinerary/ships/{id}`**: Lấy chi tiết tàu theo ID (`200 OK` / `404 Not Found`).
-* **`GET /api/itinerary/ships/code/{code}`**: Lấy chi tiết tàu theo mã hiệu `code` (`200 OK` / `404 Not Found`).
-* **`PUT /api/itinerary/ships/{id}`**: Cập nhật thông tin chi tiết tàu (`200 OK` / `400 Bad Request` / `404 Not Found` / `409 Conflict`).
-* **`PATCH /api/itinerary/ships/{id}/status`**: Cập nhật trạng thái tàu (`ACTIVE`, `DOCKED`, `ON_VOYAGE`, `UNDER_MAINTENANCE`, `INACTIVE`).
-* **`DELETE /api/itinerary/ships/{id}`**: Hủy kích hoạt tàu (soft delete mặc định; thêm query `?hard=true` để xóa vĩnh viễn khỏi cơ sở dữ liệu).
-
-* **Kiểm tra tính hợp lệ của thông tin tàu (`ShipValidator` — KAN-88):**
-  * Định dạng mã hiệu tàu: 3-30 ký tự, chữ in hoa, số, gạch nối hoặc gạch dưới (`^[A-Z0-9_-]{3,30}$`).
-  * Tương quan sức chứa & buồng phòng: Tổng số cabin không vượt quá sức chứa hành khách (`totalCabins <= capacity`).
-  * Sức chứa thủy thủ đoàn: Tỷ lệ hợp lý không vượt quá gấp đôi sức chứa hành khách (`crewCapacity <= capacity * 2`).
-  * Kích thước kỹ thuật: Chiều dài phải lớn hơn chiều rộng (`lengthMeters > beamMeters`) và mớn nước phải nhỏ hơn chiều rộng (`draftMeters < beamMeters`).
-  * Năm sản xuất: Từ năm 1900 đến tối đa 5 năm trong tương lai (`1900 <= manufacturingYear <= currentYear + 5`).
-
-* **Kiểm thử quy tắc nghiệp vụ tàu du lịch (`ShipBusinessRulesTest` — KAN-89):**
-  * Kiểm thử phân tầng 5 nhóm quy tắc nghiệp vụ: Mã hiệu & tính duy nhất (Uniqueness), Sức chứa & tỷ lệ buồng phòng, Kích thước kỹ thuật hàng hải, Năm sản xuất & biên độ tương lai, Vòng đời & chuyển đổi trạng thái (Soft/Hard delete, đổi trạng thái tàu).
-
-* **Kiểm thử API CRUD tàu du lịch (`CruiseShipControllerTest` & `CruiseShipIntegrationTest` — KAN-90):**
-  * Kiểm thử toàn diện MockMvc Web Layer và Spring Boot Integration Test với cơ sở dữ liệu in-memory H2.
-  * Bao phủ 100% các luồng thành công (200 OK, 201 Created) và các kịch bản lỗi biên: 400 Bad Request (vi phạm validation dữ liệu), 404 Not Found (ID/mã tàu không tồn tại), 409 Conflict (trùng lặp mã hoặc tên tàu khi tạo mới hoặc cập nhật).
-  * Kiểm thử vòng đời trọn vẹn (Lifecycle), phân trang, lọc từ khóa, sắp xếp và cơ chế Soft Delete / Hard Delete.
-
-### 4.5. Quản lý Tour Du Lịch Nhiều Ngày (Cruise Tour Management Endpoints — KAN-96):
-Được cung cấp bởi `cruise-itinerary-service` (Port `8082`):
-
-Hệ thống quản lý toàn diện các tour du thuyền nhiều ngày, gắn liền với tàu được chỉ định, lịch trình xuất bến/cập bến, sức chứa và chính sách giá:
-
-* **`POST /api/itinerary/tours`**: Tạo mới tour du thuyền trong hệ thống.
-  * **Status:** `201 Created` (hoặc `400 Bad Request`, `404 Not Found` nếu tàu không tồn tại, `409 Conflict` nếu trùng mã hoặc tên tour).
-  * **Request Body:**
-    ```json
-    {
-      "shipId": 1,
-      "code": "TOUR-HL-3N2D",
-      "name": "Hành trình Di sản Vịnh Hạ Long 3N2Đ",
-      "description": "Tour khám phá vẻ đẹp hang Sửng Sốt và đảo Ti Tốp",
-      "durationDays": 3,
-      "durationNights": 2,
-      "startDate": "2026-11-01",
-      "endDate": "2026-11-03",
-      "departurePort": "Cảng tàu khách quốc tế Hạ Long",
-      "destinationPort": "Cảng tàu khách quốc tế Hạ Long",
-      "maxCapacity": 1500,
-      "basePrice": 5500000,
-      "currency": "VND",
-      "status": "DRAFT"
-    }
-    ```
-* **`GET /api/itinerary/tours`**: Lấy danh sách tour với phân trang, lọc từ khóa, lọc theo tàu, lọc theo trạng thái (`DRAFT`, `PUBLISHED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`).
-  * **Query Params:** `keyword`, `shipId`, `status`, `activeOnly` (mặc định `true`), `page`, `size`, `sortBy`, `direction`.
-* **`GET /api/itinerary/tours/active`**: Lấy toàn bộ danh sách các tour đang kích hoạt (không phân trang).
-* **`GET /api/itinerary/tours/{id}`**: Lấy chi tiết tour theo ID (`200 OK` / `404 Not Found`).
-* **`GET /api/itinerary/tours/code/{code}`**: Lấy chi tiết tour theo mã định danh `code` (`200 OK` / `404 Not Found`).
-* **`GET /api/itinerary/tours/{id}/status/allowed-transitions`**: Tra cứu danh sách các trạng thái hợp lệ có thể chuyển tiếp từ trạng thái hiện tại (`200 OK` / `404 Not Found`).
-* **`GET /api/itinerary/tours/status/{status}`**: Lấy danh sách tour theo trạng thái cụ thể (`DRAFT`, `PUBLISHED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`).
-* **`PUT /api/itinerary/tours/{id}`**: Cập nhật thông tin chi tiết tour (`200 OK` / `400 Bad Request` / `404 Not Found` / `409 Conflict`).
-* **`PATCH /api/itinerary/tours/{id}/status`**: Chuyển trạng thái tour với kiểm tra quy tắc ma trận chuyển đổi (State Machine), kiểm tra tàu sẵn sàng và ghi nhận lý do hủy (`reason`).
-* **`DELETE /api/itinerary/tours/{id}`**: Hủy kích hoạt tour (Soft Delete mặc định, tự động chuyển status sang `CANCELLED`; hoặc thêm `?hard=true` để xóa vĩnh viễn khỏi DB).
-
-* **Quản lý vòng đời và ma trận chuyển đổi trạng thái Tour (`TourStatus` - KAN-97):**
-  * `DRAFT` $\to$ `PUBLISHED`, `CANCELLED`
-  * `PUBLISHED` $\to$ `IN_PROGRESS`, `DRAFT`, `CANCELLED`
-  * `IN_PROGRESS` $\to$ `COMPLETED`, `CANCELLED`
-  * `COMPLETED` $\to$ Trạng thái kết thúc (không thể chuyển đổi tiếp)
-  * `CANCELLED` $\to$ `DRAFT` (cho phép khôi phục về bản nháp để điều chỉnh)
-  * **Ràng buộc xuất bến:** Không cho phép chuyển tour sang `IN_PROGRESS` nếu tàu được chỉ định đang ở trạng thái ngừng hoạt động (`ship.active = false`).
-  * **Ghi nhận lý do hủy:** Hỗ trợ lưu trữ `cancellationReason` khi tour bị hủy.
-
-* **Kiểm tra tính hợp lệ của thông tin tour (`TourValidator`):**
-  * Mã tour: Định dạng chữ hoa, chữ số, gạch nối hoặc gạch dưới từ 3-30 ký tự (`^[A-Z0-9_-]{3,30}$`).
-  * Thời lượng tour: `durationDays >= 1`, `durationNights >= 0` và số đêm không vượt quá số ngày (`durationNights <= durationDays`).
-  * Khung thời gian: `endDate` phải bằng hoặc sau `startDate`.
-  * Sức chứa tương thích: Sức chứa tối đa của tour không được vượt quá sức chứa thiết kế của tàu phục vụ (`maxCapacity <= ship.capacity`).
-  * Trạng thái tàu: Tàu phục vụ tour bắt buộc phải đang ở trạng thái hoạt động (`ship.active = true`).
-  * Giá cơ bản: Giá tour cơ bản không được âm (`basePrice >= 0`).
-
-* **Kiểm thử toàn diện Tour API (`TourValidatorTest`, `CruiseTourServiceTest`, `CruiseTourControllerTest`, `CruiseTourIntegrationTest`):**
-  * Bao phủ 100% các tầng: Unit Validator, Service Mockito Unit Test, MockMvc Web Layer Test và Spring Boot Integration Test với H2 in-memory.
-  * Kiểm tra đầy đủ lifecycle: Tạo tàu $\to$ Tạo tour $\to$ Tra cứu theo ID/Code $\to$ Tìm kiếm & phân trang $\to$ Cập nhật thông tin $\to$ Đổi trạng thái $\to$ Soft delete $\to$ Hard delete.
-
----
-
-## 5. Cấu hình Cơ sở dữ liệu (Database Connection Settings)
-
-Hệ thống hỗ trợ cả 2 môi trường: **PostgreSQL (Production/Default)** và **H2 In-Memory (Dev/Offline fallback)**:
-
-### 5.1. PostgreSQL (Mặc định):
-* **Host:** `localhost` | **Port:** `5432`
-* **Database:** `cruise_db`
-* **Username:** `cruise_admin` | **Password:** `cruise_password`
-* **Connection Pool:** HikariCP (`maximum-pool-size: 10`, `minimum-idle: 2`)
-* **Schemas:** Tự động tạo `auth_schema`, `itinerary_schema`, `activity_schema`, `pos_schema`.
-* **Khởi chạy container PostgreSQL qua Docker Compose:**
-  ```bash
-  docker compose up -d
-  ```
-
-### 5.2. Chế độ Phát triển / Test Offline (H2 In-Memory):
-Khi chưa bật Docker PostgreSQL, bạn có thể chạy service với profile `dev`:
+#### 1. Start the Multi-Schema Database
 ```bash
-.\mvnw -pl cruise-auth-service spring-boot:run -Dspring-boot.run.profiles=dev
+docker compose up -d
 ```
-Console H2 truy cập tại: `http://localhost:<port>/h2-console` (JDBC URL: `jdbc:h2:mem:cruise_<service>_db`)
+*Creates the container `cruise-postgres` and initializes schemas: `auth_schema`, `itinerary_schema`, `activity_schema`, `pos_schema`.*
 
----
-
-## 6. Công cụ kiểm thử và Thiết lập lệnh chạy test (Test Execution Commands)
-
-Hệ thống được thiết lập bộ công cụ kiểm thử chuẩn doanh nghiệp cho mô hình Spring Boot Microservices:
-
-* **Testing Frameworks:**
-  * **JUnit 5 (Jupiter):** Test runner, lifecycle callbacks, assertions.
-  * **Spring Boot Test & WebMvc Test:** MockMvc, slice testing, ApplicationContext verification.
-  * **AssertJ & Hamcrest:** Fluent assertions cho API payloads.
-  * **Mockito:** Giả lập hành vi dependencies và service layer (`@MockitoBean`, `@Mock`, `@InjectMocks`).
-* **Test Isolation Database:** H2 In-Memory Database cho test suites (chạy độc lập 100% không cần cài đặt hay bật PostgreSQL).
-* **Code Coverage:** **JaCoCo Plugin** tự động tính toán tỷ lệ bao phủ mã nguồn và xuất báo cáo HTML.
-
----
-
-### 6.1. Bảng lệnh chạy kiểm thử qua Maven Wrapper (`.\mvnw.cmd` / `./mvnw`):
-
-| Lệnh thực thi | Mô tả chi tiết |
-| :--- | :--- |
-| `.\mvnw test` | Chạy toàn bộ test suites của tất cả các microservices |
-| `.\mvnw test -pl cruise-auth-service` | Chạy test riêng cho một module (ví dụ `cruise-auth-service`, `cruise-gateway`,...) |
-| `.\mvnw test -Dtest=UserRepositoryTest` | Chạy riêng một Test Class cụ thể |
-| `.\mvnw test -Dtest=UserControllerTest#testRegisterUser_Success` | Chạy riêng một method test cụ thể |
-| `.\mvnw test -Pquick` | Chế độ chạy test nhanh (bỏ qua agent JaCoCo để tăng tốc độ lặp khi dev) |
-| `.\mvnw verify` | Đóng gói, chạy toàn bộ test và xuất báo cáo độ bao phủ JaCoCo HTML |
-
-Báo cáo kiểm thử độ bao phủ (Coverage Report) được xuất tại:
-`<module>/target/site/jacoco/index.html`
-
----
-
-### 6.2. Script chạy test tự động (`scripts/run-tests`):
-Dự án cung cấp sẵn bộ script tiện ích đa nền tảng cho lập trình viên:
-
-#### Trên Windows (PowerShell):
-```powershell
-# Chạy toàn bộ test tất cả services
-.\scripts\run-tests.ps1
-
-# Chạy test riêng cho module auth
-.\scripts\run-tests.ps1 -Module auth
-
-# Chạy nhanh (bỏ qua JaCoCo)
-.\scripts\run-tests.ps1 -Module auth -Quick
-
-# Chạy test kèm xuất báo cáo coverage
-.\scripts\run-tests.ps1 -Module auth -Coverage
-
-# Chạy một test class cụ thể
-.\scripts\run-tests.ps1 -Test UserRepositoryTest
-```
-
-#### Trên Linux / macOS / CI Runner (Bash):
+#### 2. Compile & Install Shared Libraries
 ```bash
-# Cấp quyền thực thi và chạy
-chmod +x ./scripts/run-tests.sh
-
-# Chạy toàn bộ test
-./scripts/run-tests.sh all
-
-# Chạy module cụ thể
-./scripts/run-tests.sh auth
-
-# Chạy test class cụ thể
-./scripts/run-tests.sh auth UserRepositoryTest
+./mvnw -pl cruise-common install -DskipTests
 ```
 
-### 6.3. Cấu trúc Test mẫu (Sample Backend Tests):
-Dự án cung cấp bộ test mẫu 3 tầng kiến trúc chuẩn (trong module `cruise-auth-service`):
-1. **Repository Layer (`@DataJpaTest`):**
-   - File: `UserRepositoryTest.java`
-   - Kiểm thử thao tác cơ sở dữ liệu in-memory H2: CRUD, query methods (`findByUsername`, `findByRfidTag`, `findByRole`, `existsByUsername`), tự động ghi nhận auditing timestamps (`createdAt`, `updatedAt`).
-2. **Service Layer (Unit Test with Mockito):**
-   - File: `UserServiceTest.java`
-   - Độc lập hoàn toàn với Spring Context và DB bằng `@ExtendWith(MockitoExtension.class)`, `@Mock`, `@InjectMocks`. Kiểm thử nghiệp vụ đăng ký người dùng, xử lý ngoại lệ khi username đã tồn tại, và tìm kiếm thông tin theo vai trò / RFID.
-3. **Controller / Web Layer (`@WebMvcTest`):**
-   - File: `UserControllerTest.java`
-   - Kiểm thử tầng REST API qua `MockMvc` và `@MockitoBean`: endpoints `POST /api/auth/users` (201 Created, 400 Bad Request khi trùng lặp), `GET /api/auth/users/{username}` (200 OK, 404 Not Found).
+#### 3. Run Individual Microservices
+Open separate terminals for each desired service:
+```bash
+# Gateway (Port 8080)
+./mvnw -pl cruise-gateway spring-boot:run
 
-### 6.4. Unit Test Suite cho Tầng Xác thực (Authentication Logic Unit Tests — KAN-63):
-Module `cruise-auth-service` được trang bị bộ kiểm thử chuyên sâu (78/78 tests pass) bảo đảm logic xác thực an toàn tuyệt đối:
-1. **`PasswordValidatorTest` (19 tests):**
-   - Kiểm thử chính sách độ mạnh mật khẩu chuẩn OWASP: độ dài tối thiểu/tối đa, chữ in hoa, chữ thường, chữ số, ký tự đặc biệt.
-   - Kiểm thử từ chối danh sách mật khẩu yếu thông dụng (`password`, `12345678`, `admin123`,...).
-2. **`PasswordServiceTest` (5 tests):**
-   - Kiểm thử băm BCrypt, so khớp mật khẩu và nhận diện định dạng hash BCrypt.
-3. **`JwtServiceTest` (10 tests):**
-   - Kiểm thử cấp phát Access Token, Refresh Token, Token Pair với đầy đủ claims định danh.
-   - Kiểm thử xác minh chữ ký mã hóa HMAC-SHA256, xử lý token hết hạn, thu hồi token (Blacklist) và thu hồi toàn bộ token người dùng (User cutoff revocation).
-4. **`AuthServiceTest` (17 tests):**
-   - Kiểm thử toàn diện quy trình đăng nhập (username & email), kiểm tra tài khoản vô hiệu hóa, sai mật khẩu.
-   - Kiểm thử làm mới token với cơ chế xoay vòng (Refresh Token Rotation), đổi mật khẩu an toàn, xác minh mật khẩu cho POS và lấy thông tin người dùng.
-5. **`AuthControllerTest` (12 tests):**
-   - Kiểm thử toàn bộ các endpoint RESTful qua `MockMvc` và `@MockitoBean`: `/login`, `/logout`, `/me`, `/refresh-token`, `/verify-token`, `/change-password`, `/verify-password`, `/token/pair`, `/health`.
+# Authentication (Port 8081)
+./mvnw -pl cruise-auth-service spring-boot:run
 
-### 6.5. Kiểm thử Thông tin sai & Token hết hạn (Invalid Credentials & Expired Tokens — KAN-65):
-Bộ kiểm thử chuyên biệt tập trung vào các tình huống bảo mật biên, lỗi xác thực và phòng chống tấn công (Total 59 tests pass 100%):
+# Itinerary & Fleet (Port 8082)
+./mvnw -pl cruise-itinerary-service spring-boot:run
 
-1. **`InvalidCredentialsAndExpiredTokensIntegrationTest` (37 tests):**
-   - **Invalid Credentials (18 tests):**
-     - Đăng nhập sai mật khẩu với username / email hợp lệ trả về `401 Unauthorized` (`Invalid username or password`).
-     - Đăng nhập với username / email không tồn tại trả về `401 Unauthorized`.
-     - Đăng nhập tài khoản bị khóa / vô hiệu hóa (`active = false`) trả về `403 Forbidden`.
-     - Đăng nhập tài khoản có mật khẩu null trong DB trả về `401 Unauthorized`.
-     - Ngăn chặn tấn công SQL Injection (`' OR '1'='1`) và mã độc XSS vào username/password.
-     - DTO Validation trả về `400 Bad Request` khi để trống username, password hoặc gửi body rỗng.
-     - Xác minh mật khẩu (`/verify-password`) trả về `{ "valid": false }` khi sai mật khẩu hoặc user không tồn tại.
-     - Đổi mật khẩu (`/change-password`) trả về `400 Bad Request` khi sai mật khẩu hiện tại, trùng mật khẩu cũ, xác nhận không khớp, hoặc mật khẩu mới yếu.
-   - **Expired Tokens (7 tests):**
-     - Xác minh Access Token / Refresh Token hết hạn qua body hoặc header `Authorization` trả về `valid: false` và `status: "EXPIRED"`.
-     - Endpoint `/refresh-token` từ chối `401 Unauthorized` khi Refresh Token đã hết hạn.
-     - Endpoint `/me`, `/change-password`, `/token/pair` từ chối `401 Unauthorized` khi phiên đăng nhập hết hạn.
-   - **Tampered, Malformed & Revoked Tokens (12 tests):**
-     - Phát hiện và từ chối token bị sửa chữ ký (`INVALID_SIGNATURE`) hoặc sửa payload giả mạo quyền hạn (`SUPER_HACKER`).
-     - Từ chối token ký bởi khóa bí mật lạ hoặc chuỗi JWT dị dạng (`MALFORMED`).
-     - Kiểm tra vô hiệu hóa token sau khi đăng xuất (`/logout`) và thu hồi tức thời (`/revoke-token`).
-     - **Phòng chống Replay Attack:** Thu hồi Refresh Token cũ ngay sau khi làm mới (Token Rotation), từ chối `401 Unauthorized` khi token cũ bị sử dụng lại lần 2.
-     - Ngăn chặn dùng Access Token cho endpoint `/refresh-token` và ngược lại.
-     - **User Cutoff Revocation:** Tự động thu hồi toàn bộ token cũ đã cấp trước thời điểm đổi mật khẩu.
-     - Kiểm tra từ chối `401 Unauthorized` khi thiếu hoặc định dạng sai Authorization Header.
+# Activities & SOLAS (Port 8083)
+./mvnw -pl cruise-activity-service spring-boot:run
 
-2. **`InvalidCredentialsAndExpiredTokensUnitTest` (22 tests):**
-   - Kiểm thử độc lập tầng Service (`AuthService`) và tầng mã hóa (`JwtService`).
-   - Kiểm thử thuật toán băm BCrypt, so khớp, xử lý trường hợp user null/inactive, và ngoại lệ nghiệp vụ.
-   - Kiểm thử cơ chế giải mã payload, tính toán timestamp `iat`, `exp`, `remainingSeconds`, phát hiện hết hạn và cô lập cache (`clearRevocations`).
-
-### 6.6. Kiểm thử Tầng Quản lý Tàu Du Lịch (Cruise Ship Management Test Suite — KAN-87):
-Module `cruise-itinerary-service` được trang bị bộ kiểm thử chuyên sâu (38/38 tests pass 100%) bao phủ toàn bộ các tầng kiến trúc:
-
-1. **`CruiseShipRepositoryTest` (7 tests - DataJpaTest):**
-   - Kiểm thử lưu trữ entity `CruiseShip`, tự sinh ID và audit timestamps (`createdAt`, `updatedAt`).
-   - Kiểm thử tìm kiếm theo mã `code` và tên `name`.
-   - Kiểm thử kiểm tra tồn tại `existsByCode`, `existsByName`, `existsByCodeAndIdNot`, `existsByNameAndIdNot`.
-   - Kiểm thử lọc danh sách theo `status` và cờ `active`, đếm số lượng tàu `countByActiveTrue`.
-   - Kiểm thử tìm kiếm nâng cao đa trường (`keyword`, `status`, `activeOnly`) kết hợp phân trang.
-
-2. **`CruiseShipServiceTest` (16 tests - Mockito Unit Tests):**
-   - Kiểm thử tạo mới tàu thành công với dữ liệu hợp lệ và chuẩn hóa (trimming, uppercase code).
-   - Kiểm thử từ chối tạo mới khi trùng mã `code` hoặc trùng `name` (`DuplicateResourceException`).
-   - Kiểm thử lấy thông tin tàu theo ID và mã hiệu `code`, xử lý ngoại lệ `ResourceNotFoundException`.
-   - Kiểm thử tìm kiếm phân trang và danh sách tàu đang hoạt động (`active`).
-   - Kiểm thử cập nhật thông tin tàu, kiểm tra không cho phép trùng `code`/`name` với tàu khác.
-   - Kiểm thử cập nhật trạng thái hoạt động (`updateShipStatus`).
-   - Kiểm thử xóa mềm (`active = false`, `status = INACTIVE`) và xóa cứng (`hardDelete`).
-   - Kiểm thử thống kê số tàu đang hoạt động (`countActiveShips`).
-
-3. **`CruiseShipControllerTest` (12 tests - WebMvcTest):**
-   - Kiểm thử endpoint `POST /api/itinerary/ships`: tạo thành công `201 Created`, từ chối dữ liệu không hợp lệ `400 Bad Request`, từ chối trùng lặp `409 Conflict`.
-   - Kiểm thử endpoint `GET /api/itinerary/ships` phân trang và lọc `200 OK`.
-   - Kiểm thử endpoint `GET /api/itinerary/ships/active` lấy danh sách tàu hoạt động.
-   - Kiểm thử endpoint `GET /api/itinerary/ships/{id}` (`200 OK`, `404 Not Found`).
-   - Kiểm thử endpoint `GET /api/itinerary/ships/code/{code}` (`200 OK`).
-   - Kiểm thử endpoint `PUT /api/itinerary/ships/{id}` (`200 OK`).
-   - Kiểm thử endpoint `PATCH /api/itinerary/ships/{id}/status` (`200 OK`).
-   - Kiểm thử endpoint `DELETE /api/itinerary/ships/{id}` (xóa mềm `200 OK` và xóa cứng `200 OK`).
-
-4. **`CruiseShipIntegrationTest` (1 test - SpringBootTest E2E Lifecycle):**
-   - Kiểm thử trọn vẹn vòng đời một tàu du lịch từ khởi tạo, tra cứu ID/mã hiệu, tìm kiếm bộ lọc, cập nhật thông tin, thay đổi trạng thái hải trình, xóa mềm và xóa cứng khỏi database.
-
-### 6.7. Kiểm thử Quản lý Lịch trình Hàng ngày & Audit Log (Itinerary Management Test Suite — KAN-114, KAN-126, KAN-128):
-Module `cruise-itinerary-service` cung cấp bộ kiểm thử toàn diện cho hệ thống quản lý lịch trình chi tiết và kích hoạt thông báo tự động:
-
-1. **`DailyItineraryValidatorTest` (10 tests - Unit Tests):**
-   - Kiểm thử các quy tắc nghiệp vụ ngày lịch trình: ngày phải nằm trong khung thời gian tour, `allAboardTime` phải trước `departureTime`, không được trùng lặp `dayNumber`.
-
-2. **`DailyItineraryServiceTest` (14 tests - Mockito Unit Tests):**
-   - Kiểm thử tạo mới, cập nhật, lấy chi tiết/danh sách, sắp xếp lại thứ tự (`reorder`) và xóa mềm (`soft delete`).
-   - Kiểm thử tự động kích hoạt phát thông báo (`ItineraryNotificationTriggerService`) và ghi nhận nhật ký thay đổi (`ItineraryChangeHistoryService`).
-
-3. **`DailyItineraryControllerTest` (13 tests - WebMvcTest):**
-   - Kiểm thử các endpoint RESTful: `POST`, `PUT`, `PATCH /reorder`, `GET`, `DELETE` tại `/api/itinerary/tours/{tourId}/daily`.
-   - Kiểm thử endpoint lịch sử thay đổi `GET /history` và danh sách thông báo `GET /notifications`.
-
-4. **`ItineraryNotificationTriggerServiceTest` (5 tests - Unit Tests):**
-   - Kiểm thử phân loại mức độ khẩn cấp (`CRITICAL`, `URGENT`, `NORMAL`) dựa trên loại thay đổi (`ChangeType`).
-   - Kiểm thử lắng nghe sự kiện (`@EventListener`), tạo thông báo và xóa lịch sử thông báo (`clearHistory`).
-
-5. **`ItineraryChangeHistoryServiceTest` (5 tests - Unit Tests):**
-   - Kiểm thử lưu trữ nhật ký kiểm toán, gán người thực hiện mặc định và truy vấn theo `tourId` hoặc `dailyItineraryId`.
-
-6. **`DailyItineraryUpdateIntegrationTest` (3 tests - SpringBootTest E2E Integration):**
-   - Kiểm thử tích hợp trọn vẹn: Tạo mới $\rightarrow$ Cập nhật lịch trình $\rightarrow$ Ghi nhận Audit Log $\rightarrow$ Kích hoạt thông báo với mức độ khẩn cấp phù hợp.
-   - Kiểm thử tích hợp sắp xếp lại thứ tự các ngày trong tour (`REORDER`).
-   - Kiểm thử tích hợp xóa mềm lịch trình và phát thông báo mức độ nghiêm trọng `CRITICAL`.
-
-### 6.8. Kiểm thử Quản lý, Lọc & Xuất Danh sách Hành khách (Passenger Management, Filtering & Export — KAN-146, KAN-148, KAN-149, KAN-150):
-Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn diện cho nghiệp vụ quản lý, lọc theo trạng thái và xuất file CSV hành khách du thuyền:
-* **`PassengerServiceTest` (13 tests - Mockito Unit Tests):**
-  - Kiểm thử đăng ký thông tin hành khách với số phòng cabin, mã định danh RFID/QR code, gói tour bao gồm và vùng định vị BLE.
-  - Kiểm thử truy vấn danh sách hành khách theo mã tour (`tourId`) và tìm kiếm phân trang theo tên, cabin, mã RFID.
-  - Kiểm thử tra cứu chi tiết theo ID hoặc mã thẻ RFID, xử lý ngoại lệ `ResourceNotFoundException`.
-  - Kiểm thử cập nhật trạng thái check-in (`NOT_CHECKED_IN` $\rightarrow$ `BOARDED`) và tự động ghi nhận thời gian lên tàu (`boardedAt`).
-  - Kiểm thử cập nhật trạng thái đăng ký `RegistrationStatus` (`CONFIRMED`, `PENDING`, `CANCELLED`).
-  - Kiểm thử xuất danh sách hành khách ra định dạng CSV chuẩn UTF-8 BOM phục vụ Microsoft Excel và các hệ thống điều hành cảng (`exportRegisteredPassengersCsv`), bao gồm cả lọc theo trạng thái đăng ký và escape ký tự đặc biệt.
-* **`PassengerControllerTest` (9 tests - WebMvcTest):**
-  - Kiểm thử các endpoint: `POST /api/activities/passengers/register` (`201 Created`), `GET /tour/{tourId}`, `GET /tour/{tourId}?status=...`, `GET /tour/{tourId}/paged`, `GET /{id}`, `GET /rfid/{rfidTag}`, `PATCH /{id}/check-in`, `PATCH /{id}/registration-status`, và `GET /tour/{tourId}/export/csv` (hỗ trợ param lọc `status`).
-* **`PassengerRegistrationListRetrievalApiTest` (17 tests - SpringBootTest End-to-End API Integration — KAN-149):**
-  - Kiểm thử tích hợp truy vấn danh sách hành khách theo tour không lọc và có lọc theo từng trạng thái `RegistrationStatus`.
-  - Kiểm thử tìm kiếm kết hợp phân trang, sắp xếp asc/desc, tìm theo họ tên, số cabin, mã RFID.
-  - Kiểm thử tra cứu hành khách theo ID và mã thẻ RFID kèm các trường hợp lỗi 404 NOT_FOUND.
-* **`FilteringAndExportResultsTest` (11 tests - SpringBootTest End-to-End Filtering & Export Integration — KAN-150):**
-  - Kiểm thử kết quả lọc danh sách theo `CONFIRMED`, `PENDING`, `CANCELLED` và loại trừ bản ghi soft-deleted (`active = false`).
-  - Kiểm thử kết hợp tìm kiếm keyword cabinNumber và lọc trạng thái trong phân trang.
-  - Kiểm thử xuất file CSV toàn bộ tour và xuất CSV có lọc theo `RegistrationStatus`.
-  - Kiểm thử xử lý escape chuẩn RFC 4180 cho các trường chứa ký tự đặc biệt (dấu phẩy, dấu nháy kép, ký tự xuống dòng `\r\n`).
-  - Kiểm thử xuất CSV khi danh sách tour rỗng (sinh đúng header và UTF-8 BOM).
-
-### 6.9. Tạo, Cập nhật, Cấu hình, Quản lý Trạng thái & API CRUD Hoạt động trên tàu (Activities Management — KAN-134, KAN-135, KAN-136, KAN-137, KAN-138, KAN-144):
-Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn diện cho việc tạo mới, cập nhật toàn diện thông tin, cấu hình địa điểm, quản lý chuyển đổi trạng thái hoạt động (State Machine), kiểm tra chi tiết, truy vấn danh sách, xác thực quy tắc nghiệp vụ và kiểm thử tích hợp toàn diện các thao tác CRUD API:
-* **`ActivityCrudOperationsApiTest` (19 tests - SpringBootTest End-to-End API Integration — KAN-138):**
-  - **Create Activity Tests (`POST /api/activities`):**
-    - Kiểm thử tạo mới thành công với payload đầy đủ (`201 Created`), kiểm tra tự sinh ID, liên kết tour, khung giờ và lưu trữ database.
-    - Kiểm thử tự động gán giá trị mặc định (`category: General`, `dayNumber: 1`, `maxCapacity: 50`, `price: 0`, `isIncluded: true`, `status: SCHEDULED`) khi người dùng không truyền.
-    - Kiểm thử bắt lỗi `400 Bad Request` khi vi phạm validation các trường bắt buộc (title, location, date, start/end time).
-    - Kiểm thử bắt lỗi `400 Bad Request` khi giờ kết thúc không sau giờ bắt đầu.
-    - Kiểm thử phát hiện và ngăn chặn xung đột lịch trình khi trùng địa điểm và khung giờ với hoạt động đã tồn tại.
-  - **Get Activity Detail Tests (`GET /api/activities/{id}`):**
-    - Kiểm thử tra cứu chi tiết thành công (`200 OK`) với thông tin chính xác.
-    - Kiểm thử xử lý lỗi `404 Not Found` khi ID không tồn tại hoặc hoạt động đã bị xóa mềm (`active = false`).
-  - **Update Activity Tests (`PUT /api/activities/{id}`):**
-    - Kiểm thử cập nhật toàn diện thành công (`200 OK`): tiêu đề, mô tả, danh mục, thời gian, sức chứa, giá và trạng thái.
-    - Kiểm thử từ chối `400 Bad Request` khi payload cập nhật rỗng hoặc để trống trường bắt buộc.
-    - Kiểm thử từ chối `404 Not Found` khi cập nhật ID không tồn tại.
-  - **Configure Time and Location Tests (`PATCH /api/activities/{id}/time-location`):**
-    - Kiểm thử cập nhật thời gian và địa điểm thành công (`200 OK`).
-    - Kiểm thử từ chối `400 Bad Request` khi địa điểm để trống hoặc chỉ chứa khoảng trắng.
-  - **Activity Status Transition Tests (`PATCH /api/activities/{id}/status`):**
-    - Kiểm thử chuyển đổi trạng thái sang `IN_PROGRESS` thành công.
-    - Kiểm thử chuyển đổi trạng thái sang `CANCELLED` kèm lý do hủy `cancellationReason`.
-    - Kiểm thử từ chối `400 Bad Request` khi vi phạm State Machine (`SCHEDULED` $\to$ `COMPLETED`).
-    - Kiểm thử tra cứu trạng thái hợp lệ tiếp theo `GET /api/activities/{id}/status/allowed-transitions`.
-  - **Delete Activity Tests (`DELETE /api/activities/{id}`):**
-    - Kiểm thử xóa mềm thành công (`200 OK`), cập nhật `active = false` và `status = CANCELLED`.
-    - Kiểm thử từ chối `404 Not Found` khi xóa hoạt động có ID không tồn tại.
-* **`ActivityBusinessRulesUnitTest` (23 tests - Mockito & Parameterized Unit Tests — KAN-137):**
-  - **Quy tắc tính hợp lệ của Địa điểm (Location Validation):**
-    - Từ chối địa điểm bị null, chuỗi rỗng hoặc chỉ chứa khoảng trắng (`BusinessRuleException: Địa điểm tổ chức không được để trống`).
-    - Chuẩn hóa khoảng trắng (`trim()`) của địa điểm trước khi thực hiện truy vấn và đối soát trùng lặp.
-  - **Quy tắc Khung thời gian & Thứ tự giờ (Time & Date Validation):**
-    - Từ chối ngày diễn ra bị null (`BusinessRuleException: Ngày tổ chức không được để trống`).
-    - Từ chối giờ bắt đầu hoặc giờ kết thúc bị null (`BusinessRuleException: Thời gian bắt đầu và kết thúc không được để trống`).
-    - Bắt lỗi khi giờ kết thúc trùng với giờ bắt đầu (thời lượng bằng 0) hoặc giờ kết thúc xảy ra trước giờ bắt đầu (`BusinessRuleException: Thời gian kết thúc phải sau thời gian bắt đầu`).
-  - **Quy tắc Xung đột Lịch trình & Trùng lặp Địa điểm (Schedule Conflict & Overlap Detection):**
-    - Phát hiện và từ chối xung đột khi địa điểm đã có hoạt động khác diễn ra trong cùng khung giờ (`existsOverlappingActivity`).
-    - Cho phép loại trừ chính ID của hoạt động (`excludeId`) khi cập nhật thông tin để tránh tự xung đột với chính nó.
-  - **Quy tắc Ma trận Trạng thái Hoạt động (State Machine Transition Rules):**
-    - Xác thực các luồng chuyển trạng thái hợp lệ và không hợp lệ giữa `SCHEDULED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`.
-    - Kiểm tra `COMPLETED` là trạng thái kết thúc (terminal state), không thể chuyển tiếp.
-    - Kiểm tra lưu trữ nguyên nhân hủy `cancellationReason` khi hoạt động chuyển sang `CANCELLED`.
-  - **Quy tắc Giá trị Mặc định & Toàn vẹn Dữ liệu (Defaults & Integrity):**
-    - Tự động áp dụng giá trị mặc định cho danh mục (`General`), sức chứa (`50`), giá (`0`), miễn phí (`true`), trạng thái (`SCHEDULED`), số người tham gia hiện tại (`0`).
-    - Kiểm thử cơ chế Soft Delete (`active = false`, `status = CANCELLED`) và xử lý ngoại lệ `ResourceNotFoundException`.
-* **`OnboardActivityServiceTest` (17 tests - Mockito Unit Tests):**
-  - Kiểm thử tạo hoạt động mới với ngày, giờ bắt đầu/kết thúc, số lượng tham gia tối đa, danh mục và địa điểm tổ chức.
-  - Kiểm thử cập nhật toàn diện hoạt động (`updateActivity` — KAN-134): tiêu đề, mô tả, danh mục, số ngày, địa điểm, sức chứa, giá dịch vụ và trạng thái.
-  - Kiểm thử cấu hình thời gian và địa điểm riêng biệt (`configureTimeAndLocation` — KAN-144).
-  - Kiểm thử chuyển đổi trạng thái hoạt động theo State Machine (`updateActivityStatus` — KAN-136).
-  - Kiểm thử tra cứu chi tiết, phân trang theo ngày/thể loại/từ khóa và xóa mềm hoạt động (`CANCELLED`).
-* **`ActivityStatusTest` (9 tests - Enum Unit Tests — KAN-136):**
-  - Kiểm thử toàn diện 100% độ bao phủ các nhánh chuyển đổi trạng thái của Enum `ActivityStatus`.
-* **`ActivityControllerTest` (15 tests - WebMvcTest):**
-  - Kiểm thử `POST /api/activities`: tạo mới hoạt động du thuyền (`201 Created`).
-  - Kiểm thử `PUT /api/activities/{id}`: cập nhật toàn diện hoạt động (`200 OK` / `400 Bad Request` khi validation thất bại).
-  - Kiểm thử `PATCH /api/activities/{id}/time-location`: cấu hình thời gian và địa điểm (`200 OK`).
-  - Kiểm thử `PATCH /api/activities/{id}/status`: chuyển trạng thái hoạt động với validation và lý do hủy (`200 OK` / `400 Bad Request` / `404 Not Found`).
-  - Kiểm thử `GET /api/activities/{id}/status/allowed-transitions`: lấy danh sách các trạng thái hợp lệ tiếp theo (`200 OK`).
-  - Kiểm thử các kịch bản ngoại lệ: `400 Bad Request` khi vi phạm quy tắc thời gian hoặc xung đột địa điểm, `404 Not Found` khi hoạt động không tồn tại.
-  - Kiểm thử `GET /api/activities/{id}`, `GET /api/activities/tour/{tourId}`, `GET /api/activities/tour/{tourId}/day/{dayNumber}`, `GET /api/activities/tour/{tourId}/paged`, và `DELETE /api/activities/{id}`.
-* **`ActivityListAndDetailApiTest` (12 tests - SpringBootTest End-to-End API Integration — KAN-135):**
-  - Kiểm thử truy vấn chi tiết hoạt động `GET /api/activities/{id}`: kiểm tra đầy đủ các trường (title, category, location, capacity, participants, isIncluded), xử lý 404 NOT_FOUND khi ID không tồn tại hoặc đã bị xóa mềm (`active = false`).
-  - Kiểm thử lấy danh sách hoạt động theo tour `GET /api/activities/tour/{tourId}`: sắp xếp theo ngày và giờ bắt đầu, trả về danh sách rỗng khi tour không có hoạt động.
-  - Kiểm thử lấy danh sách hoạt động theo từng ngày cụ thể `GET /api/activities/tour/{tourId}/day/{dayNumber}`.
-  - Kiểm thử phân trang `GET /api/activities/tour/{tourId}/paged` kết hợp lọc theo danh mục (`category`), tìm kiếm từ khóa (`keyword` theo tiêu đề hoặc địa điểm), và lọc theo ngày số (`dayNumber`).
-
-### 6.10. Quản lý và Cấu hình Giá, Sức chứa & Lịch trình Tour Bờ (Shore Excursion Management — KAN-168 & KAN-169):
-Module `cruise-activity-service` cung cấp API và bộ kiểm thử toàn diện phục vụ quản lý tour bờ (Shore Excursions), thiết lập giờ tập trung/xuất bến/quay lại tàu, sức chứa tối đa, giá vé người lớn/trẻ em, và quản lý vòng đời trạng thái tour bờ:
-* **Endpoints Quản lý Tour Bờ (`/api/excursions`):**
-  - **`POST /api/excursions`**: Tạo mới tour bờ (`201 Created`).
-  - **`PUT /api/excursions/{id}`**: Cập nhật toàn diện tour bờ (`200 OK`).
-  - **`PATCH /api/excursions/{id}/price-capacity-schedule`**: Endpoint chuyên biệt cấu hình Giá vé (`price`, `childPrice`), Sức chứa tối đa (`maxCapacity`) và Lịch trình (`gatheringTime`, `departureTime`, `returnToShipTime`, `excursionDate`) (`200 OK`).
-  - **`PATCH /api/excursions/{id}/status`**: Quản lý và chuyển đổi trạng thái tour bờ với state machine validation (`SCHEDULED` $\to$ `OPEN_FOR_BOOKING` $\to$ `IN_PROGRESS` $\to$ `COMPLETED`, `DELAYED`, `CANCELLED`) (KAN-169).
-  - **`GET /api/excursions/{id}/status/allowed-transitions`**: Tra cứu danh sách trạng thái hợp lệ tiếp theo (KAN-169).
-  - **`GET /api/excursions/tour/{tourId}/status/{status}`**: Tra cứu danh sách tour bờ theo trạng thái hoạt động trong tour (KAN-169).
-  - **`GET /api/excursions/{id}`**: Lấy chi tiết tour bờ (bao gồm tính toán `remainingCapacity`).
-  - **`GET /api/excursions/tour/{tourId}`**: Lấy danh sách tour bờ của chuyến hải trình.
-  - **`GET /api/excursions/tour/{tourId}/port/{portId}`**: Lấy danh sách tour bờ theo điểm dừng/cảng ghé.
-  - **`GET /api/excursions/tour/{tourId}/day/{dayNumber}`**: Lấy danh sách tour bờ theo ngày của chuyến đi.
-  - **`GET /api/excursions/tour/{tourId}/paged`**: Phân trang, tìm kiếm và lọc tour bờ theo cảng/ngày.
-  - **`DELETE /api/excursions/{id}`**: Xóa mềm tour bờ (`active = false`, `status = CANCELLED`).
-* **Quy tắc Nghiệp vụ Tour Bờ (`ShoreExcursionService` & `ExcursionStatus`):**
-  - **Vòng đời Trạng thái (KAN-169):**
-    - `SCHEDULED` $\to$ Cho phép chuyển sang `OPEN_FOR_BOOKING`, `DELAYED`, `CANCELLED`.
-    - `OPEN_FOR_BOOKING` $\to$ Cho phép chuyển sang `IN_PROGRESS`, `DELAYED`, `CANCELLED`.
-    - `DELAYED` $\to$ Cho phép chuyển sang `OPEN_FOR_BOOKING`, `IN_PROGRESS`, `CANCELLED`.
-    - `IN_PROGRESS` $\to$ Cho phép chuyển sang `COMPLETED`, `CANCELLED`.
-    - `COMPLETED` $\to$ Trạng thái kết thúc (Terminal State), không cho phép chuyển trạng thái khác.
-    - `CANCELLED` $\to$ Chỉ cho phép mở lại về `SCHEDULED`.
-    - Khi trạng thái chuyển sang `CANCELLED`, hệ thống tự động ghi nhận lý do hủy (`cancellationReason`).
-  - **Khung thời gian:** `departureTime` bắt buộc phải sau `gatheringTime`; `returnToShipTime` bắt buộc phải sau `departureTime`.
-  - **Sức chứa:** `maxCapacity` bắt buộc lớn hơn 0 và không được nhỏ hơn số khách hiện đã đăng ký (`currentParticipants`).
-  - **Giá vé:** `price >= 0`, `childPrice >= 0` và `childPrice <= price`.
-  - **Chống trùng lặp:** Kiểm tra không cho phép tạo 2 tour bờ trùng tên tại cùng 1 cảng ghé vào cùng 1 ngày.
-* **Bộ Kiểm thử KAN-168, KAN-169, KAN-170 & KAN-171:**
-  - **`ExcursionCrudOperationsApiTest` (22 tests - End-to-End SpringBootTest API Integration — KAN-171):** Kiểm thử toàn diện toàn bộ chu trình REST API tour bờ trên cơ sở dữ liệu thật:
-    1. *`POST /api/excursions`:* Tạo mới thành công (201 Created), xác thực dữ liệu đầu vào bắt buộc (@NotNull), kiểm tra vi phạm nghiệp vụ lịch trình và chống trùng lặp.
-    2. *`GET /api/excursions/{id}`:* Lấy chi tiết tour bờ (200 OK), tính toán chính xác sức chứa còn lại (`remainingCapacity`), xử lý 404 khi ID không tồn tại hoặc đã bị xóa mềm (`active = false`).
-    3. *`GET Queries`:* Truy vấn tour bờ theo tour (`/tour/{tourId}`), theo cảng ghé (`/port/{portId}`), theo ngày (`/day/{dayNumber}`), theo trạng thái (`/status/{status}`), và phân trang tìm kiếm (`/paged`).
-    4. *`PUT /api/excursions/{id}`:* Cập nhật toàn diện tour bờ (200 OK), kiểm tra 400 validation error và 404 khi không tìm thấy.
-    5. *`PATCH /api/excursions/{id}/price-capacity-schedule`:* Cấu hình chuyên biệt giá, sức chứa, lịch trình; từ chối khi giảm sức chứa nhỏ hơn số khách hiện tại.
-    6. *`PATCH /api/excursions/{id}/status`:* Chuyển trạng thái tour bờ với State Machine (SCHEDULED $\to$ OPEN_FOR_BOOKING, CANCELLED kèm reason), từ chối nhảy cóc sang COMPLETED, kiểm tra tra cứu `allowed-transitions`.
-    7. *`DELETE /api/excursions/{id}`:* Xóa mềm an toàn (`active = false`, `status = CANCELLED`), xử lý 404 khi ID không tồn tại.
-  - **`ExcursionBusinessRulesUnitTest` (33 tests - Specialized Business Rules Unit Tests — KAN-170):** Kiểm thử chuyên biệt và toàn diện cho 6 nhóm quy tắc nghiệp vụ cốt lõi (Lịch trình, Giá vé, Sức chứa, Chống trùng lặp, Vòng đời trạng thái, Toàn vẹn dữ liệu).
-  - **`ShoreExcursionServiceTest` (19 tests - Service Unit Tests):** Kiểm thử độc lập tầng Service cho các tác vụ CRUD, lọc danh sách theo ngày/cảng/trạng thái.
-  - **`ExcursionStatusTest` (7 tests - Enum Tests):** Kiểm thử 100% các nhánh chuyển đổi trạng thái State Machine của `ExcursionStatus`.
-  - **`ShoreExcursionControllerTest` (13 tests - WebMvcTest):** Kiểm thử MockMvc tầng REST API cho toàn bộ các endpoint CRUD, PATCH status, lấy allowed transitions và query theo status.
-  - **`ShoreExcursionIntegrationTest` (2 tests - E2E Integration):** Kiểm thử tích hợp từ Web layer đến Database in-memory, xác minh lưu trữ và cập nhật trạng thái thực tế.
-
-### 6.11. Quản lý Gán Hành khách vào Đoàn/Xe và Phương tiện, Hướng dẫn viên Tour Bờ (KAN-176 & KAN-177):
-Cung cấp bộ REST API hoàn chỉnh, các quy tắc nghiệp vụ chặt chẽ và bộ kiểm thử tự động phục vụ điều phối tour tham quan trên bờ:
-* **Endpoints Gán Hành khách vào Nhóm & Xe Tour Bờ (KAN-176):**
-  - **`GET /api/excursions/{id}/passengers`**: Lấy danh sách hành khách đã đăng ký và phân nhóm trong tour bờ (`200 OK`).
-  - **`POST /api/excursions/{id}/passengers`**: Thêm hành khách vào tour bờ (`201 Created`), kiểm tra sức chứa tối đa (`currentParticipants < maxCapacity`), tự sinh mã vé (`ticketCode`), tăng số lượng người tham gia (`+1`).
-  - **`PATCH /api/excursions/{id}/passengers/{passengerId}/group`**: Phân công đoàn/nhóm (`groupName`) và xe trung chuyển (`busNumber`) cho từng hành khách (`200 OK`).
-  - **`PATCH /api/excursions/{id}/passengers/bulk-group`**: Gán đoàn và xe hàng loạt cho danh sách ID hành khách (`200 OK`).
-  - **`DELETE /api/excursions/{id}/passengers/{passengerId}`**: Xóa hành khách khỏi tour bờ qua xóa mềm (`active = false`), giảm số lượng người tham gia (`-1`).
-* **Endpoints Quản lý Phương tiện & Hướng dẫn viên Tour Bờ (KAN-177):**
-  - **`GET /api/excursions/{id}/vehicles`**: Tra cứu danh sách phương tiện (tàu tender, cano, xe khách 45/29 chỗ) được phân bổ (`200 OK`).
-  - **`POST /api/excursions/{id}/vehicles`**: Thêm phương tiện mới vào tour bờ (`201 Created`), tự sinh mã quản lý (`VEH-01`, `VEH-02`), xác thực sức chứa hợp lệ.
-  - **`PATCH /api/excursions/{id}/vehicles/{vehicleId}`**: Cập nhật thông tin phương tiện (tài xế, sức chứa, biển số, trạng thái `READY`/`ON_TRIP`/`MAINTENANCE`) (`200 OK`).
-  - **`DELETE /api/excursions/{id}/vehicles/{vehicleId}`**: Xóa phương tiện khỏi tour bờ (`200 OK`).
-  - **`GET /api/excursions/{id}/guides`**: Tra cứu danh sách hướng dẫn viên (Lead, Assistant, Specialist) được phân công (`200 OK`).
-  - **`POST /api/excursions/{id}/guides`**: Thêm hướng dẫn viên vào tour bờ (`201 Created`), tự sinh mã (`GUD-01`, `GUD-02`), hỗ trợ danh sách ngôn ngữ và số thẻ HDV.
-  - **`PATCH /api/excursions/{id}/guides/{guideId}`**: Cập nhật thông tin hướng dẫn viên (vai trò, ngôn ngữ, đánh giá rating, trạng thái `ACTIVE`/`ASSIGNED`/`STANDBY`) (`200 OK`).
-  - **`DELETE /api/excursions/{id}/guides/{guideId}`**: Xóa hướng dẫn viên khỏi tour bờ (`200 OK`).
-* **Bộ Kiểm thử Tự động KAN-176 & KAN-177:**
-  - **`ExcursionPassengerAssignmentUnitTest` (11 tests — KAN-176):** Kiểm thử độc lập tầng Service cho việc gán nhóm, kiểm tra vi phạm sức chứa, mã vé trùng lặp, từ chối thêm vào tour đã hủy, gán hàng loạt và xóa hành khách.
-  - **`ExcursionPassengerAssignmentApiTest` (11 tests — KAN-176):** Kiểm thử tích hợp End-to-End toàn bộ các REST endpoint gán hành khách với SpringBootTest và MockMvc.
-  - **`ExcursionLogisticsUnitTest` (27 tests — KAN-177):** Kiểm thử nghiệp vụ quản lý phương tiện và hướng dẫn viên (tự sinh mã, cập nhật thông tin, xác thực sức chứa và hành khách gán, soft-delete, tra cứu ID số).
-  - **`ExcursionLogisticsApiTest` (8 tests — KAN-177):** Kiểm thử tích hợp REST API CRUD phương tiện và hướng dẫn viên trên cơ sở dữ liệu thật.
-
-### 6.12. Phân nhóm Tự động và Xuất Danh sách Hành khách theo Đoàn (Passenger Group Generation & Manifest — KAN-178):
-Cung cấp bộ REST API, thuật toán phân bổ hành khách tự động và xuất dữ liệu báo cáo hỗ trợ điều hành tour bờ:
-* **Endpoints Quản lý Danh sách Hành khách theo Nhóm (KAN-178):**
-  - **`GET /api/excursions/{id}/groups/manifest`**: Lấy danh sách hành khách phân nhóm kèm thông tin xe, hướng dẫn viên và thống kê trạng thái (`totalPassengers`, `checkedInCount`, `onTourCount`, `returnedSafeCount`, `pendingCount`) (`200 OK`).
-  - **`POST /api/excursions/{id}/groups/auto-generate`**: Tự động sinh nhóm và phân bổ lại toàn bộ hành khách đang hoạt động vào các xe khả dụng hoặc theo số lượng nhóm mục tiêu (`targetGroupCount`, `maxPassengersPerGroup`, `groupPrefix`, `autoAssignVehicles`) (`200 OK`).
-  - **`GET /api/excursions/{id}/groups/export/csv`**: Xuất danh sách hành khách theo từng đoàn/xe ra định dạng file CSV tương thích Microsoft Excel (sử dụng UTF-8 BOM `\ufeff`, chuẩn hóa dấu phẩy, ngoặc kép và xuống dòng; hỗ trợ tham số lọc `?groupName=...`) (`200 OK`).
-* **Bộ Kiểm thử Tự động KAN-178:**
-  - **`ExcursionGroupGenerationUnitTest` (11 tests — KAN-178):** Kiểm thử độc lập tầng Service cho việc phân nhóm, tự động sinh nhóm theo cấu hình, xử lý danh sách rỗng, xuất CSV chuẩn UTF-8 BOM, phòng chống tấn công CSV Injection và kiểm thử DTOs.
-  - **`ExcursionGroupGenerationApiTest` (6 tests — KAN-178):** Kiểm thử tích hợp REST API End-to-End cho cả 3 endpoint (`manifest`, `auto-generate`, `export/csv`), kiểm tra status code 200/404, định dạng header CSV và cấu trúc JSON trả về.
-
-### 6.13. Kiểm thử Đơn vị Toàn diện Quy tắc Phân nhóm Tour Bờ (Group Assignment Rules Unit Tests — KAN-179):
-Kiểm thử chuyên sâu các quy tắc nghiệp vụ, thuật toán điều phối và toàn vẹn dữ liệu cho hoạt động phân nhóm tour bờ:
-* **Bộ Kiểm thử Đơn vị KAN-179:**
-  - **`ExcursionGroupAssignmentRulesUnitTest` (17 tests — KAN-179):**
-    - *Quy tắc gán nhóm đơn lẻ (Single Assignment Rules):* Gán nhóm mới, chuyển đổi đoàn/xe cho hành khách đã có nhóm (re-assignment), chuẩn hóa chuỗi trim whitespace, xử lý ngoại lệ tour không tồn tại (`404`) hoặc hành khách không thuộc tour.
-    - *Quy tắc gán nhóm hàng loạt (Bulk Assignment Rules):* Gán thành công toàn bộ danh sách ID, xử lý gán một phần (partial match) khi có ID không tồn tại, từ chối khi không tìm thấy hành khách hợp lệ nào (`BusinessRuleException`).
-    - *Quy tắc thuật toán tự động sinh nhóm (Auto-Generation Rules):* Phân bổ đều vòng tròn Round-Robin theo `targetGroupCount`, tự động gán vòng tròn theo mã xe khả dụng khi `autoAssignVehicles = true`, tự động xác định số nhóm theo số lượng xe khi không truyền `targetGroupCount`, tự động tính nhóm theo trần `maxPassengersPerGroup` khi không có xe, giới hạn số nhóm mục tiêu không vượt quá tổng số khách khả dụng.
-    - *Quy tắc sức chứa xe và toàn vẹn dữ liệu (Capacity & Integrity Rules):* Từ chối thêm/cập nhật xe khi `assignedPassengers` âm hoặc vượt quá sức chứa phương tiện, kiểm tra giảm số người tham gia an toàn khi xóa hành khách.
-    - *Quy tắc thống kê chỉ số Manifest (Manifest Summary Metrics Rules):* Tổng hợp chính xác và riêng biệt từng nhóm trạng thái (`CHECKED_IN`, `ON_TOUR`, `RETURNED_SAFE`, `REGISTERED/pending`).
+# POS & Folio (Port 8084)
+./mvnw -pl cruise-pos-service spring-boot:run
+```
 
 ---
 
-## 7. Tài liệu đặc tả nghiệp vụ
-Xem chi tiết toàn bộ đề bài và yêu cầu tại: [PROJECT_SPECIFICATION.md](PROJECT_SPECIFICATION.md)
+## 📬 Automated Postman Enterprise Test Suite
+
+The project includes a comprehensive, production-grade Postman collection and environment suite located in [`docs/postman/`](./docs/postman/):
+
+- 📄 **Collection:** [`Cruise_Management_System_v1.0.0.postman_collection.json`](./docs/postman/Cruise_Management_System_v1.0.0.postman_collection.json) *(37 comprehensive endpoints with automated assertions)*
+- 📄 **Environment:** [`Cruise_Local.postman_environment.json`](./docs/postman/Cruise_Local.postman_environment.json) *(Pre-mapped hosts and auto-syncing JWT token)*
+
+### Suite Structure:
+```text
+Cruise Management System v1.0.0 (Enterprise Full Suite)
+├── 00 - Gateway & Monitoring (cruise-gateway:8080)
+│   ├── Ping Service [GET]
+│   ├── System Information [GET]
+│   └── Health & JVM Stats [GET]
+├── 01 - Authentication & User Security (cruise-auth-service:8081)
+│   ├── Auth Health Check [GET]
+│   ├── Admin Login & Auto-Token Capture [POST]  --> (Auto-saves {{jwt_token}})
+│   ├── Get Current User Profile (/me) [GET]
+│   ├── Token Verification (RFC 7662) [POST]
+│   ├── Token Refresh Rotation [POST]
+│   ├── Verify User Password [POST]
+│   ├── Create New Staff User [POST]
+│   ├── Get User By Username [GET]
+│   └── Logout & Revoke Token [POST]
+├── 02 - Fleet & Itinerary Operations (cruise-itinerary-service:8082)
+│   ├── List Cruise Ships [GET]
+│   ├── List Ports of Call [GET]
+│   ├── List Cruise Tours [GET]
+│   ├── Get Daily Itinerary for Tour #1 [GET]
+│   ├── Get Tour Stops for Tour #1 [GET]
+│   └── Cruise Maritime Area Policies [GET]
+├── 03 - Shore Excursions & Activities (cruise-activity-service:8083)
+│   ├── Activity Service Health [GET]
+│   ├── List Onboard Activities [GET]
+│   ├── Create New Activity [POST]
+│   ├── List Shore Excursions [GET]
+│   ├── Passenger Portal Catalog [GET]
+│   ├── Operations Live Dashboard [GET]
+│   ├── SOLAS All-Aboard Watchdog [GET]
+│   ├── SOLAS Muster Station Readiness [GET]
+│   ├── RFID Cards Management [GET]
+│   └── Passenger Notifications [GET]
+└── 04 - POS, Folios & Voyage Lifecycle (cruise-pos-service:8084)
+    ├── POS Menu & Service Catalog [GET]
+    ├── Active POS Shifts [GET]
+    ├── Current Shift X-Report [GET]
+    ├── List Cash Drops [GET]
+    ├── Passenger Folio Accounts [GET]
+    ├── POS Terminals Admin Registry [GET]
+    ├── Cabin Billing Summaries [GET]
+    ├── Dispute Records [GET]
+    └── Voyage Phase Control Center [GET]
+```
+
+### Running Automated Regression via Newman CLI:
+```bash
+npx --yes newman run docs/postman/Cruise_Management_System_v1.0.0.postman_collection.json \
+  -e docs/postman/Cruise_Local.postman_environment.json \
+  --reporters cli
+```
 
 ---
 
-## 8. Quy trình Git Workflow & CI/CD Pipeline
+## ⚓ Maritime Domain & Safety Specifications
 
-Dự án áp dụng mô hình **GitHub Flow** và kiểm thử tự động qua **GitHub Actions**:
-* **Chi tiết quy chuẩn:** Xem hướng dẫn đầy đủ tại [GIT_WORKFLOW.md](GIT_WORKFLOW.md).
-* **Quy ước nhánh:** `feature/<JIRA-KEY>-<ten-tinh-nang>`, `bugfix/...`, `hotfix/...`.
-* **Quy ước Commit:** `[<JIRA-KEY>] <type>: <description>` (theo chuẩn Conventional Commits).
-* **Bảo vệ nhánh `main`:** Cấm push trực tiếp, bắt buộc tạo Pull Request và pass 100% CI checks trước khi merge.
-* **GitHub Actions Pipeline (`.github/workflows/ci.yml`):** Tự động kích hoạt khi có Push hoặc PR vào `main`, khởi tạo Java 21, chạy `./mvnw -B verify`, lưu trữ báo cáo JaCoCo coverage report, và kiểm tra **SonarCloud Quality Gate** (`-Dsonar.qualitygate.wait=true`).
-* **SonarCloud Quality Gate:** Tổ chức `cruise-javaclass`, Project `Cruise-JavaCLass_Cruise-api`, giám sát toàn diện Code Coverage (ngưỡng >= 80%), Bugs (0), Vulnerabilities (0), và Code Smells (Rating A).
+### 1. SOLAS All-Aboard Watchdog & Muster Drills
+In compliance with the **International Convention for the Safety of Life at Sea (SOLAS Chapter III, Regulation 19)**:
+- `SolasMusterEmergencyController`: Enforces compulsory passenger lifeboat drill check-ins before vessel departure.
+- `AllAboardWatchdogController`: Real-time countdown tracking shore excursion participants to prevent leaving guests stranded in foreign ports of call.
 
+### 2. High-Entropy Dynamic QR Passes (HMAC-SHA256)
+- QR passes issued to guests for excursion boarding feature a strict **60-second Time-To-Live (TTL)** and cryptographic signature to eliminate screenshot sharing, ticket fraud, and unauthorized boarding.
 
+### 3. Voyage Global Lifecycle State Machine
+Vessel operational phases are locked through transactional state transitions:
+$$\text{SCHEDULED} \longrightarrow \text{BOARDING} \longrightarrow \text{DEPARTED} \longrightarrow \text{AT\_SEA} \longrightarrow \text{PORT\_CALL} \longrightarrow \text{DISEMBARKING} \longrightarrow \text{CLOSED}$$
+Transactions, folio postings, and retail purchases are restricted based on the current active phase.
+
+---
+
+## 🧪 Testing & Quality Assurance
+
+Each microservice is backed by comprehensive Unit, Integration, and Mockito tests ensuring $\ge 80\%$ line and branch coverage:
+
+```bash
+# Run unit and integration tests across all microservices
+./mvnw test -q
+
+# Run targeted test for specific service
+./mvnw test -pl cruise-auth-service -Dtest=AuthServiceTest -q
+
+# Run SonarCloud code quality scanner
+./mvnw clean verify sonar:sonar
+```
+
+---
+
+## 📄 License & Organization
+
+This repository is maintained by the **Cruise Hospitality Technology Engineering Team** under the [MIT License](./LICENSE).  
+For frontend web applications and POS tablet clients, see [`Cruise-web`](https://github.com/Cruise-JavaCLass/Cruise-web) and [`Cruise-pos`](https://github.com/Cruise-JavaCLass/Cruise-pos).

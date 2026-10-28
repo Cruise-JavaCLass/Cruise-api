@@ -34,3 +34,7 @@ build/
 
 ### MCP / AI Tool artifacts ###
 .codegraph/
+
+### Logs ###
+logs/
+*.log
