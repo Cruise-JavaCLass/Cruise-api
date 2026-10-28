@@ -26,6 +26,9 @@ class UserServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private JwtService jwtService;
+
     @InjectMocks
     private UserService userService;
 
@@ -141,5 +144,40 @@ class UserServiceTest {
         sampleUser.setPassword("   ");
         User registered2 = userService.registerUser(sampleUser);
         assertThat(registered2.getPassword()).isEqualTo("   ");
+    }
+
+    @Test
+    @DisplayName("Should delete user by username and revoke tokens when user exists")
+    void shouldDeleteUserByUsernameWhenUserExists() {
+        when(userRepository.findByUsername("thao.tran")).thenReturn(Optional.of(sampleUser));
+
+        userService.deleteUserByUsername("thao.tran");
+
+        verify(userRepository, times(1)).findByUsername("thao.tran");
+        verify(userRepository, times(1)).delete(sampleUser);
+        verify(jwtService, times(1)).revokeAllUserTokens("thao.tran");
+    }
+
+    @Test
+    @DisplayName("Should do nothing when deleteUserByUsername for non-existent user")
+    void shouldDoNothingWhenDeleteUserNonExistent() {
+        when(userRepository.findByUsername("nonexistent")).thenReturn(Optional.empty());
+
+        userService.deleteUserByUsername("nonexistent");
+
+        verify(userRepository, times(1)).findByUsername("nonexistent");
+        verify(userRepository, never()).delete(any());
+        verify(jwtService, never()).revokeAllUserTokens(any());
+    }
+
+    @Test
+    @DisplayName("Should delete user without error when jwtService is null")
+    void shouldDeleteUserWhenJwtServiceIsNull() {
+        UserService serviceWithoutJwt = new UserService(userRepository);
+        when(userRepository.findByUsername("thao.tran")).thenReturn(Optional.of(sampleUser));
+
+        serviceWithoutJwt.deleteUserByUsername("thao.tran");
+
+        verify(userRepository, times(1)).delete(sampleUser);
     }
 }
