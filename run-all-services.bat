@@ -56,10 +56,11 @@ if errorlevel 1 (
 
 REM 5. Stop any existing processes occupying ports 8080-8084 (verifying PID ownership before kill)
 echo [3/7] Cleaning up previous processes on ports 8080-8084...
-for %%P in (8080 8081 8082 8083 8084) do (
-    for /f "tokens=5" %%a in ('netstat -aon ^| findstr /R /C:":%%P[ ]" ^| findstr LISTENING') do (
-        taskkill /F /FI "IMAGENAME eq java.exe" /PID %%a >nul 2>&1
-    )
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ports = 8080..8084; foreach ($p in $ports) { $conns = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue; foreach ($c in $conns) { try { Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue } catch {} } }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ports = 8080..8084; $conflict = $false; foreach ($p in $ports) { $conns = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue; if ($conns) { foreach ($c in $conns) { Write-Host """[ERROR] Port $p is still held by PID $($c.OwningProcess)"""; $conflict = $true } } }; if ($conflict) { exit 1 }"
+if errorlevel 1 (
+    echo [FATAL] Cannot start services due to occupied ports.
+    exit /b 1
 )
 
 REM 6. Launch all 5 Microservices cleanly
