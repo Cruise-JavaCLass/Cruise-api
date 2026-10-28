@@ -56,8 +56,8 @@ if errorlevel 1 (
 
 REM 5. Stop any existing processes occupying ports 8080-8084 (verifying PID ownership before kill)
 echo [3/7] Cleaning up previous processes on ports 8080-8084...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ports = 8080..8084; try { foreach ($p in $ports) { $conns = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction Stop; foreach ($c in $conns) { Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue } } } catch { if ($_.CategoryInfo.Category -ne 'ObjectNotFound') { Write-Error $_; exit 1 } }"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ports = 8080..8084; $conflict = $false; try { foreach ($p in $ports) { $conns = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction Stop; if ($conns) { foreach ($c in $conns) { Write-Host """[ERROR] Port $p is still held by PID $($c.OwningProcess)"""; $conflict = $true } } } } catch { if ($_.CategoryInfo.Category -ne 'ObjectNotFound') { Write-Error $_; exit 1 } }; if ($conflict) { exit 1 }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ports = 8080..8084; foreach ($p in $ports) { try { $conns = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction Stop; foreach ($c in $conns) { Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue } } catch { if ($_.CategoryInfo.Category -ne 'ObjectNotFound') { Write-Error $_; exit 1 } } }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ports = 8080..8084; $conflict = $false; foreach ($p in $ports) { try { $conns = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction Stop; if ($conns) { foreach ($c in $conns) { Write-Host """[ERROR] Port $p is still held by PID $($c.OwningProcess)"""; $conflict = $true } } } catch { if ($_.CategoryInfo.Category -ne 'ObjectNotFound') { Write-Error $_; exit 1 } } }; if ($conflict) { exit 1 }"
 if errorlevel 1 (
     echo [FATAL] Cannot start services due to occupied ports.
     exit /b 1
