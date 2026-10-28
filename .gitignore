@@ -38,3 +38,5 @@ build/
 ### Logs ###
 logs/
 *.log
+
+preview-readme.html
