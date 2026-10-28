@@ -21,7 +21,7 @@ public class UserService {
     private final JwtService jwtService;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public UserService(UserRepository userRepository, org.springframework.security.crypto.password.PasswordEncoder passwordEncoder, @org.springframework.beans.factory.annotation.Autowired(required = false) JwtService jwtService) {
+    public UserService(UserRepository userRepository, org.springframework.security.crypto.password.PasswordEncoder passwordEncoder, @org.springframework.lang.Nullable JwtService jwtService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
