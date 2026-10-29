@@ -304,6 +304,20 @@ class TourProviderServiceTest {
         assertEquals(id, response.getContent().get(0).getId());
     }
 
+    @Test
+    void getTourProvidersFiltersByPortWhenPortIdIsProvided() {
+        UUID id = UUID.randomUUID();
+        PageRequest pageable = PageRequest.of(0, 10);
+        when(tourProviderRepository.findAllByPortId("VN-HALONG", pageable))
+                .thenReturn(new PageImpl<>(List.of(existingProvider(id)), pageable, 1));
+
+        Page<TourProviderResponse> response = tourProviderService.getTourProviders(pageable, " VN-HALONG ");
+
+        assertEquals(1, response.getTotalElements());
+        assertEquals("VN-HALONG", response.getContent().get(0).getPortId());
+        verify(tourProviderRepository).findAllByPortId("VN-HALONG", pageable);
+    }
+
     private CreateTourProviderRequest createRequest() {
         CreateTourProviderRequest request = new CreateTourProviderRequest();
         request.setName("  Provider One  ");

@@ -97,6 +97,15 @@ public class TourProviderService {
 
     @Transactional(readOnly = true)
     public Page<TourProviderResponse> getTourProviders(Pageable pageable) {
+        return getTourProviders(pageable, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TourProviderResponse> getTourProviders(Pageable pageable, String portId) {
+        if (portId != null && !portId.isBlank()) {
+            return tourProviderRepository.findAllByPortId(portId.trim(), pageable)
+                    .map(TourProviderResponse::fromEntity);
+        }
         return tourProviderRepository.findAll(pageable)
                 .map(TourProviderResponse::fromEntity);
     }
