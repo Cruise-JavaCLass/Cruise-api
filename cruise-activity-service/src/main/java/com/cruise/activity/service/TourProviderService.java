@@ -6,6 +6,7 @@ import com.cruise.activity.dto.UpdateTourProviderRequest;
 import com.cruise.activity.entity.TourProvider;
 import com.cruise.activity.enums.TourProviderStatus;
 import com.cruise.activity.exception.BusinessRuleException;
+import com.cruise.activity.exception.DuplicateTourProviderException;
 import com.cruise.activity.exception.ResourceNotFoundException;
 import com.cruise.activity.repository.TourProviderRepository;
 import lombok.RequiredArgsConstructor;
@@ -29,12 +30,16 @@ public class TourProviderService {
                 ? generateCode()
                 : normalizeCode(request.getCode());
         ensureCodeAvailable(code);
+        String taxCode = trimToNull(request.getTaxCode());
+        String licenseNumber = trimToNull(request.getLicenseNumber());
+        ensureTaxCodeAvailable(taxCode);
+        ensureLicenseNumberAvailable(licenseNumber);
 
         TourProvider provider = TourProvider.builder()
                 .code(code)
                 .name(request.getName().trim())
-                .taxCode(trimToNull(request.getTaxCode()))
-                .licenseNumber(trimToNull(request.getLicenseNumber()))
+                .taxCode(taxCode)
+                .licenseNumber(licenseNumber)
                 .contactPerson(trimToNull(request.getContactPerson()))
                 .email(trimToNull(request.getEmail()))
                 .phone(trimToNull(request.getPhone()))
@@ -49,6 +54,11 @@ public class TourProviderService {
         TourProvider provider = tourProviderRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhà cung cấp với ID: " + id));
 
+        String taxCode = trimToNull(request.getTaxCode());
+        String licenseNumber = trimToNull(request.getLicenseNumber());
+        ensureTaxCodeAvailable(taxCode, id);
+        ensureLicenseNumberAvailable(licenseNumber, id);
+
         if (request.getCode() != null && !request.getCode().isBlank()) {
             String code = normalizeCode(request.getCode());
             if (!code.equalsIgnoreCase(provider.getCode())) {
@@ -58,8 +68,8 @@ public class TourProviderService {
         }
 
         provider.setName(request.getName().trim());
-        provider.setTaxCode(trimToNull(request.getTaxCode()));
-        provider.setLicenseNumber(trimToNull(request.getLicenseNumber()));
+        provider.setTaxCode(taxCode);
+        provider.setLicenseNumber(licenseNumber);
         if (request.getContactPerson() != null) {
             provider.setContactPerson(trimToNull(request.getContactPerson()));
         }
@@ -100,6 +110,31 @@ public class TourProviderService {
     private void ensureCodeAvailable(String code, UUID id) {
         if (tourProviderRepository.existsByCodeIgnoreCaseAndIdNot(code, id)) {
             throw new BusinessRuleException("Mã nhà cung cấp '" + code + "' đã tồn tại");
+        }
+    }
+
+    private void ensureTaxCodeAvailable(String taxCode) {
+        if (taxCode != null && tourProviderRepository.existsByTaxCodeIgnoreCase(taxCode)) {
+            throw new DuplicateTourProviderException("Mã số thuế '" + taxCode + "' đã được sử dụng");
+        }
+    }
+
+    private void ensureTaxCodeAvailable(String taxCode, UUID id) {
+        if (taxCode != null && tourProviderRepository.existsByTaxCodeIgnoreCaseAndIdNot(taxCode, id)) {
+            throw new DuplicateTourProviderException("Mã số thuế '" + taxCode + "' đã được sử dụng");
+        }
+    }
+
+    private void ensureLicenseNumberAvailable(String licenseNumber) {
+        if (licenseNumber != null && tourProviderRepository.existsByLicenseNumberIgnoreCase(licenseNumber)) {
+            throw new DuplicateTourProviderException("Số giấy phép '" + licenseNumber + "' đã được sử dụng");
+        }
+    }
+
+    private void ensureLicenseNumberAvailable(String licenseNumber, UUID id) {
+        if (licenseNumber != null
+                && tourProviderRepository.existsByLicenseNumberIgnoreCaseAndIdNot(licenseNumber, id)) {
+            throw new DuplicateTourProviderException("Số giấy phép '" + licenseNumber + "' đã được sử dụng");
         }
     }
 

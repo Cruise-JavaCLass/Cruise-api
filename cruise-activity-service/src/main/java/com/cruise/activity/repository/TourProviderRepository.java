@@ -12,4 +12,12 @@ public interface TourProviderRepository extends JpaRepository<TourProvider, UUID
     boolean existsByCodeIgnoreCase(String code);
 
     boolean existsByCodeIgnoreCaseAndIdNot(String code, UUID id);
+
+    boolean existsByTaxCodeIgnoreCase(String taxCode);
+
+    boolean existsByTaxCodeIgnoreCaseAndIdNot(String taxCode, UUID id);
+
+    boolean existsByLicenseNumberIgnoreCase(String licenseNumber);
+
+    boolean existsByLicenseNumberIgnoreCaseAndIdNot(String licenseNumber, UUID id);
 }
