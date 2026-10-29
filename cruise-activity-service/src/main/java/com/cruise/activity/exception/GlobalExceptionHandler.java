@@ -34,6 +34,12 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(ex.getMessage());
     }
 
+    @ExceptionHandler(DuplicateTourProviderException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResponse<Void> handleDuplicateTourProvider(DuplicateTourProviderException ex) {
+        return ApiResponse.error(ex.getMessage());
+    }
+
     @ExceptionHandler(PaymentRequiredException.class)
     @ResponseStatus(HttpStatus.PAYMENT_REQUIRED)
     public ApiResponse<Void> handlePaymentRequired(PaymentRequiredException ex) {
