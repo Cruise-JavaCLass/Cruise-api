@@ -3,6 +3,7 @@ package com.cruise.activity.controller;
 import com.cruise.activity.dto.CreateTourProviderRequest;
 import com.cruise.activity.dto.TourProviderResponse;
 import com.cruise.activity.dto.UpdateTourProviderRequest;
+import com.cruise.activity.exception.AccessDeniedException;
 import com.cruise.activity.service.TourProviderService;
 import com.cruise.common.dto.ApiResponse;
 import jakarta.validation.Valid;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -34,8 +36,10 @@ public class TourProviderController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<TourProviderResponse> createTourProvider(
+            @RequestHeader(value = "X-Caller-Role", required = false) String callerRole,
             @Valid @RequestBody CreateTourProviderRequest request
     ) {
+        verifyProviderManagementAuthorization(callerRole);
         return ApiResponse.ok("Tạo nhà cung cấp thành công",
                 tourProviderService.createTourProvider(request));
     }
@@ -58,7 +62,8 @@ public class TourProviderController {
     @GetMapping
     public ApiResponse<Page<TourProviderResponse>> getTourProviders(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String portId
     ) {
         Pageable pageable = PageRequest.of(
                 Math.max(0, page),
@@ -66,6 +71,12 @@ public class TourProviderController {
                 Sort.by(Sort.Direction.DESC, "createdAt")
         );
         return ApiResponse.ok("Lấy danh sách nhà cung cấp thành công",
-                tourProviderService.getTourProviders(pageable));
+                tourProviderService.getTourProviders(pageable, portId));
+    }
+
+    private void verifyProviderManagementAuthorization(String callerRole) {
+        if (callerRole == null || !"SHORE_EXCURSION_MANAGER".equalsIgnoreCase(callerRole.trim())) {
+            throw new AccessDeniedException("Yêu cầu quyền SHORE_EXCURSION_MANAGER");
+        }
     }
 }
