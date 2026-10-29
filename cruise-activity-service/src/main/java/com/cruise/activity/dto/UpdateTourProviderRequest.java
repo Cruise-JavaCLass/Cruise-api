@@ -3,6 +3,7 @@ package com.cruise.activity.dto;
 import com.cruise.activity.enums.TourProviderStatus;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -35,6 +36,8 @@ public class UpdateTourProviderRequest {
     private String phone;
 
     @NotBlank(message = "Hotline khẩn cấp không được để trống")
+    @Pattern(regexp = "^\\+?[0-9][0-9\\s().-]{5,28}[0-9]$",
+            message = "Hotline khẩn cấp không đúng định dạng")
     @Size(max = 30, message = "Hotline khẩn cấp không được vượt quá 30 ký tự")
     private String emergencyHotline;
 
