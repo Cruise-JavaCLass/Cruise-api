@@ -21,13 +21,10 @@ import java.util.Optional;
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private AuthService authService;
+    private final AuthService authService;
 
-    public AuthController() {
-    }
-
-    public AuthController(AuthService authService) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public AuthController(@org.springframework.lang.Nullable AuthService authService) {
         this.authService = authService;
     }
 
