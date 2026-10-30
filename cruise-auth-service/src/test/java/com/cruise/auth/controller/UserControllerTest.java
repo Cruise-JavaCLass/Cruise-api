@@ -11,11 +11,16 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -187,5 +192,115 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("User deleted successfully"));
         org.mockito.Mockito.verify(userService).deleteUserByUsername("testuser");
+    }
+
+    private User sampleUser(Long id, String username, Role role, boolean active) {
+        User user = User.builder()
+                .username(username)
+                .fullName("Người dùng " + username)
+                .email(username + "@cruise.com")
+                .role(role)
+                .active(active)
+                .build();
+        user.setId(id);
+        return user;
+    }
+
+    @Test
+    @DisplayName("GET /api/auth/users returns the list of users")
+    void shouldListUsers() throws Exception {
+        when(userService.getAllUsers()).thenReturn(List.of(
+                sampleUser(1L, "an.nguyen", Role.SYSTEM_ADMIN, true),
+                sampleUser(2L, "binh.tran", Role.POS_STAFF, false)));
+
+        mockMvc.perform(get("/api/auth/users").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].username").value("an.nguyen"))
+                .andExpect(jsonPath("$.data[1].active").value(false));
+    }
+
+    @Test
+    @DisplayName("GET /api/auth/users/id/{id} returns 200 when found and 404 when missing")
+    void shouldGetUserById() throws Exception {
+        when(userService.getUserById(1L)).thenReturn(Optional.of(sampleUser(1L, "an.nguyen", Role.SYSTEM_ADMIN, true)));
+        when(userService.getUserById(99L)).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/auth/users/id/1").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(1))
+                .andExpect(jsonPath("$.data.role").value("SYSTEM_ADMIN"));
+
+        mockMvc.perform(get("/api/auth/users/id/99").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("User not found: 99"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/auth/users/{id} updates a user")
+    void shouldUpdateUser() throws Exception {
+        User updated = sampleUser(1L, "an.nguyen", Role.POS_STAFF, true);
+        updated.setFullName("An Nguyễn");
+        when(userService.updateUser(eq(1L), eq("An Nguyễn"), eq("an.nguyen@cruise.com"), eq(Role.POS_STAFF)))
+                .thenReturn(updated);
+
+        String payload = """
+                {"fullName": "An Nguyễn", "email": "an.nguyen@cruise.com", "role": "POS_STAFF"}
+                """;
+
+        mockMvc.perform(put("/api/auth/users/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("User updated successfully"))
+                .andExpect(jsonPath("$.data.fullName").value("An Nguyễn"))
+                .andExpect(jsonPath("$.data.role").value("POS_STAFF"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/auth/users/{id} returns 404 for a missing user and 400 for a duplicate email")
+    void shouldMapUpdateErrors() throws Exception {
+        when(userService.updateUser(eq(99L), any(), any(), any()))
+                .thenThrow(new NoSuchElementException("User not found: 99"));
+        when(userService.updateUser(eq(2L), any(), any(), any()))
+                .thenThrow(new IllegalArgumentException("Email already exists: taken@cruise.com"));
+
+        String payload = """
+                {"fullName": "A", "email": "taken@cruise.com", "role": "PASSENGER"}
+                """;
+
+        mockMvc.perform(put("/api/auth/users/99").contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("User not found: 99"));
+
+        mockMvc.perform(put("/api/auth/users/2").contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Email already exists: taken@cruise.com"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/auth/users/{id}/deactivate and /activate toggle the account")
+    void shouldActivateAndDeactivateUser() throws Exception {
+        when(userService.setUserActive(1L, false)).thenReturn(sampleUser(1L, "an.nguyen", Role.POS_STAFF, false));
+        when(userService.setUserActive(1L, true)).thenReturn(sampleUser(1L, "an.nguyen", Role.POS_STAFF, true));
+
+        mockMvc.perform(patch("/api/auth/users/1/deactivate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.active").value(false));
+
+        mockMvc.perform(patch("/api/auth/users/1/activate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.active").value(true));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/auth/users/{id}/activate returns 404 when the user is missing")
+    void shouldReturnNotFoundWhenTogglingMissingUser() throws Exception {
+        when(userService.setUserActive(99L, true)).thenThrow(new NoSuchElementException("User not found: 99"));
+
+        mockMvc.perform(patch("/api/auth/users/99/activate"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false));
     }
 }
