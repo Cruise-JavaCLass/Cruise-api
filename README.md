@@ -26,7 +26,7 @@ Orchestrating mission-critical nautical compliance, SOLAS Chapter III real-time 
     <img src="https://img.shields.io/badge/Docker_Compose_v2-102A43?style=for-the-badge&logo=docker&logoColor=2496ED" alt="Docker Compose" />
   </a>
   <a href="https://www.postman.com/">
-    <img src="https://img.shields.io/badge/Postman_Suite-37_APIs-102A43?style=for-the-badge&logo=postman&logoColor=FF6C37" alt="Postman Suite" />
+    <img src="https://img.shields.io/badge/Postman_Suite-38_APIs-102A43?style=for-the-badge&logo=postman&logoColor=FF6C37" alt="Postman Suite" />
   </a>
   <a href="https://sonarcloud.io/project/overview?id=Cruise-JavaCLass_Cruise-api">
     <img src="https://img.shields.io/badge/SonarCloud-Quality_Gate_Passed-102A43?style=for-the-badge&logo=sonarcloud&logoColor=397C80" alt="SonarCloud" />
@@ -293,13 +293,14 @@ The project includes an enterprise-grade automated Postman test suite located in
 | `posUrl` | `http://localhost:8084` | POS & Folio Microservice URL |
 | `jwt_token` | *(Dynamic)* | Auto-populated by Admin Login request |
 | `admin_username`| `admin` | Default Maritime Admin identifier |
-| `admin_password`| `admin123` | Default Maritime Admin credential |
+| `admin_password`| *(Set locally)* | Default Maritime Admin credential (set in Postman or pass via Newman CLI) |
 
 ### Automated Execution via Newman CLI:
 ```bash
-# Run the entire 37-endpoint suite with terminal summary table
+# Run the entire 38-endpoint suite with terminal summary table
 npx --yes newman run docs/postman/Cruise_Management_System_v1.0.0.postman_collection.json \
   -e docs/postman/Cruise_Local.postman_environment.json \
+  --env-var "admin_password=${ADMIN_PASSWORD:?Set ADMIN_PASSWORD before running Newman}" \
   --reporters cli
 ```
 
@@ -332,6 +333,7 @@ npx --yes newman run docs/postman/Cruise_Management_System_v1.0.0.postman_collec
 | `POST` | `/api/auth/verify-password`| Credential verification without token generation |
 | `POST` | `/api/auth/users` | Register new crew officer profile |
 | `GET` | `/api/auth/users/{username}`| Fetch staff details and assigned operational privileges |
+| `DELETE` | `/api/auth/users/{username}` | Delete a user and revoke active tokens |
 | `POST` | `/api/auth/logout` | Revoke active access token and commit to blacklist |
 
 </details>
@@ -390,11 +392,10 @@ npx --yes newman run docs/postman/Cruise_Management_System_v1.0.0.postman_collec
 <a id="quality-assurance-sonarcloud-cicd"></a>
 ## 🧪 8. Quality Assurance, SonarCloud & CI/CD
 
-The codebase is enforced with strict quality gates across GitHub Actions and SonarCloud:
+GitHub Actions runs Maven verification on pushes and pull requests. When `SONAR_TOKEN` is configured, CI runs SonarCloud and waits for its quality gate:
 
-- **Targeted Unit Tests:** Coverage $\ge 80\%$ on business logic and state machines.
-- **Security Scans:** CodeQL analysis and CodeRabbit automated peer review on every pull request.
-- **SonarCloud Quality Gate:** Zero blocker bugs, zero security vulnerabilities, zero code smells.
+- **Coverage:** JaCoCo reports are generated for the test suite.
+- **SonarCloud Quality Gate:** SonarCloud evaluates the configured coverage and issue thresholds when the analysis step runs.
 
 ```bash
 # Execute full Maven test suite

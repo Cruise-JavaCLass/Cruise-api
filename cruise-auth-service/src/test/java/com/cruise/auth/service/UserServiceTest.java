@@ -12,6 +12,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -179,5 +180,118 @@ class UserServiceTest {
         serviceWithoutJwt.deleteUserByUsername("thao.tran");
 
         verify(userRepository, times(1)).delete(sampleUser);
+    }
+
+    @Test
+    @DisplayName("Should return all users")
+    void shouldReturnAllUsers() {
+        when(userRepository.findAll()).thenReturn(List.of(sampleUser));
+
+        List<User> users = userService.getAllUsers();
+
+        assertThat(users).containsExactly(sampleUser);
+    }
+
+    @Test
+    @DisplayName("Should find user by id")
+    void shouldFindUserById() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser));
+
+        assertThat(userService.getUserById(1L)).contains(sampleUser);
+        assertThat(userService.getUserById(2L)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Should update full name, email and role of an existing user")
+    void shouldUpdateUser() {
+        sampleUser.setId(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser));
+        when(userRepository.findByEmail("new.mail@cruise.com")).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        User updated = userService.updateUser(1L, "  Trần Thảo  ", " new.mail@cruise.com ", Role.POS_STAFF);
+
+        assertThat(updated.getFullName()).isEqualTo("Trần Thảo");
+        assertThat(updated.getEmail()).isEqualTo("new.mail@cruise.com");
+        assertThat(updated.getRole()).isEqualTo(Role.POS_STAFF);
+        assertThat(updated.getUsername()).isEqualTo("thao.tran");
+        verify(userRepository).save(sampleUser);
+    }
+
+    @Test
+    @DisplayName("Should allow keeping the same email on update")
+    void shouldAllowSameEmailOnUpdate() {
+        sampleUser.setId(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser));
+        when(userRepository.findByEmail("thao.tran@cruise.com")).thenReturn(Optional.of(sampleUser));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        User updated = userService.updateUser(1L, "Trần Thảo", "thao.tran@cruise.com", Role.PASSENGER);
+
+        assertThat(updated.getEmail()).isEqualTo("thao.tran@cruise.com");
+    }
+
+    @Test
+    @DisplayName("Should throw NoSuchElementException when updating a missing user")
+    void shouldThrowWhenUpdatingMissingUser() {
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.updateUser(99L, "A", "a@cruise.com", Role.PASSENGER))
+                .isInstanceOf(NoSuchElementException.class)
+                .hasMessageContaining("User not found: 99");
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("Should reject an email that belongs to another user")
+    void shouldRejectEmailUsedByAnotherUser() {
+        sampleUser.setId(1L);
+        User other = User.builder().username("other").fullName("Other").email("taken@cruise.com")
+                .role(Role.PASSENGER).build();
+        other.setId(2L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser));
+        when(userRepository.findByEmail("taken@cruise.com")).thenReturn(Optional.of(other));
+
+        assertThatThrownBy(() -> userService.updateUser(1L, "Trần Thảo", "taken@cruise.com", Role.PASSENGER))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Email already exists: taken@cruise.com");
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("Should reject blank full name, blank email and null role on update")
+    void shouldRejectInvalidUpdateInput() {
+        sampleUser.setId(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser));
+
+        assertThatThrownBy(() -> userService.updateUser(1L, " ", "a@cruise.com", Role.PASSENGER))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Full name");
+        assertThatThrownBy(() -> userService.updateUser(1L, "A", " ", Role.PASSENGER))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Email");
+        assertThatThrownBy(() -> userService.updateUser(1L, "A", "a@cruise.com", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Role");
+    }
+
+    @Test
+    @DisplayName("Should deactivate and reactivate a user")
+    void shouldToggleActiveStatus() {
+        sampleUser.setId(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        assertThat(userService.setUserActive(1L, false).getActive()).isFalse();
+        assertThat(userService.setUserActive(1L, true).getActive()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Should throw NoSuchElementException when toggling a missing user")
+    void shouldThrowWhenTogglingMissingUser() {
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.setUserActive(99L, false))
+                .isInstanceOf(NoSuchElementException.class);
     }
 }
