@@ -7,6 +7,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 /**
@@ -85,6 +87,42 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok("User deleted successfully", null));
     }
 
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<com.cruise.auth.dto.UserResponseDto>>> getAllUsers() {
+        List<com.cruise.auth.dto.UserResponseDto> users = userService.getAllUsers().stream()
+                .map(this::mapToResponseDto)
+                .toList();
+        return ResponseEntity.ok(ApiResponse.ok("Users retrieved", users));
+    }
+
+    @GetMapping("/id/{id}")
+    public ResponseEntity<ApiResponse<com.cruise.auth.dto.UserResponseDto>> getUserById(@PathVariable Long id) {
+        Optional<User> user = userService.getUserById(id);
+        return user.map(u -> ResponseEntity.ok(ApiResponse.ok("User found", mapToResponseDto(u))))
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ApiResponse.error("User not found: " + id)));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse<com.cruise.auth.dto.UserResponseDto>> updateUser(
+            @PathVariable Long id,
+            @RequestBody com.cruise.auth.dto.UserUpdateDto request) {
+        User updated = userService.updateUser(id, request.getFullName(), request.getEmail(), request.getRole());
+        return ResponseEntity.ok(ApiResponse.ok("User updated successfully", mapToResponseDto(updated)));
+    }
+
+    @PatchMapping("/{id}/activate")
+    public ResponseEntity<ApiResponse<com.cruise.auth.dto.UserResponseDto>> activateUser(@PathVariable Long id) {
+        User updated = userService.setUserActive(id, true);
+        return ResponseEntity.ok(ApiResponse.ok("User activated", mapToResponseDto(updated)));
+    }
+
+    @PatchMapping("/{id}/deactivate")
+    public ResponseEntity<ApiResponse<com.cruise.auth.dto.UserResponseDto>> deactivateUser(@PathVariable Long id) {
+        User updated = userService.setUserActive(id, false);
+        return ResponseEntity.ok(ApiResponse.ok("User deactivated", mapToResponseDto(updated)));
+    }
+
     private com.cruise.auth.dto.UserResponseDto mapToResponseDto(User user) {
         return com.cruise.auth.dto.UserResponseDto.builder()
                 .id(user.getId())
@@ -103,5 +141,10 @@ public class UserController {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
         return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(NoSuchElementException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNotFound(NoSuchElementException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(ex.getMessage()));
     }
 }

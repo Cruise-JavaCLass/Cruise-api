@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 /**
@@ -63,5 +64,60 @@ public class UserService {
             }
             userRepository.delete(user);
         });
+    }
+
+    @Transactional(readOnly = true)
+    public List<User> getAllUsers() {
+        return userRepository.findAll();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<User> getUserById(Long id) {
+        return userRepository.findById(id);
+    }
+
+    /**
+     * Cập nhật họ tên, email và vai trò. Username và mật khẩu không đổi ở đây.
+     *
+     * @throws NoSuchElementException khi không có người dùng với id này
+     * @throws IllegalArgumentException khi dữ liệu không hợp lệ hoặc email đã được tài khoản khác dùng
+     */
+    public User updateUser(Long id, String fullName, String email, Role role) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("User not found: " + id));
+
+        if (fullName == null || fullName.isBlank()) {
+            throw new IllegalArgumentException("Full name must not be blank");
+        }
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Email must not be blank");
+        }
+        if (role == null) {
+            throw new IllegalArgumentException("Role must not be null");
+        }
+
+        String normalizedEmail = email.trim();
+        userRepository.findByEmail(normalizedEmail)
+                .filter(other -> !other.getId().equals(id))
+                .ifPresent(other -> {
+                    throw new IllegalArgumentException("Email already exists: " + normalizedEmail);
+                });
+
+        user.setFullName(fullName.trim());
+        user.setEmail(normalizedEmail);
+        user.setRole(role);
+        return userRepository.save(user);
+    }
+
+    /**
+     * Bật hoặc tắt tài khoản.
+     *
+     * @throws NoSuchElementException khi không có người dùng với id này
+     */
+    public User setUserActive(Long id, boolean active) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("User not found: " + id));
+        user.setActive(active);
+        return userRepository.save(user);
     }
 }
