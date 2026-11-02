@@ -75,3 +75,35 @@ No role table migration is needed: role storage already exists. Permissions are
 versioned code. Token revocation storage remains the existing auth-service in-memory
 implementation; a persistent/distributed revocation store is a separate deployment
 concern, and this change does not claim restart-safe or multi-instance revocation.
+
+## KAN-70 / KAN-71 / KAN-72: validation
+
+Validated locally on 2026-11-02 with Java 25 (compiler target 21), Maven 3.9.15,
+Node 24.22.1 and npm 12.2.1:
+
+- `mvn -q test`: 1,953 tests, zero failures/errors/skips across all six modules.
+- `mvn -q -DskipTests package`: all modules package successfully.
+- Web: `npx vitest run --maxWorkers=2`: 107 files, 736 tests passed; the separate
+  `node --test .github/scripts/jules-client.test.mjs` suite also passes.
+- Web `npm run lint` exits 0 with repository warnings; `npm run build` succeeds
+  (TypeScript + Vite). The existing Lottie dependency emits an eval build warning.
+
+The new tests exercise all eight roles at real Spring HTTP boundaries in auth,
+itinerary, activity and POS, including positive persistence and denied writes
+without mutations. Auth integration uses real signed access/refresh JWTs and H2
+user state; domain cross-role tests mock only the remote identity verifier. The
+remote verifier itself is covered against a loopback HTTP identity-service stub.
+Existing domain tests use an explicit test-only authenticated fixture and keep
+the production authorization filter active.
+
+Web tests cover deep links, menus, landing pages, read-only roster controls,
+unknown roles, actual login payload/token contract and Bearer injection. A server
+401 clears the staff session; 403 opens the denied page, even if a domain service
+contains an offline/demo fallback. Demo staff accounts now require explicit
+development opt-in and cannot be enabled in a production build.
+
+Review and staging sign-off remain for the team: PostgreSQL schema deployment,
+reverse-proxy routing, TLS to the private auth service, and real browser sessions
+for representative staff roles. GitHub CI and staging were not run from this
+workspace. The three unrelated bugs listed after the RBAC story in the source
+document are excluded from this change.
