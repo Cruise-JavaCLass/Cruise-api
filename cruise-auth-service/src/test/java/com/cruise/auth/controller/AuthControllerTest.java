@@ -521,9 +521,6 @@ class AuthControllerTest {
     @Test
     @DisplayName("Direct unit tests verify 503 SERVICE_UNAVAILABLE when AuthService is null")
     void testNullAuthServiceDirectly() {
-        AuthController controller = new AuthController();
-        org.junit.jupiter.api.Assertions.assertNotNull(controller);
-
         AuthController nullController = new AuthController(null);
         org.junit.jupiter.api.Assertions.assertEquals(
                 org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
