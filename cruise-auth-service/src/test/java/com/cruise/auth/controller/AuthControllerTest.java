@@ -274,6 +274,34 @@ class AuthControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/auth/verify-password with email alias returns 200 OK")
+    void testVerifyPasswordEndpoint_WithEmailAlias() throws Exception {
+        when(authService.verifyPassword(any(VerifyPasswordRequest.class))).thenReturn(true);
+
+        String jsonBody = "{\"email\":\"admin@cruise.com\",\"password\":\"Admin@1234\"}";
+
+        mockMvc.perform(post("/api/auth/verify-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.valid").value(true));
+    }
+
+    @Test
+    @DisplayName("POST /api/auth/verify-password with rawPassword alias returns 200 OK")
+    void testVerifyPasswordEndpoint_WithRawPasswordAlias() throws Exception {
+        when(authService.verifyPassword(any(VerifyPasswordRequest.class))).thenReturn(true);
+
+        String jsonBody = "{\"usernameOrEmail\":\"admin\",\"rawPassword\":\"Admin@1234\"}";
+
+        mockMvc.perform(post("/api/auth/verify-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.valid").value(true));
+    }
+
+    @Test
     @DisplayName("POST /api/auth/token/pair returns 200 OK with new TokenPair for authenticated user")
     void testIssueTokenPairEndpoint() throws Exception {
         User user = User.builder().username("admin").build();
