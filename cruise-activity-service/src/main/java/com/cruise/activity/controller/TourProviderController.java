@@ -26,6 +26,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+/**
+ * REST controller quản lý nhà cung cấp tour/dịch vụ trên bờ (Tour Provider Management).
+ * Architecture Note: Hoạt động phía sau API Gateway trust boundary, nơi upstream API Gateway
+ * xác thực JWT danh tính và inject header tin cậy X-Caller-Role trước khi forward downstream.
+ */
 @RestController
 @RequestMapping("/api/v1/tour-providers")
 @RequiredArgsConstructor
@@ -47,8 +52,10 @@ public class TourProviderController {
     @PutMapping("/{id}")
     public ApiResponse<TourProviderResponse> updateTourProvider(
             @PathVariable UUID id,
+            @RequestHeader(value = "X-Caller-Role", required = false) String callerRole,
             @Valid @RequestBody UpdateTourProviderRequest request
     ) {
+        verifyProviderManagementAuthorization(callerRole);
         return ApiResponse.ok("Cập nhật nhà cung cấp thành công",
                 tourProviderService.updateTourProvider(id, request));
     }
@@ -68,7 +75,7 @@ public class TourProviderController {
         Pageable pageable = PageRequest.of(
                 Math.max(0, page),
                 Math.max(1, Math.min(size, 100)),
-                Sort.by(Sort.Direction.DESC, "createdAt")
+                Sort.by(Sort.Direction.DESC, "createdAt", "id")
         );
         return ApiResponse.ok("Lấy danh sách nhà cung cấp thành công",
                 tourProviderService.getTourProviders(pageable, portId));

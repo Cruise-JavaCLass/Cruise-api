@@ -10,6 +10,7 @@ import com.cruise.activity.exception.DuplicateTourProviderException;
 import com.cruise.activity.exception.ResourceNotFoundException;
 import com.cruise.activity.repository.TourProviderRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -47,17 +48,18 @@ public class TourProviderService {
                 .portId(request.getPortId().trim())
                 .status(request.getStatus() == null ? TourProviderStatus.ACTIVE : request.getStatus())
                 .build();
-        return TourProviderResponse.fromEntity(tourProviderRepository.save(provider));
+
+        try {
+            return TourProviderResponse.fromEntity(tourProviderRepository.saveAndFlush(provider));
+        } catch (DataIntegrityViolationException ex) {
+            handleDataIntegrityViolation(ex);
+            throw ex;
+        }
     }
 
     public TourProviderResponse updateTourProvider(UUID id, UpdateTourProviderRequest request) {
         TourProvider provider = tourProviderRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhà cung cấp với ID: " + id));
-
-        String taxCode = trimToNull(request.getTaxCode());
-        String licenseNumber = trimToNull(request.getLicenseNumber());
-        ensureTaxCodeAvailable(taxCode, id);
-        ensureLicenseNumberAvailable(licenseNumber, id);
 
         if (request.getCode() != null && !request.getCode().isBlank()) {
             String code = normalizeCode(request.getCode());
@@ -68,8 +70,16 @@ public class TourProviderService {
         }
 
         provider.setName(request.getName().trim());
-        provider.setTaxCode(taxCode);
-        provider.setLicenseNumber(licenseNumber);
+        if (request.getTaxCode() != null) {
+            String taxCode = trimToNull(request.getTaxCode());
+            ensureTaxCodeAvailable(taxCode, id);
+            provider.setTaxCode(taxCode);
+        }
+        if (request.getLicenseNumber() != null) {
+            String licenseNumber = trimToNull(request.getLicenseNumber());
+            ensureLicenseNumberAvailable(licenseNumber, id);
+            provider.setLicenseNumber(licenseNumber);
+        }
         if (request.getContactPerson() != null) {
             provider.setContactPerson(trimToNull(request.getContactPerson()));
         }
@@ -85,7 +95,12 @@ public class TourProviderService {
             provider.setStatus(request.getStatus());
         }
 
-        return TourProviderResponse.fromEntity(tourProviderRepository.save(provider));
+        try {
+            return TourProviderResponse.fromEntity(tourProviderRepository.saveAndFlush(provider));
+        } catch (DataIntegrityViolationException ex) {
+            handleDataIntegrityViolation(ex);
+            throw ex;
+        }
     }
 
     @Transactional(readOnly = true)
@@ -112,13 +127,13 @@ public class TourProviderService {
 
     private void ensureCodeAvailable(String code) {
         if (tourProviderRepository.existsByCodeIgnoreCase(code)) {
-            throw new BusinessRuleException("Mã nhà cung cấp '" + code + "' đã tồn tại");
+            throw new DuplicateTourProviderException("Mã nhà cung cấp '" + code + "' đã tồn tại");
         }
     }
 
     private void ensureCodeAvailable(String code, UUID id) {
         if (tourProviderRepository.existsByCodeIgnoreCaseAndIdNot(code, id)) {
-            throw new BusinessRuleException("Mã nhà cung cấp '" + code + "' đã tồn tại");
+            throw new DuplicateTourProviderException("Mã nhà cung cấp '" + code + "' đã tồn tại");
         }
     }
 
@@ -147,12 +162,33 @@ public class TourProviderService {
         }
     }
 
+    private void handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        String msg = ex.getMessage();
+        if (msg != null) {
+            String lower = msg.toLowerCase(Locale.ROOT);
+            if (lower.contains("uk_tour_providers_code") || lower.contains("code")) {
+                throw new DuplicateTourProviderException("Mã nhà cung cấp đã tồn tại");
+            }
+            if (lower.contains("uk_tour_providers_tax_code") || lower.contains("tax_code")) {
+                throw new DuplicateTourProviderException("Mã số thuế đã được sử dụng");
+            }
+            if (lower.contains("uk_tour_providers_license_number") || lower.contains("license_number")) {
+                throw new DuplicateTourProviderException("Số giấy phép đã được sử dụng");
+            }
+        }
+        throw new DuplicateTourProviderException("Thông tin nhà cung cấp bị trùng lặp trong hệ thống");
+    }
+
     private String generateCode() {
         return "TP-" + UUID.randomUUID().toString().replace("-", "").toUpperCase(Locale.ROOT);
     }
 
     private String normalizeCode(String code) {
-        return code.trim().toUpperCase(Locale.ROOT);
+        String normalized = code.trim().toUpperCase(Locale.ROOT);
+        if (normalized.length() > 40) {
+            throw new BusinessRuleException("Mã nhà cung cấp không được vượt quá 40 ký tự");
+        }
+        return normalized;
     }
 
     private String trimToNull(String value) {

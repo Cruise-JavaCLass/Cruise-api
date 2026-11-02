@@ -7,6 +7,7 @@ import com.cruise.activity.entity.TourProvider;
 import com.cruise.activity.enums.TourProviderStatus;
 import com.cruise.activity.exception.BusinessRuleException;
 import com.cruise.activity.exception.DuplicateResourceException;
+import com.cruise.activity.exception.DuplicateTourProviderException;
 import com.cruise.activity.exception.ResourceNotFoundException;
 import com.cruise.activity.repository.TourProviderRepository;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -29,8 +31,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -47,7 +49,7 @@ class TourProviderServiceTest {
         CreateTourProviderRequest request = createRequest();
 
         when(tourProviderRepository.existsByCodeIgnoreCase(anyString())).thenReturn(false);
-        when(tourProviderRepository.save(any(TourProvider.class)))
+        when(tourProviderRepository.saveAndFlush(any(TourProvider.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         TourProviderResponse response = tourProviderService.createTourProvider(request);
@@ -57,7 +59,7 @@ class TourProviderServiceTest {
         assertEquals("+84 123 456 789", response.getEmergencyHotline());
         assertEquals("VN-HALONG", response.getPortId());
         assertEquals(TourProviderStatus.ACTIVE, response.getStatus());
-        verify(tourProviderRepository).save(any(TourProvider.class));
+        verify(tourProviderRepository).saveAndFlush(any(TourProvider.class));
     }
 
     @Test
@@ -73,7 +75,7 @@ class TourProviderServiceTest {
         when(tourProviderRepository.existsByCodeIgnoreCase("TP-CUSTOM")).thenReturn(false);
         when(tourProviderRepository.existsByTaxCodeIgnoreCase("TAX-123")).thenReturn(false);
         when(tourProviderRepository.existsByLicenseNumberIgnoreCase("LIC-123")).thenReturn(false);
-        when(tourProviderRepository.save(any(TourProvider.class)))
+        when(tourProviderRepository.saveAndFlush(any(TourProvider.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         TourProviderResponse response = tourProviderService.createTourProvider(request);
@@ -92,7 +94,7 @@ class TourProviderServiceTest {
         CreateTourProviderRequest request = createRequest();
         request.setCode("   ");
         when(tourProviderRepository.existsByCodeIgnoreCase(anyString())).thenReturn(false);
-        when(tourProviderRepository.save(any(TourProvider.class)))
+        when(tourProviderRepository.saveAndFlush(any(TourProvider.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         TourProviderResponse response = tourProviderService.createTourProvider(request);
@@ -106,9 +108,9 @@ class TourProviderServiceTest {
         request.setCode("tp-duplicate");
         when(tourProviderRepository.existsByCodeIgnoreCase("TP-DUPLICATE")).thenReturn(true);
 
-        assertThrows(BusinessRuleException.class, () -> tourProviderService.createTourProvider(request));
+        assertThrows(DuplicateTourProviderException.class, () -> tourProviderService.createTourProvider(request));
 
-        verify(tourProviderRepository, never()).save(any(TourProvider.class));
+        verify(tourProviderRepository, never()).saveAndFlush(any(TourProvider.class));
     }
 
     @Test
@@ -123,7 +125,7 @@ class TourProviderServiceTest {
         );
 
         assertTrue(exception.getMessage().contains("Mã số thuế"));
-        verify(tourProviderRepository, never()).save(any(TourProvider.class));
+        verify(tourProviderRepository, never()).saveAndFlush(any(TourProvider.class));
     }
 
     @Test
@@ -138,7 +140,29 @@ class TourProviderServiceTest {
         );
 
         assertTrue(exception.getMessage().contains("Số giấy phép"));
-        verify(tourProviderRepository, never()).save(any(TourProvider.class));
+        verify(tourProviderRepository, never()).saveAndFlush(any(TourProvider.class));
+    }
+
+    @Test
+    void createTourProviderRejectsCodeExceedingFortyCharactersWhenNormalized() {
+        CreateTourProviderRequest request = createRequest();
+        request.setCode("A".repeat(39) + "ß");
+        assertThrows(BusinessRuleException.class, () -> tourProviderService.createTourProvider(request));
+        verify(tourProviderRepository, never()).saveAndFlush(any(TourProvider.class));
+    }
+
+    @Test
+    void createTourProviderTranslatesDataIntegrityViolationToDuplicateTourProviderException() {
+        CreateTourProviderRequest request = createRequest();
+        when(tourProviderRepository.existsByCodeIgnoreCase(anyString())).thenReturn(false);
+        when(tourProviderRepository.saveAndFlush(any(TourProvider.class)))
+                .thenThrow(new DataIntegrityViolationException("uk_tour_providers_code"));
+
+        DuplicateTourProviderException exception = assertThrows(
+                DuplicateTourProviderException.class,
+                () -> tourProviderService.createTourProvider(request)
+        );
+        assertTrue(exception.getMessage().contains("Mã nhà cung cấp đã tồn tại"));
     }
 
     @Test
@@ -153,7 +177,7 @@ class TourProviderServiceTest {
         assertThrows(DuplicateResourceException.class,
                 () -> tourProviderService.updateTourProvider(id, request));
 
-        verify(tourProviderRepository, never()).save(any(TourProvider.class));
+        verify(tourProviderRepository, never()).saveAndFlush(any(TourProvider.class));
     }
 
     @Test
@@ -167,7 +191,7 @@ class TourProviderServiceTest {
         assertThrows(DuplicateResourceException.class,
                 () -> tourProviderService.updateTourProvider(id, request));
 
-        verify(tourProviderRepository, never()).save(any(TourProvider.class));
+        verify(tourProviderRepository, never()).saveAndFlush(any(TourProvider.class));
     }
 
     @Test
@@ -178,14 +202,14 @@ class TourProviderServiceTest {
         request.setTaxCode("TAX-123");
         request.setLicenseNumber("LICENSE-123");
         when(tourProviderRepository.findById(id)).thenReturn(Optional.of(existingProvider(id)));
-        when(tourProviderRepository.save(any(TourProvider.class)))
+        when(tourProviderRepository.saveAndFlush(any(TourProvider.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         tourProviderService.updateTourProvider(id, request);
 
         verify(tourProviderRepository).existsByTaxCodeIgnoreCaseAndIdNot("TAX-123", id);
         verify(tourProviderRepository).existsByLicenseNumberIgnoreCaseAndIdNot("LICENSE-123", id);
-        verify(tourProviderRepository).save(any(TourProvider.class));
+        verify(tourProviderRepository).saveAndFlush(any(TourProvider.class));
     }
 
     @Test
@@ -197,19 +221,19 @@ class TourProviderServiceTest {
         provider.setPhone("111");
         UpdateTourProviderRequest request = updateRequest();
         request.setCode(" tp-existing ");
-        request.setTaxCode("  ");
+        request.setTaxCode(null);
         request.setLicenseNumber(null);
         request.setStatus(TourProviderStatus.TERMINATED);
         when(tourProviderRepository.findById(id)).thenReturn(Optional.of(provider));
-        when(tourProviderRepository.save(any(TourProvider.class)))
+        when(tourProviderRepository.saveAndFlush(any(TourProvider.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         TourProviderResponse response = tourProviderService.updateTourProvider(id, request);
 
         assertEquals("TP-EXISTING", response.getCode());
         assertEquals("Provider One", response.getName());
-        assertNull(response.getTaxCode());
-        assertNull(response.getLicenseNumber());
+        assertEquals("TAX-123", response.getTaxCode());
+        assertEquals("LICENSE-123", response.getLicenseNumber());
         assertEquals("Existing Contact", response.getContactPerson());
         assertEquals("existing@example.com", response.getEmail());
         assertEquals("111", response.getPhone());
@@ -233,7 +257,7 @@ class TourProviderServiceTest {
         when(tourProviderRepository.existsByCodeIgnoreCaseAndIdNot("TP-NEW", id)).thenReturn(false);
         when(tourProviderRepository.existsByTaxCodeIgnoreCaseAndIdNot("TAX-NEW", id)).thenReturn(false);
         when(tourProviderRepository.existsByLicenseNumberIgnoreCaseAndIdNot("LIC-NEW", id)).thenReturn(false);
-        when(tourProviderRepository.save(any(TourProvider.class)))
+        when(tourProviderRepository.saveAndFlush(any(TourProvider.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         TourProviderResponse response = tourProviderService.updateTourProvider(id, request);
@@ -249,6 +273,23 @@ class TourProviderServiceTest {
     }
 
     @Test
+    void updateTourProviderCanExplicitlyClearTaxCodeAndLicenseNumber() {
+        UUID id = UUID.randomUUID();
+        TourProvider provider = existingProvider(id);
+        UpdateTourProviderRequest request = updateRequest();
+        request.setTaxCode("   ");
+        request.setLicenseNumber("   ");
+        when(tourProviderRepository.findById(id)).thenReturn(Optional.of(provider));
+        when(tourProviderRepository.saveAndFlush(any(TourProvider.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        TourProviderResponse response = tourProviderService.updateTourProvider(id, request);
+
+        assertNull(response.getTaxCode());
+        assertNull(response.getLicenseNumber());
+    }
+
+    @Test
     void updateTourProviderRejectsDuplicateCode() {
         UUID id = UUID.randomUUID();
         UpdateTourProviderRequest request = updateRequest();
@@ -256,9 +297,9 @@ class TourProviderServiceTest {
         when(tourProviderRepository.findById(id)).thenReturn(Optional.of(existingProvider(id)));
         when(tourProviderRepository.existsByCodeIgnoreCaseAndIdNot("TP-OTHER", id)).thenReturn(true);
 
-        assertThrows(BusinessRuleException.class, () -> tourProviderService.updateTourProvider(id, request));
+        assertThrows(DuplicateTourProviderException.class, () -> tourProviderService.updateTourProvider(id, request));
 
-        verify(tourProviderRepository, never()).save(any(TourProvider.class));
+        verify(tourProviderRepository, never()).saveAndFlush(any(TourProvider.class));
     }
 
     @Test
@@ -269,7 +310,7 @@ class TourProviderServiceTest {
         assertThrows(ResourceNotFoundException.class,
                 () -> tourProviderService.updateTourProvider(id, updateRequest()));
 
-        verify(tourProviderRepository, never()).save(any(TourProvider.class));
+        verify(tourProviderRepository, never()).saveAndFlush(any(TourProvider.class));
     }
 
     @Test

@@ -23,7 +23,9 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "tour_providers", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_tour_providers_code", columnNames = "code")
+        @UniqueConstraint(name = "uk_tour_providers_code", columnNames = "code"),
+        @UniqueConstraint(name = "uk_tour_providers_tax_code", columnNames = "tax_code"),
+        @UniqueConstraint(name = "uk_tour_providers_license_number", columnNames = "license_number")
 })
 @Getter
 @Setter

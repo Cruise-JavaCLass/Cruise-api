@@ -118,6 +118,44 @@ class TourProviderControllerTest {
     }
 
     @Test
+    void updateTourProviderRejectsUnauthorizedRole() throws Exception {
+        mockMvc.perform(put("/api/v1/tour-providers/00000000-0000-0000-0000-000000000001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Provider One",
+                                  "emergencyHotline": "+84 123 456 789",
+                                  "portId": "VN-HALONG"
+                                }
+                                """))
+                .andExpect(status().isForbidden());
+
+        verify(tourProviderService, never()).updateTourProvider(any(), any());
+    }
+
+    @Test
+    void updateTourProviderReturnsOkForAuthorizedRole() throws Exception {
+        UUID id = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        when(tourProviderService.updateTourProvider(org.mockito.ArgumentMatchers.eq(id), any()))
+                .thenReturn(sampleProviderResponse());
+
+        mockMvc.perform(put("/api/v1/tour-providers/" + id)
+                        .header("X-Caller-Role", "SHORE_EXCURSION_MANAGER")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Provider Updated",
+                                  "emergencyHotline": "+84 123 456 789",
+                                  "portId": "VN-HALONG"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(tourProviderService).updateTourProvider(org.mockito.ArgumentMatchers.eq(id), any());
+    }
+
+    @Test
     void updateTourProviderReturnsBadRequestForInvalidEmail() throws Exception {
         mockMvc.perform(put("/api/v1/tour-providers/00000000-0000-0000-0000-000000000001")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -171,7 +209,7 @@ class TourProviderControllerTest {
 
     @Test
     void getTourProvidersFiltersByPortAndAppliesPagination() throws Exception {
-        PageRequest pageable = PageRequest.of(1, 2, Sort.by(Sort.Direction.DESC, "createdAt"));
+        PageRequest pageable = PageRequest.of(1, 2, Sort.by(Sort.Direction.DESC, "createdAt", "id"));
         TourProviderResponse response = sampleProviderResponse();
         when(tourProviderService.getTourProviders(pageable, "VN-HALONG"))
                 .thenReturn(new PageImpl<>(List.of(response), pageable, 5));
