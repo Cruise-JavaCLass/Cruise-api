@@ -260,6 +260,20 @@ class AuthControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/auth/verify-password with username and currentPassword alias returns 200 OK")
+    void testVerifyPasswordEndpoint_WithAliasFields() throws Exception {
+        when(authService.verifyPassword(any(VerifyPasswordRequest.class))).thenReturn(true);
+
+        String jsonBody = "{\"username\":\"admin\",\"currentPassword\":\"Admin@1234\"}";
+
+        mockMvc.perform(post("/api/auth/verify-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.valid").value(true));
+    }
+
+    @Test
     @DisplayName("POST /api/auth/token/pair returns 200 OK with new TokenPair for authenticated user")
     void testIssueTokenPairEndpoint() throws Exception {
         User user = User.builder().username("admin").build();

@@ -77,7 +77,15 @@ public class UserController {
                     .body(ApiResponse.error("Invalid or expired authentication token"));
         }
         String role = jwtService.extractRole(token);
-        if (role == null || (!role.equals("SYSTEM_ADMIN") && !role.equals("ADMIN"))) {
+        boolean isAdmin = role != null && (
+                role.equalsIgnoreCase("SYSTEM_ADMIN") ||
+                role.equalsIgnoreCase("ROLE_SYSTEM_ADMIN") ||
+                role.equalsIgnoreCase("ADMIN") ||
+                role.equalsIgnoreCase("ROLE_ADMIN") ||
+                role.equalsIgnoreCase("OPERATIONS_MANAGER") ||
+                role.equalsIgnoreCase("ROLE_OPERATIONS_MANAGER")
+        );
+        if (!isAdmin) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(ApiResponse.error("Access denied: Administrator privileges required"));
         }
