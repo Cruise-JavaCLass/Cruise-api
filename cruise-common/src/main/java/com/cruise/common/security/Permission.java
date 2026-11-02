@@ -1,0 +1,12 @@
+package com.cruise.common.security;
+
+/** Stable permission names shared by the service authorization policies. */
+public enum Permission {
+    USERS_MANAGE, SECURITY_AUDIT_READ, TERMINALS_MANAGE,
+    ITINERARY_READ, ITINERARY_MANAGE,
+    ACTIVITIES_READ, ACTIVITIES_MANAGE,
+    EXCURSIONS_READ, EXCURSIONS_MANAGE,
+    PASSENGERS_READ, PASSENGERS_MANAGE,
+    POS_READ, POS_OPERATE, FINANCE_MANAGE, REPORTS_READ,
+    OPERATIONS_MANAGE, CATALOG_READ
+}
