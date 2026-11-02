@@ -27,6 +27,7 @@ import java.util.concurrent.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@org.springframework.context.annotation.Import(com.cruise.activity.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @DisplayName("Activity Concurrency & Capacity Enforcement Integration Test (KAN-218)")
 class ActivityConcurrencyIntegrationTest {

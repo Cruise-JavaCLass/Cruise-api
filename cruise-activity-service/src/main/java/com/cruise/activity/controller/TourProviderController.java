@@ -82,7 +82,8 @@ public class TourProviderController {
     }
 
     private void verifyProviderManagementAuthorization(String callerRole) {
-        if (callerRole == null || !"SHORE_EXCURSION_MANAGER".equalsIgnoreCase(callerRole.trim())) {
+        if (callerRole == null || !java.util.Set.of("SHORE_EXCURSION_MANAGER", "OPERATIONS_MANAGER", "SYSTEM_ADMIN")
+                .contains(callerRole.trim().toUpperCase(java.util.Locale.ROOT))) {
             throw new AccessDeniedException("Yêu cầu quyền SHORE_EXCURSION_MANAGER");
         }
     }

@@ -30,6 +30,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@org.springframework.context.annotation.Import(com.cruise.pos.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @ActiveProfiles("test")
 @Transactional

@@ -31,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Chứng minh tất toán nguyên tử: khoá bi quan trên folio + unique idempotency key
  * đảm bảo không bao giờ có hai bản ghi tất toán cho cùng một cabin.
  */
+@org.springframework.context.annotation.Import(com.cruise.pos.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @ActiveProfiles("test")
 @DisplayName("Folio settlement concurrency")

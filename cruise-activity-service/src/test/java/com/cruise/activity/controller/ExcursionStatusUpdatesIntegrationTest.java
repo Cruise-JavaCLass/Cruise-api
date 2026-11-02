@@ -26,6 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Integration Test suite kiểm thử tích hợp toàn diện cho các thao tác cập nhật trạng thái tour bờ (KAN-191).
  * Kiểm thử thông qua MockMvc và verify trực tiếp trong database.
  */
+@org.springframework.context.annotation.Import(com.cruise.activity.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 @DisplayName("Excursion Status Updates Integration Tests (KAN-191)")

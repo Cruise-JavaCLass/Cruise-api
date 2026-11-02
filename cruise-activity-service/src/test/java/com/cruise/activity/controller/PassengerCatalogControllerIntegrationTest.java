@@ -28,6 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Integration Test cho Passenger Catalog Browsing & Realtime Capacity (KAN-213)
  */
+@org.springframework.context.annotation.Import(com.cruise.activity.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc(addFilters = false)
 @ActiveProfiles("test")

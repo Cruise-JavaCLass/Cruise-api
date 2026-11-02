@@ -52,7 +52,7 @@ public final class AuthorizationFilter extends OncePerRequestFilter {
         }
         String header = request.getHeader("Authorization");
         if (header == null || !header.matches("(?i)Bearer [^\\s,]{1,8192}")) {
-            reject(request, response, 401, "UNAUTHENTICATED", "A valid Bearer access token is required", null);
+            reject(request, response, 401, "UNAUTHENTICATED", "Missing or invalid Authorization header", null);
             return;
         }
         Optional<VerifiedCaller> result;
@@ -63,7 +63,7 @@ public final class AuthorizationFilter extends OncePerRequestFilter {
             return;
         }
         if (result.isEmpty()) {
-            reject(request, response, 401, "UNAUTHENTICATED", "Invalid, expired or revoked access token", null);
+            reject(request, response, 401, "UNAUTHENTICATED", "Invalid or expired session token", null);
             return;
         }
         VerifiedCaller caller = result.get();

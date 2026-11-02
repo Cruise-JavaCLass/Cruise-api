@@ -30,6 +30,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+@org.springframework.context.annotation.Import(com.cruise.activity.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 @DisplayName("Activity Check-in & Attendance Controller Integration Tests (KAN-223)")

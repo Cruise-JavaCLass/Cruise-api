@@ -16,3 +16,7 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: true
+
+# Explicit local-only key; production requires JWT_SECRET.
+jwt:
+  secret: ${JWT_SECRET:dev-only-cruise-jwt-key-do-not-deploy-2026}

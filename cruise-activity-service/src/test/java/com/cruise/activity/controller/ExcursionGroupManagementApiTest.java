@@ -45,6 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 10. GET /api/excursions/{id}/groups/export/csv - Xuất danh sách đoàn dạng CSV
  * 11. Edge cases, Validation và Business Rule Error Handling
  */
+@org.springframework.context.annotation.Import(com.cruise.activity.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional

@@ -47,7 +47,7 @@ public class OperationalNotificationController {
             @RequestHeader(value = "X-Caller-Role", required = false) String callerRole,
             @Valid @RequestBody OperationalBroadcastRequest request
     ) {
-        if (callerRole == null || !java.util.Set.of("CREW", "STAFF", "OFFICER", "ADMIN", "SYSTEM")
+        if (callerRole == null || !java.util.Set.of("CREW", "STAFF", "OFFICER", "ADMIN", "SYSTEM", "SYSTEM_ADMIN", "OPERATIONS_MANAGER")
                 .contains(callerRole.trim().toUpperCase())) {
             throw new AccessDeniedException("Chỉ nhân viên hoặc hệ thống mới có quyền phát thông báo vận hành");
         }

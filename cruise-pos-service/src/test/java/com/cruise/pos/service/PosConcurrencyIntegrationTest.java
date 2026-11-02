@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@org.springframework.context.annotation.Import(com.cruise.pos.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @ActiveProfiles("test")
 @DisplayName("POS Concurrency & Credit Limit Enforcement Integration Tests")

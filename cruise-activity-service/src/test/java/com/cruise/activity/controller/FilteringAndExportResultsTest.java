@@ -35,6 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 6. Escape dữ liệu đặc biệt trong file CSV (dấu phẩy, dấu nháy kép, ký tự xuống dòng).
  * 7. Kiểm tra Content-Type, Content-Disposition header của response CSV.
  */
+@org.springframework.context.annotation.Import(com.cruise.activity.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional

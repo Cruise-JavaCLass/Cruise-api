@@ -37,6 +37,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     @NonNull FilterChain filterChain) throws ServletException, IOException {
 
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
+        // Reuse live auth-service verification performed at the service boundary.
+        // Do not require another shared-secret configuration or lose revocation checks.
+        Object verified = request.getAttribute(com.cruise.common.security.VerifiedCaller.ATTRIBUTE);
+        if (verified instanceof com.cruise.common.security.VerifiedCaller caller) {
+            var principal = new AuthPrincipal(caller.username(), caller.role().name(), null);
+            var authentication = new UsernamePasswordAuthenticationToken(principal, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_" + caller.role().name())));
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            filterChain.doFilter(request, response);
+            return;
+        }
         if (header != null && header.startsWith(BEARER_PREFIX)) {
             String token = header.substring(BEARER_PREFIX.length()).trim();
             Optional<AuthPrincipal> principal = jwtVerificationService.verify(token);

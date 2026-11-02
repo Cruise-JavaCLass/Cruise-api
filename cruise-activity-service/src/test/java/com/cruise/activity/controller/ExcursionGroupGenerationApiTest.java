@@ -37,6 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 2. POST /api/excursions/{id}/groups/auto-generate
  * 3. GET /api/excursions/{id}/groups/export/csv
  */
+@org.springframework.context.annotation.Import(com.cruise.activity.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional

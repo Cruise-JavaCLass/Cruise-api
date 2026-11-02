@@ -29,6 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * End-to-End API Integration Tests for Tour Management (KAN-99)
  */
+@org.springframework.context.annotation.Import(com.cruise.itinerary.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional

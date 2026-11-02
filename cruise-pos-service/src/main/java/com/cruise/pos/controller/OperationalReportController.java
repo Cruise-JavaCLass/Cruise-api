@@ -31,7 +31,7 @@ import java.time.Instant;
 @RequestMapping("/api/pos/reports")
 @RequiredArgsConstructor
 @Slf4j
-@PreAuthorize("hasAnyRole('MANAGER', 'ADMIN', 'SYSTEM_ADMIN')")
+@PreAuthorize("hasAnyRole('FINANCE_FRONT_DESK', 'OPERATIONS_MANAGER', 'SYSTEM_ADMIN')")
 public class OperationalReportController {
 
     private final OperationalReportService reportService;
