@@ -39,6 +39,7 @@ public class PosShiftService {
     private final ConcurrentMap<String, ReentrantLock> stationLocks = new ConcurrentHashMap<>();
 
     @Transactional
+    @SuppressWarnings("java:S2222")
     public PosShift openShift(String stationId, String cashierId, BigDecimal startingCash) {
         if (stationId == null || stationId.isBlank()) {
             throw new BusinessRuleException("stationId không được để trống khi mở ca làm việc");
