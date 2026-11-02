@@ -83,10 +83,24 @@ public class TourProvider {
             createdAt = now;
         }
         updatedAt = now;
+        normalizeFields();
     }
 
     @PreUpdate
     protected void onUpdate() {
         updatedAt = Instant.now();
+        normalizeFields();
+    }
+
+    private void normalizeFields() {
+        if (code != null) {
+            code = code.trim().toUpperCase(java.util.Locale.ROOT);
+        }
+        if (taxCode != null) {
+            taxCode = taxCode.trim().toUpperCase(java.util.Locale.ROOT);
+        }
+        if (licenseNumber != null) {
+            licenseNumber = licenseNumber.trim().toUpperCase(java.util.Locale.ROOT);
+        }
     }
 }

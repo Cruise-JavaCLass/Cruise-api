@@ -1,11 +1,13 @@
 package com.cruise.activity.controller;
 
+import com.cruise.activity.dto.CreateTourProviderRequest;
 import com.cruise.activity.dto.TourProviderResponse;
 import com.cruise.activity.enums.TourProviderStatus;
 import com.cruise.activity.exception.DuplicateTourProviderException;
 import com.cruise.activity.exception.GlobalExceptionHandler;
 import com.cruise.activity.service.TourProviderService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -20,6 +22,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -80,6 +83,12 @@ class TourProviderControllerTest {
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"))
                 .andExpect(jsonPath("$.data.createdAt").isNotEmpty())
                 .andExpect(jsonPath("$.data.updatedAt").isNotEmpty());
+
+        ArgumentCaptor<CreateTourProviderRequest> captor =
+                ArgumentCaptor.forClass(CreateTourProviderRequest.class);
+        verify(tourProviderService).createTourProvider(captor.capture());
+        assertEquals("TP-TEST", captor.getValue().getCode());
+        assertEquals(TourProviderStatus.ACTIVE, captor.getValue().getStatus());
     }
 
     @Test
@@ -233,6 +242,7 @@ class TourProviderControllerTest {
     private String validCreatePayload() {
         return """
                 {
+                  "code": "TP-TEST",
                   "name": "Provider One",
                   "taxCode": "TAX-123",
                   "licenseNumber": "LIC-123",
@@ -240,7 +250,8 @@ class TourProviderControllerTest {
                   "email": "contact@example.com",
                   "phone": "+84123456789",
                   "emergencyHotline": "+84 123 456 789",
-                  "portId": "VN-HALONG"
+                  "portId": "VN-HALONG",
+                  "status": "ACTIVE"
                 }
                 """;
     }

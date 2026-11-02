@@ -31,8 +31,8 @@ public class TourProviderService {
                 ? generateCode()
                 : normalizeCode(request.getCode());
         ensureCodeAvailable(code);
-        String taxCode = trimToNull(request.getTaxCode());
-        String licenseNumber = trimToNull(request.getLicenseNumber());
+        String taxCode = normalizeTaxCode(request.getTaxCode());
+        String licenseNumber = normalizeLicenseNumber(request.getLicenseNumber());
         ensureTaxCodeAvailable(taxCode);
         ensureLicenseNumberAvailable(licenseNumber);
 
@@ -71,12 +71,12 @@ public class TourProviderService {
 
         provider.setName(request.getName().trim());
         if (request.getTaxCode() != null) {
-            String taxCode = trimToNull(request.getTaxCode());
+            String taxCode = normalizeTaxCode(request.getTaxCode());
             ensureTaxCodeAvailable(taxCode, id);
             provider.setTaxCode(taxCode);
         }
         if (request.getLicenseNumber() != null) {
-            String licenseNumber = trimToNull(request.getLicenseNumber());
+            String licenseNumber = normalizeLicenseNumber(request.getLicenseNumber());
             ensureLicenseNumberAvailable(licenseNumber, id);
             provider.setLicenseNumber(licenseNumber);
         }
@@ -166,13 +166,13 @@ public class TourProviderService {
         String msg = ex.getMessage();
         if (msg != null) {
             String lower = msg.toLowerCase(Locale.ROOT);
-            if (lower.contains("uk_tour_providers_code") || lower.contains("code")) {
+            if (lower.contains("uk_tour_providers_code")) {
                 throw new DuplicateTourProviderException("Mã nhà cung cấp đã tồn tại");
             }
-            if (lower.contains("uk_tour_providers_tax_code") || lower.contains("tax_code")) {
+            if (lower.contains("uk_tour_providers_tax_code")) {
                 throw new DuplicateTourProviderException("Mã số thuế đã được sử dụng");
             }
-            if (lower.contains("uk_tour_providers_license_number") || lower.contains("license_number")) {
+            if (lower.contains("uk_tour_providers_license_number")) {
                 throw new DuplicateTourProviderException("Số giấy phép đã được sử dụng");
             }
         }
@@ -187,6 +187,28 @@ public class TourProviderService {
         String normalized = code.trim().toUpperCase(Locale.ROOT);
         if (normalized.length() > 40) {
             throw new BusinessRuleException("Mã nhà cung cấp không được vượt quá 40 ký tự");
+        }
+        return normalized;
+    }
+
+    private String normalizeTaxCode(String taxCode) {
+        if (taxCode == null || taxCode.isBlank()) {
+            return null;
+        }
+        String normalized = taxCode.trim().toUpperCase(Locale.ROOT);
+        if (normalized.length() > 50) {
+            throw new BusinessRuleException("Mã số thuế không được vượt quá 50 ký tự");
+        }
+        return normalized;
+    }
+
+    private String normalizeLicenseNumber(String licenseNumber) {
+        if (licenseNumber == null || licenseNumber.isBlank()) {
+            return null;
+        }
+        String normalized = licenseNumber.trim().toUpperCase(Locale.ROOT);
+        if (normalized.length() > 100) {
+            throw new BusinessRuleException("Số giấy phép không được vượt quá 100 ký tự");
         }
         return normalized;
     }

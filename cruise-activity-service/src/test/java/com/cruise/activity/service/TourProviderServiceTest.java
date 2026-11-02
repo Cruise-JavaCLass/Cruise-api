@@ -66,8 +66,8 @@ class TourProviderServiceTest {
     void createTourProviderNormalizesProvidedValuesAndKeepsRequestedStatus() {
         CreateTourProviderRequest request = createRequest();
         request.setCode("  tp-custom  ");
-        request.setTaxCode(" TAX-123 ");
-        request.setLicenseNumber(" LIC-123 ");
+        request.setTaxCode(" tax-123 ");
+        request.setLicenseNumber(" lic-123 ");
         request.setContactPerson(" Contact ");
         request.setEmail(" contact@example.com ");
         request.setPhone(" 123456 ");
@@ -163,6 +163,48 @@ class TourProviderServiceTest {
                 () -> tourProviderService.createTourProvider(request)
         );
         assertTrue(exception.getMessage().contains("Mã nhà cung cấp đã tồn tại"));
+    }
+
+    @Test
+    void createTourProviderTranslatesTaxCodeViolationToDuplicateTourProviderException() {
+        CreateTourProviderRequest request = createRequest();
+        when(tourProviderRepository.existsByCodeIgnoreCase(anyString())).thenReturn(false);
+        when(tourProviderRepository.saveAndFlush(any(TourProvider.class)))
+                .thenThrow(new DataIntegrityViolationException("ERROR: duplicate key value violates unique constraint \"uk_tour_providers_tax_code\""));
+
+        DuplicateTourProviderException exception = assertThrows(
+                DuplicateTourProviderException.class,
+                () -> tourProviderService.createTourProvider(request)
+        );
+        assertEquals("Mã số thuế đã được sử dụng", exception.getMessage());
+    }
+
+    @Test
+    void createTourProviderTranslatesLicenseNumberViolationToDuplicateTourProviderException() {
+        CreateTourProviderRequest request = createRequest();
+        when(tourProviderRepository.existsByCodeIgnoreCase(anyString())).thenReturn(false);
+        when(tourProviderRepository.saveAndFlush(any(TourProvider.class)))
+                .thenThrow(new DataIntegrityViolationException("ERROR: duplicate key value violates unique constraint \"uk_tour_providers_license_number\""));
+
+        DuplicateTourProviderException exception = assertThrows(
+                DuplicateTourProviderException.class,
+                () -> tourProviderService.createTourProvider(request)
+        );
+        assertEquals("Số giấy phép đã được sử dụng", exception.getMessage());
+    }
+
+    @Test
+    void createTourProviderTranslatesGenericDataIntegrityViolation() {
+        CreateTourProviderRequest request = createRequest();
+        when(tourProviderRepository.existsByCodeIgnoreCase(anyString())).thenReturn(false);
+        when(tourProviderRepository.saveAndFlush(any(TourProvider.class)))
+                .thenThrow(new DataIntegrityViolationException("some unexpected sql error"));
+
+        DuplicateTourProviderException exception = assertThrows(
+                DuplicateTourProviderException.class,
+                () -> tourProviderService.createTourProvider(request)
+        );
+        assertEquals("Thông tin nhà cung cấp bị trùng lặp trong hệ thống", exception.getMessage());
     }
 
     @Test
