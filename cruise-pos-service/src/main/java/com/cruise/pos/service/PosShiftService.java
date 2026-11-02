@@ -15,6 +15,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionSynchronization;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -24,6 +26,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.locks.ReentrantLock;
 import org.springframework.dao.DataIntegrityViolationException;
 
 @Service
@@ -33,7 +36,7 @@ public class PosShiftService {
 
     private final PosShiftRepository shiftRepository;
     private final PosTransactionRepository transactionRepository;
-    private final ConcurrentMap<String, Object> stationLocks = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, ReentrantLock> stationLocks = new ConcurrentHashMap<>();
 
     @Transactional
     public PosShift openShift(String stationId, String cashierId, BigDecimal startingCash) {
@@ -46,31 +49,46 @@ public class PosShiftService {
             return existing.get();
         }
 
-        Object lock = stationLocks.computeIfAbsent(stationId, k -> new Object());
-        synchronized (lock) {
+        ReentrantLock lock = stationLocks.computeIfAbsent(stationId, k -> new ReentrantLock());
+        lock.lock();
+        boolean locked = true;
+
+        try {
             existing = shiftRepository.findByStationIdAndStatus(stationId, ShiftStatus.OPEN);
             if (existing.isPresent()) {
+                lock.unlock();
+                locked = false;
                 return existing.get();
             }
 
-            try {
-                PosShift shift = PosShift.builder()
-                        .stationId(stationId)
-                        .cashierId(cashierId)
-                        .startingCash(startingCash != null ? startingCash : BigDecimal.ZERO)
-                        .status(ShiftStatus.OPEN)
-                        .openedAt(Instant.now())
-                        .totalSales(BigDecimal.ZERO)
-                        .totalRefunds(BigDecimal.ZERO)
-                        .netRevenue(BigDecimal.ZERO)
-                        .transactionCount(0)
-                        .build();
+            PosShift shift = PosShift.builder()
+                    .stationId(stationId)
+                    .cashierId(cashierId)
+                    .startingCash(startingCash != null ? startingCash : BigDecimal.ZERO)
+                    .status(ShiftStatus.OPEN)
+                    .openedAt(Instant.now())
+                    .totalSales(BigDecimal.ZERO)
+                    .totalRefunds(BigDecimal.ZERO)
+                    .netRevenue(BigDecimal.ZERO)
+                    .transactionCount(0)
+                    .build();
 
-                return shiftRepository.save(shift);
-            } catch (DataIntegrityViolationException dive) {
-                log.warn("Concurrent shift creation detected for station {}: {}", stationId, dive.getMessage());
-                return shiftRepository.findByStationIdAndStatus(stationId, ShiftStatus.OPEN)
-                        .orElseThrow(() -> new BusinessRuleException("Không thể tạo ca làm việc do xung đột trạm POS: " + stationId));
+            shift = shiftRepository.save(shift);
+
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCompletion(int status) {
+                        lock.unlock();
+                    }
+                });
+                locked = false;
+            }
+
+            return shift;
+        } finally {
+            if (locked) {
+                lock.unlock();
             }
         }
     }
