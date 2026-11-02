@@ -50,8 +50,8 @@ public class PosShiftService {
         }
 
         ReentrantLock lock = stationLocks.computeIfAbsent(stationId, k -> new ReentrantLock());
-        lock.lock();
         boolean locked = true;
+        lock.lock();
 
         try {
             existing = shiftRepository.findByStationIdAndStatus(stationId, ShiftStatus.OPEN);
