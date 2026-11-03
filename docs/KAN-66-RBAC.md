@@ -76,6 +76,12 @@ versioned code. Token revocation storage remains the existing auth-service in-me
 implementation; a persistent/distributed revocation store is a separate deployment
 concern, and this change does not claim restart-safe or multi-instance revocation.
 
+The service-specific `RbacConfig` classes are opt-in imports only. Filter registration
+is defined once in `RbacFilterConfiguration`; itinerary, activity and POS also import
+the single `RemoteRbacConfiguration` for live identity verification. Auth supplies its
+local verifier. Keeping these imports in service configuration preserves MVC test
+slice isolation while removing the repeated remote-verifier/filter bean definitions.
+
 ## KAN-70 / KAN-71 / KAN-72: validation
 
 Validated locally on 2026-11-02 with Java 25 (compiler target 21), Maven 3.9.15,
@@ -107,3 +113,14 @@ reverse-proxy routing, TLS to the private auth service, and real browser session
 for representative staff roles. GitHub CI and staging were not run from this
 workspace. The three unrelated bugs listed after the RBAC story in the source
 document are excluded from this change.
+
+### Review follow-up — 2026-11-03
+
+The initial SonarCloud analysis reported 3.2% new-code duplication against a 3%
+limit, caused by repeated remote RBAC bean wiring in itinerary, activity and POS.
+That wiring now lives in the shared configurations described above. Configuration
+context tests verify both local-verifier and remote-verifier imports, single filter
+registration and role enforcement. The full backend `mvn -B verify` run and the
+common-module verification pass; the combined suite contains 1,955 passing tests,
+with zero failures, errors or skips. This is a follow-up review fix on KAN-66;
+the six original KAN-67–72 task commits remain intact.
