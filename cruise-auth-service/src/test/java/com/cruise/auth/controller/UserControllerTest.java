@@ -188,4 +188,40 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.message").value("User deleted successfully"));
         org.mockito.Mockito.verify(userService).deleteUserByUsername("testuser");
     }
+
+    @Test
+    @DisplayName("DELETE /api/auth/users/{username} returns 200 OK when caller has ROLE_ prefix or other admin roles")
+    void shouldDeleteUserSuccessfullyWithRolePrefixAndSystemAdmin() throws Exception {
+        when(jwtService.validateToken("role-admin-token")).thenReturn(true);
+        when(jwtService.extractRole("role-admin-token")).thenReturn("ROLE_ADMIN");
+
+        mockMvc.perform(delete("/api/auth/users/testuser1")
+                        .header("Authorization", "Bearer role-admin-token"))
+                .andExpect(status().isOk());
+
+        when(jwtService.validateToken("sysadmin-token")).thenReturn(true);
+        when(jwtService.extractRole("sysadmin-token")).thenReturn("SYSTEM_ADMIN");
+
+        mockMvc.perform(delete("/api/auth/users/testuser2")
+                        .header("Authorization", "Bearer sysadmin-token"))
+                .andExpect(status().isOk());
+
+        when(jwtService.validateToken("ops-token")).thenReturn(true);
+        when(jwtService.extractRole("ops-token")).thenReturn("OPERATIONS_MANAGER");
+
+        mockMvc.perform(delete("/api/auth/users/testuser3")
+                        .header("Authorization", "Bearer ops-token"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("DELETE /api/auth/users/{username} returns 403 Forbidden when extracted role is null")
+    void shouldReturnForbiddenWhenRoleIsNull() throws Exception {
+        when(jwtService.validateToken("null-role-token")).thenReturn(true);
+        when(jwtService.extractRole("null-role-token")).thenReturn(null);
+
+        mockMvc.perform(delete("/api/auth/users/testuser")
+                        .header("Authorization", "Bearer null-role-token"))
+                .andExpect(status().isForbidden());
+    }
 }
