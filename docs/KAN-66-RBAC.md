@@ -124,3 +124,8 @@ registration and role enforcement. The full backend `mvn -B verify` run and the
 common-module verification pass; the combined suite contains 1,955 passing tests,
 with zero failures, errors or skips. This is a follow-up review fix on KAN-66;
 the six original KAN-67–72 task commits remain intact.
+
+After upstream PRs #142 and #143 were merged into `main`, the branch was merged
+with `a8cdc62` and the `UserController` conflict was resolved by retaining upstream
+role normalization together with KAN-66 request validation. The final full
+`mvn -B verify` run passes all six modules: 1,961 tests, zero failures/errors/skips.

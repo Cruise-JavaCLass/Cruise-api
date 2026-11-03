@@ -77,7 +77,7 @@ public class UserController {
                     .body(ApiResponse.error("Invalid or expired authentication token"));
         }
         String role = jwtService.extractRole(token);
-        if (role == null || (!role.equals("SYSTEM_ADMIN") && !role.equals("ADMIN"))) {
+        if (!isAdministrator(role)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(ApiResponse.error("Access denied: Administrator privileges required"));
         }
@@ -103,5 +103,17 @@ public class UserController {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
         return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage()));
+    }
+
+    private static final java.util.Set<String> ADMIN_ROLES = java.util.Set.of(
+            "SYSTEM_ADMIN", "ADMIN", "OPERATIONS_MANAGER"
+    );
+
+    private boolean isAdministrator(String role) {
+        if (role == null) {
+            return false;
+        }
+        String normalized = role.startsWith("ROLE_") ? role.substring(5) : role;
+        return ADMIN_ROLES.contains(normalized.toUpperCase(java.util.Locale.ROOT));
     }
 }
