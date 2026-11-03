@@ -84,6 +84,8 @@ public class UserService {
                 com.cruise.common.security.VerifiedCaller.ATTRIBUTE,
                 org.springframework.web.context.request.RequestAttributes.SCOPE_REQUEST);
         Long actor = caller instanceof com.cruise.common.security.VerifiedCaller verified ? verified.userId() : null;
-        audit.save(new com.cruise.auth.entity.IdentityAuditEvent(action, actor, user.getUsername(), user.getRole().name()));
+        Role role = user.getRole();
+        String targetRole = role == null ? "UNKNOWN" : role.name();
+        audit.save(new com.cruise.auth.entity.IdentityAuditEvent(action, actor, user.getUsername(), targetRole));
     }
 }
