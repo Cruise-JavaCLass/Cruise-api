@@ -30,7 +30,7 @@ public class UserController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<com.cruise.auth.dto.UserResponseDto>> createUser(@RequestBody com.cruise.auth.dto.UserDto userDto) {
+    public ResponseEntity<ApiResponse<com.cruise.auth.dto.UserResponseDto>> createUser(@jakarta.validation.Valid @RequestBody com.cruise.auth.dto.UserDto userDto) {
         try {
             User user = new User();
             user.setUsername(userDto.getUsername());

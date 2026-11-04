@@ -347,17 +347,17 @@ class InvalidCredentialsAndExpiredTokensIntegrationTest {
         }
 
         @Test
-        @DisplayName("1.18. POST /api/auth/change-password trả về 403 khi tài khoản bị khóa/vô hiệu hóa")
-        void testChangePassword_InactiveAccount_Returns403() throws Exception {
+        @DisplayName("1.18. POST /api/auth/change-password trả về 401 khi tài khoản bị khóa/vô hiệu hóa")
+        void testChangePassword_InactiveAccount_Returns401() throws Exception {
             String tokenForInactiveUser = jwtService.generateAccessToken(inactiveUser);
 
             mockMvc.perform(post("/api/auth/change-password")
                             .header("Authorization", "Bearer " + tokenForInactiveUser)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(changePasswordJson(VALID_RAW_PASSWORD, "NewValidPass999#", "NewValidPass999#")))
-                    .andExpect(status().isForbidden())
+                    .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.success").value(false))
-                    .andExpect(jsonPath("$.message").value("Account is inactive or disabled"));
+                    .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
         }
     }
 

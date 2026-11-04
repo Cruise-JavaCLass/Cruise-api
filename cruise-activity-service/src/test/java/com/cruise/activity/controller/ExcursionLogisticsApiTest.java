@@ -36,6 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 1. POST /api/excursions/{id}/vehicles & GET & PATCH & DELETE
  * 2. POST /api/excursions/{id}/guides & GET & PATCH & DELETE
  */
+@org.springframework.context.annotation.Import(com.cruise.activity.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional

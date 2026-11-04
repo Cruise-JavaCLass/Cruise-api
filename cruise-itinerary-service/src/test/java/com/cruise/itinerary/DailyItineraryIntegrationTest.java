@@ -35,6 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Integration Tests for Daily Itinerary Updates and Change History (KAN-128, KAN-127)
  */
+@org.springframework.context.annotation.Import(com.cruise.itinerary.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional

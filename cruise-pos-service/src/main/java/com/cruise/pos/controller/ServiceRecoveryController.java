@@ -29,7 +29,7 @@ public class ServiceRecoveryController {
     private final ServiceRecoveryService serviceRecoveryService;
 
     @PostMapping("/cases")
-    @PreAuthorize("hasAnyRole('STAFF', 'MANAGER', 'ADMIN', 'SYSTEM_ADMIN')")
+    @PreAuthorize("hasAnyRole('FINANCE_FRONT_DESK', 'OPERATIONS_MANAGER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<ServiceRecoveryCaseDto>> createCase(
             @Valid @RequestBody CreateServiceRecoveryCaseRequest request,
             Principal principal) {
@@ -40,7 +40,7 @@ public class ServiceRecoveryController {
     }
 
     @GetMapping("/cases")
-    @PreAuthorize("hasAnyRole('STAFF', 'MANAGER', 'ADMIN', 'SYSTEM_ADMIN')")
+    @PreAuthorize("hasAnyRole('FINANCE_FRONT_DESK', 'OPERATIONS_MANAGER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<Page<ServiceRecoveryCaseDto>>> searchCases(
             @RequestParam(required = false) ServiceRecoveryCaseStatus status,
             @RequestParam(required = false) ServiceRecoverySeverity severity,
@@ -51,14 +51,14 @@ public class ServiceRecoveryController {
     }
 
     @GetMapping("/cases/{caseId}")
-    @PreAuthorize("hasAnyRole('STAFF', 'MANAGER', 'ADMIN', 'SYSTEM_ADMIN')")
+    @PreAuthorize("hasAnyRole('FINANCE_FRONT_DESK', 'OPERATIONS_MANAGER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<ServiceRecoveryCaseDto>> getCase(@PathVariable Long caseId) {
         ServiceRecoveryCaseDto dto = serviceRecoveryService.getCase(caseId);
         return ResponseEntity.ok(ApiResponse.ok(dto));
     }
 
     @PostMapping("/cases/{caseId}/escalate")
-    @PreAuthorize("hasAnyRole('STAFF', 'MANAGER', 'ADMIN', 'SYSTEM_ADMIN')")
+    @PreAuthorize("hasAnyRole('FINANCE_FRONT_DESK', 'OPERATIONS_MANAGER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<ServiceRecoveryCaseDto>> escalateCase(
             @PathVariable Long caseId,
             @Valid @RequestBody EscalateCaseRequest request,
@@ -69,7 +69,7 @@ public class ServiceRecoveryController {
     }
 
     @PostMapping("/cases/{caseId}/resolve")
-    @PreAuthorize("hasAnyRole('STAFF', 'MANAGER', 'ADMIN', 'SYSTEM_ADMIN')")
+    @PreAuthorize("hasAnyRole('FINANCE_FRONT_DESK', 'OPERATIONS_MANAGER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<ServiceRecoveryCaseDto>> resolveCase(
             @PathVariable Long caseId,
             @Valid @RequestBody ResolveCaseRequest request,
@@ -80,7 +80,7 @@ public class ServiceRecoveryController {
     }
 
     @PostMapping("/cases/{caseId}/vouchers")
-    @PreAuthorize("hasAnyRole('STAFF', 'MANAGER', 'ADMIN', 'SYSTEM_ADMIN')")
+    @PreAuthorize("hasAnyRole('FINANCE_FRONT_DESK', 'OPERATIONS_MANAGER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<ServiceRecoveryObcVoucherDto>> issueVoucher(
             @PathVariable Long caseId,
             @Valid @RequestBody IssueObcVoucherRequest request,
@@ -92,7 +92,7 @@ public class ServiceRecoveryController {
     }
 
     @GetMapping("/cases/{caseId}/vouchers")
-    @PreAuthorize("hasAnyRole('STAFF', 'MANAGER', 'ADMIN', 'SYSTEM_ADMIN')")
+    @PreAuthorize("hasAnyRole('FINANCE_FRONT_DESK', 'OPERATIONS_MANAGER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<List<ServiceRecoveryObcVoucherDto>>> getVouchersForCase(@PathVariable Long caseId) {
         List<ServiceRecoveryObcVoucherDto> list = serviceRecoveryService.getVouchersForCase(caseId);
         return ResponseEntity.ok(ApiResponse.ok(list));
@@ -108,7 +108,7 @@ public class ServiceRecoveryController {
     }
 
     @GetMapping("/passenger/{passengerId}/vouchers")
-    @PreAuthorize("hasAnyRole('STAFF', 'MANAGER', 'ADMIN', 'SYSTEM_ADMIN') or #passengerId.toString() == authentication.name")
+    @PreAuthorize("hasAnyRole('FINANCE_FRONT_DESK', 'OPERATIONS_MANAGER', 'SYSTEM_ADMIN') or #passengerId.toString() == authentication.name")
     public ResponseEntity<ApiResponse<List<ServiceRecoveryObcVoucherDto>>> getPassengerVouchers(@PathVariable Long passengerId) {
         List<ServiceRecoveryObcVoucherDto> list = serviceRecoveryService.getPassengerVouchers(passengerId);
         return ResponseEntity.ok(ApiResponse.ok(list));

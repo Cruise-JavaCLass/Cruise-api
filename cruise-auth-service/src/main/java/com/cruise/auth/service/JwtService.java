@@ -48,7 +48,7 @@ public class JwtService {
 
     @org.springframework.beans.factory.annotation.Autowired
     public JwtService(
-            @Value("${jwt.secret:cruise-secret-key-super-secure-token-2026-auth-jwt-system}") String secretKey,
+            @Value("${jwt.secret}") String secretKey,
             @Value("${jwt.access-token.expiration-millis:${jwt.expiration-millis:86400000}}") long accessExpirationMillis,
             @Value("${jwt.refresh-token.expiration-millis:604800000}") long refreshExpirationMillis,
             @Value("${jwt.issuer:cruise-auth-service}") String issuer) {

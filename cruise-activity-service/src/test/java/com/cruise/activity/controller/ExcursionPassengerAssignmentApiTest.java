@@ -36,6 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 4. PATCH /api/excursions/{id}/passengers/bulk-group - Gán đoàn & xe hàng loạt
  * 5. DELETE /api/excursions/{id}/passengers/{passengerId} - Xóa hành khách khỏi tour bờ
  */
+@org.springframework.context.annotation.Import(com.cruise.activity.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional

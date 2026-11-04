@@ -30,6 +30,7 @@ public class OperationalNotificationBroadcaster {
                         || callerRole.equalsIgnoreCase("STAFF")
                         || callerRole.equalsIgnoreCase("OFFICER")
                         || callerRole.equalsIgnoreCase("ADMIN")
+                        || isCanonicalCrew(callerRole)
                 );
             }
             if (event.getScope() == NotificationScope.PASSENGER_ONLY) {
@@ -44,6 +45,14 @@ public class OperationalNotificationBroadcaster {
                 return event.getTargetZone() == null || event.getTargetZone().equalsIgnoreCase(zone);
             }
             return true;
+        }
+
+        private static boolean isCanonicalCrew(String role) {
+            try {
+                return com.cruise.common.enums.Role.valueOf(role) != com.cruise.common.enums.Role.PASSENGER;
+            } catch (IllegalArgumentException ex) {
+                return false;
+            }
         }
     }
 

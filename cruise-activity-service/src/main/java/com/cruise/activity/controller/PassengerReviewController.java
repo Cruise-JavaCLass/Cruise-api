@@ -78,7 +78,7 @@ public class PassengerReviewController {
     }
 
     private void verifyAdminAuthorization(String callerRole) {
-        if (callerRole == null || !java.util.Set.of("SYSTEM_ADMIN", "ADMIN", "STAFF")
+        if (callerRole == null || !java.util.Set.of("SYSTEM_ADMIN", "ADMIN", "STAFF", "OPERATIONS_MANAGER")
                 .contains(callerRole.trim().toUpperCase())) {
             throw new AccessDeniedException("Yêu cầu quyền SYSTEM_ADMIN để truy cập quản trị đánh giá");
         }

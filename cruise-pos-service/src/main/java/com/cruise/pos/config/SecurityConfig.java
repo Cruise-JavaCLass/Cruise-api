@@ -35,6 +35,9 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/pos/health").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.HEAD, "/api/pos/health").permitAll()
                         .requestMatchers("/api/pos/auth/manifest/**").hasAnyRole("POS_STAFF", "OPERATIONS_MANAGER", "SYSTEM_ADMIN")
                         .requestMatchers("/api/admin/voyage-lifecycle/**").hasAnyRole("OPERATIONS_MANAGER", "SYSTEM_ADMIN", "ADMIN")
                         .requestMatchers("/api/admin/voyages/**").hasAnyRole("OPERATIONS_MANAGER", "SYSTEM_ADMIN", "EXECUTIVE_CONTROLLER", "EXECUTIVE_DIRECTOR", "ADMIN", "MANAGER")

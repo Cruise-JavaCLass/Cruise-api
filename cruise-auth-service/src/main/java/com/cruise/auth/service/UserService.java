@@ -19,12 +19,20 @@ public class UserService {
     private final UserRepository userRepository;
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final com.cruise.auth.repository.IdentityAuditRepository audit;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public UserService(UserRepository userRepository, org.springframework.security.crypto.password.PasswordEncoder passwordEncoder, @org.springframework.lang.Nullable JwtService jwtService) {
+    public UserService(UserRepository userRepository, org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
+                       JwtService jwtService, com.cruise.auth.repository.IdentityAuditRepository audit) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.audit = audit;
+    }
+
+    public UserService(UserRepository userRepository, org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
+                       JwtService jwtService) {
+        this(userRepository, passwordEncoder, jwtService, null);
     }
 
     public UserService(UserRepository userRepository) {
@@ -38,7 +46,9 @@ public class UserService {
         if (user.getPassword() != null && !user.getPassword().isBlank() && !user.getPassword().startsWith("$2a$")) {
             user.setPassword(passwordEncoder.encode(user.getPassword()));
         }
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        recordIdentityChange("USER_CREATED", saved);
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -62,6 +72,20 @@ public class UserService {
                 jwtService.revokeAllUserTokens(username);
             }
             userRepository.delete(user);
+            recordIdentityChange("USER_DELETED", user);
         });
+    }
+
+    private void recordIdentityChange(String action, User user) {
+        // Compatibility constructors are used by isolated unit tests; production injects the repository.
+        if (audit == null) return;
+        var attributes = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+        Object caller = attributes == null ? null : attributes.getAttribute(
+                com.cruise.common.security.VerifiedCaller.ATTRIBUTE,
+                org.springframework.web.context.request.RequestAttributes.SCOPE_REQUEST);
+        Long actor = caller instanceof com.cruise.common.security.VerifiedCaller verified ? verified.userId() : null;
+        Role role = user.getRole();
+        String targetRole = role == null ? "UNKNOWN" : role.name();
+        audit.save(new com.cruise.auth.entity.IdentityAuditEvent(action, actor, user.getUsername(), targetRole));
     }
 }

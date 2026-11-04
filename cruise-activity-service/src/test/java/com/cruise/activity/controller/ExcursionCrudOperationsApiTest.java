@@ -34,6 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 6. PATCH /api/excursions/{id}/status & GET allowed-transitions - Quản lý trạng thái và danh sách trạng thái cho phép.
  * 7. DELETE /api/excursions/{id} - Xóa mềm tour bờ (active=false, status=CANCELLED, 404).
  */
+@org.springframework.context.annotation.Import(com.cruise.activity.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional

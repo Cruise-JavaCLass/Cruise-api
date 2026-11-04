@@ -42,6 +42,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.reset;
 
+@org.springframework.context.annotation.Import(com.cruise.pos.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @ActiveProfiles("test")
 @Transactional

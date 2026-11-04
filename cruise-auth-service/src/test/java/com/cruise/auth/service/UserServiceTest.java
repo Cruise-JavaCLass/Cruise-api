@@ -1,6 +1,8 @@
 package com.cruise.auth.service;
 
 import com.cruise.auth.entity.User;
+import com.cruise.auth.entity.IdentityAuditEvent;
+import com.cruise.auth.repository.IdentityAuditRepository;
 import com.cruise.auth.repository.UserRepository;
 import com.cruise.common.enums.Role;
 import org.junit.jupiter.api.BeforeEach;
@@ -8,6 +10,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -28,6 +31,9 @@ class UserServiceTest {
 
     @Mock
     private JwtService jwtService;
+
+    @Mock
+    private IdentityAuditRepository audit;
 
     @InjectMocks
     private UserService userService;
@@ -61,6 +67,41 @@ class UserServiceTest {
 
         verify(userRepository, times(1)).existsByUsername("thao.tran");
         verify(userRepository, times(1)).save(sampleUser);
+        verify(audit).save(argThat(event -> "USER_CREATED".equals(event.getAction())
+                && "PASSENGER".equals(event.getTargetRole())));
+    }
+
+    @Test
+    @DisplayName("Creating a user with no role records UNKNOWN in the audit without throwing")
+    void shouldAuditUnknownRoleWhenCreatingUserWithoutRole() {
+        sampleUser.setRole(null);
+        when(userRepository.save(sampleUser)).thenReturn(sampleUser);
+
+        User registered = userService.registerUser(sampleUser);
+
+        assertThat(registered).isSameAs(sampleUser);
+        var event = ArgumentCaptor.forClass(IdentityAuditEvent.class);
+        verify(audit).save(event.capture());
+        assertThat(event.getValue().getAction()).isEqualTo("USER_CREATED");
+        assertThat(event.getValue().getTargetUsername()).isEqualTo("thao.tran");
+        assertThat(event.getValue().getTargetRole()).isEqualTo("UNKNOWN");
+    }
+
+    @Test
+    @DisplayName("Deleting a user with no role still revokes tokens and records UNKNOWN")
+    void shouldAuditUnknownRoleWhenDeletingUserWithoutRole() {
+        sampleUser.setRole(null);
+        when(userRepository.findByUsername("thao.tran")).thenReturn(Optional.of(sampleUser));
+
+        userService.deleteUserByUsername("thao.tran");
+
+        verify(jwtService).revokeAllUserTokens("thao.tran");
+        verify(userRepository).delete(sampleUser);
+        var event = ArgumentCaptor.forClass(IdentityAuditEvent.class);
+        verify(audit).save(event.capture());
+        assertThat(event.getValue().getAction()).isEqualTo("USER_DELETED");
+        assertThat(event.getValue().getTargetUsername()).isEqualTo("thao.tran");
+        assertThat(event.getValue().getTargetRole()).isEqualTo("UNKNOWN");
     }
 
     @Test

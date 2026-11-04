@@ -14,3 +14,6 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: false
+
+jwt:
+  secret: cruise-secret-key-super-secure-token-2026-auth-jwt-system

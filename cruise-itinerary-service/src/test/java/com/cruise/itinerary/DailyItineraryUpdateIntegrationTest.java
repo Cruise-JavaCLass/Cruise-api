@@ -34,6 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * End-to-End API Integration Tests for Itinerary Updates and Audit Notification Triggers (KAN-128)
  */
+@org.springframework.context.annotation.Import(com.cruise.itinerary.support.AuthenticatedApiTestConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
