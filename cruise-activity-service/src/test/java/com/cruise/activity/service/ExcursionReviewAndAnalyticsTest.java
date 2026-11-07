@@ -142,7 +142,7 @@ class ExcursionReviewAndAnalyticsTest {
                 .build();
         saved.setId(99L);
 
-        when(reviewWriter.writeReview(any(ExcursionReview.class))).thenReturn(saved);
+        when(reviewWriter.writeReview(any())).thenReturn(saved);
 
         ExcursionReviewResponse response = reviewService.submitReview(1L, req, "IDEM-1");
 
@@ -185,7 +185,7 @@ class ExcursionReviewAndAnalyticsTest {
                 .build();
         saved.setId(100L);
 
-        when(reviewWriter.writeReview(any(ExcursionReview.class))).thenReturn(saved);
+        when(reviewWriter.writeReview(any())).thenReturn(saved);
 
         ExcursionReviewResponse response = reviewService.submitReview(1L, req, null);
 
