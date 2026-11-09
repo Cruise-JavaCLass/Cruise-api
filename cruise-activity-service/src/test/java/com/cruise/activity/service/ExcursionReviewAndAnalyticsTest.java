@@ -50,6 +50,8 @@ class ExcursionReviewAndAnalyticsTest {
 
     @Mock
     private ExcursionReviewRepository reviewRepository;
+    @Mock
+    private ExcursionReviewItemWriter reviewWriter;
 
     @Mock
     private ShoreExcursionRepository excursionRepository;
@@ -139,14 +141,14 @@ class ExcursionReviewAndAnalyticsTest {
                 .build();
         saved.setId(99L);
 
-        when(reviewRepository.save(any(ExcursionReview.class))).thenReturn(saved);
+        when(reviewWriter.writeItem(any(ExcursionReview.class))).thenReturn(saved);
 
         ExcursionReviewResponse response = reviewService.submitReview(1L, req, "IDEM-1");
 
         assertThat(response).isNotNull();
         assertThat(response.ratingOverall()).isEqualTo(5);
         assertThat(response.isFlagged()).isFalse();
-        verify(reviewRepository, times(1)).save(any(ExcursionReview.class));
+        verify(reviewWriter, times(1)).writeItem(any(ExcursionReview.class));
     }
 
     @Test
@@ -182,7 +184,7 @@ class ExcursionReviewAndAnalyticsTest {
                 .build();
         saved.setId(100L);
 
-        when(reviewRepository.save(any(ExcursionReview.class))).thenReturn(saved);
+        when(reviewWriter.writeItem(any(ExcursionReview.class))).thenReturn(saved);
 
         ExcursionReviewResponse response = reviewService.submitReview(1L, req, null);
 
@@ -237,7 +239,7 @@ class ExcursionReviewAndAnalyticsTest {
         when(excursionRepository.findById(1L)).thenReturn(Optional.of(mockExcursion));
         when(passengerRepository.findByExcursionIdAndActiveTrue(1L)).thenReturn(List.of(attendedPassenger));
         when(reviewRepository.existsByExcursionIdAndPassengerId(1L, 201L)).thenReturn(false);
-        when(reviewRepository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate key"));
+        when(reviewWriter.writeItem(any())).thenThrow(new DataIntegrityViolationException("duplicate key"));
 
         ExcursionReview existing = ExcursionReview.builder()
                 .excursionId(1L)
