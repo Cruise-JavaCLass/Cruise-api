@@ -36,6 +36,7 @@ public class ExcursionReviewService {
     );
 
     private final ExcursionReviewRepository reviewRepository;
+    private final ExcursionReviewWriter reviewWriter;
     private final ShoreExcursionRepository excursionRepository;
     private final ExcursionPassengerRepository passengerRepository;
 
@@ -84,7 +85,7 @@ public class ExcursionReviewService {
                 .build();
 
         try {
-            ExcursionReview saved = reviewRepository.save(review);
+            ExcursionReview saved = reviewWriter.saveReview(review);
             log.info("Excursion review submitted: excursionId={}, passengerId={}, overallRating={}, flagged={}",
                     excursionId, request.passengerId(), request.ratingOverall(), isNegativeOrSafetyConcern);
             return mapToResponse(saved);

@@ -16,10 +16,6 @@ import java.util.Optional;
 @Repository
 public interface ExcursionReviewRepository extends JpaRepository<ExcursionReview, Long> {
 
-    @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    <S extends ExcursionReview> S save(S entity);
-
     Optional<ExcursionReview> findByExcursionIdAndPassengerId(Long excursionId, Long passengerId);
 
     boolean existsByExcursionIdAndPassengerId(Long excursionId, Long passengerId);

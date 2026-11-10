@@ -52,6 +52,9 @@ class ExcursionReviewAndAnalyticsTest {
     private ExcursionReviewRepository reviewRepository;
 
     @Mock
+    private ExcursionReviewWriter reviewWriter;
+
+    @Mock
     private ShoreExcursionRepository excursionRepository;
 
     @Mock
@@ -76,6 +79,7 @@ class ExcursionReviewAndAnalyticsTest {
     @BeforeEach
     void setUp() {
         fleetAggregator = new FleetOccupancyAggregator(excursionRepository, vehicleRepository);
+        reviewService = new ExcursionReviewService(reviewRepository, reviewWriter, excursionRepository, passengerRepository);
         opsAnalyticsService = new ExcursionOpsAnalyticsService(excursionRepository, reviewRepository, guideRepository);
 
         mockExcursion = ShoreExcursion.builder()
@@ -139,14 +143,14 @@ class ExcursionReviewAndAnalyticsTest {
                 .build();
         saved.setId(99L);
 
-        when(reviewRepository.save(any(ExcursionReview.class))).thenReturn(saved);
+        when(reviewWriter.saveReview(any(ExcursionReview.class))).thenReturn(saved);
 
         ExcursionReviewResponse response = reviewService.submitReview(1L, req, "IDEM-1");
 
         assertThat(response).isNotNull();
         assertThat(response.ratingOverall()).isEqualTo(5);
         assertThat(response.isFlagged()).isFalse();
-        verify(reviewRepository, times(1)).save(any(ExcursionReview.class));
+        verify(reviewWriter, times(1)).saveReview(any(ExcursionReview.class));
     }
 
     @Test
@@ -161,7 +165,7 @@ class ExcursionReviewAndAnalyticsTest {
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("ATTENDED");
 
-        verify(reviewRepository, never()).save(any());
+        verify(reviewWriter, never()).saveReview(any());
     }
 
     @Test
@@ -182,7 +186,7 @@ class ExcursionReviewAndAnalyticsTest {
                 .build();
         saved.setId(100L);
 
-        when(reviewRepository.save(any(ExcursionReview.class))).thenReturn(saved);
+        when(reviewWriter.saveReview(any(ExcursionReview.class))).thenReturn(saved);
 
         ExcursionReviewResponse response = reviewService.submitReview(1L, req, null);
 
@@ -208,7 +212,7 @@ class ExcursionReviewAndAnalyticsTest {
         ExcursionReviewResponse response = reviewService.submitReview(1L, req, "KEY-123");
 
         assertThat(response.id()).isEqualTo(50L);
-        verify(reviewRepository, never()).save(any());
+        verify(reviewWriter, never()).saveReview(any());
     }
 
     @Test
@@ -237,7 +241,7 @@ class ExcursionReviewAndAnalyticsTest {
         when(excursionRepository.findById(1L)).thenReturn(Optional.of(mockExcursion));
         when(passengerRepository.findByExcursionIdAndActiveTrue(1L)).thenReturn(List.of(attendedPassenger));
         when(reviewRepository.existsByExcursionIdAndPassengerId(1L, 201L)).thenReturn(false);
-        when(reviewRepository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate key"));
+        when(reviewWriter.saveReview(any())).thenThrow(new DataIntegrityViolationException("duplicate key"));
 
         ExcursionReview existing = ExcursionReview.builder()
                 .excursionId(1L)
