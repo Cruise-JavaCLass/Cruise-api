@@ -47,7 +47,7 @@ jobs:
           CI: true
 
       - name: SonarCloud Code Analysis & Quality Gate Check
-        if: env.SONAR_TOKEN != ''
+        if: ${{ env.SONAR_TOKEN != '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >
