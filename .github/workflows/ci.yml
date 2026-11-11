@@ -28,7 +28,7 @@ jobs:
         uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
-          java-version: '25'
+          java-version: '21'
           cache: 'maven'
 
       - name: Cache SonarCloud Packages
@@ -47,7 +47,7 @@ jobs:
           CI: true
 
       - name: SonarCloud Code Analysis & Quality Gate Check
-        if: env.SONAR_TOKEN != ''
+        if: ${{ env.SONAR_TOKEN != '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >
