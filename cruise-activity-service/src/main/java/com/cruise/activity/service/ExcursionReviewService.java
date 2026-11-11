@@ -38,6 +38,7 @@ public class ExcursionReviewService {
     private final ExcursionReviewRepository reviewRepository;
     private final ShoreExcursionRepository excursionRepository;
     private final ExcursionPassengerRepository passengerRepository;
+    private final ExcursionReviewWriter reviewWriter;
 
     @Transactional
     public ExcursionReviewResponse submitReview(Long excursionId, ExcursionReviewRequest request, String idempotencyKey) {
@@ -84,7 +85,7 @@ public class ExcursionReviewService {
                 .build();
 
         try {
-            ExcursionReview saved = reviewRepository.save(review);
+            ExcursionReview saved = reviewWriter.writeItem(review);
             log.info("Excursion review submitted: excursionId={}, passengerId={}, overallRating={}, flagged={}",
                     excursionId, request.passengerId(), request.ratingOverall(), isNegativeOrSafetyConcern);
             return mapToResponse(saved);
