@@ -18,6 +18,13 @@ public class CruiseAreaPolicyController {
 
     private final CruiseAreaPolicyService areaPolicyService;
 
+    @GetMapping
+    public ApiResponse<List<SystemCancellationPolicyDto>> getMaritimePolicies(
+            @RequestParam(required = false) String serviceType
+    ) {
+        return ApiResponse.ok("Lấy danh sách chính sách hàng hải thành công", areaPolicyService.getCancellationPolicies(serviceType));
+    }
+
     @GetMapping("/ships/{shipId}/deck-zones")
     public ApiResponse<List<ShipDeckZoneDto>> getDeckZones(@PathVariable Long shipId) {
         return ApiResponse.ok("Lấy danh sách khu vực boong tàu thành công", areaPolicyService.getDeckZonesByShip(shipId));

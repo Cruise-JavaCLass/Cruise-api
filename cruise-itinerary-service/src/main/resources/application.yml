@@ -27,3 +27,8 @@ spring:
       hibernate:
         format_sql: true
     open-in-view: false
+
+app:
+  seeder:
+    enabled: ${SEEDER_ENABLED:true}
+
