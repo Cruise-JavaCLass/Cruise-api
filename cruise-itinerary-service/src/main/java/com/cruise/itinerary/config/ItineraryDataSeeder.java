@@ -53,7 +53,9 @@ public class ItineraryDataSeeder implements ApplicationRunner {
     }
 
     private CruiseShip seedShips() {
-        return shipRepository.findByCode("SHIP-001").orElseGet(() -> {
+        return shipRepository.findByCode("SHIP-001")
+                .or(() -> shipRepository.findByName("Grand Pearl Voyager"))
+                .orElseGet(() -> {
             log.info("Seeding default cruise ship SHIP-001...");
             CruiseShip ship = CruiseShip.builder()
                     .name("Grand Pearl Voyager")
@@ -78,7 +80,9 @@ public class ItineraryDataSeeder implements ApplicationRunner {
     }
 
     private Port[] seedPorts() {
-        Port halongPort = portRepository.findByCodeIgnoreCase("VNHLG").orElseGet(() -> {
+        Port halongPort = portRepository.findByCodeIgnoreCase("VNHLG")
+                .or(() -> portRepository.findByNameIgnoreCase("Cảng Quốc Tế Hạ Long"))
+                .orElseGet(() -> {
             log.info("Seeding default port VNHLG...");
             return portRepository.save(Port.builder()
                     .name("Cảng Quốc Tế Hạ Long")
@@ -93,7 +97,9 @@ public class ItineraryDataSeeder implements ApplicationRunner {
                     .build());
         });
 
-        Port danangPort = portRepository.findByCodeIgnoreCase("VNDAD").orElseGet(() -> {
+        Port danangPort = portRepository.findByCodeIgnoreCase("VNDAD")
+                .or(() -> portRepository.findByNameIgnoreCase("Cảng Tiên Sa Đà Nẵng"))
+                .orElseGet(() -> {
             log.info("Seeding default port VNDAD...");
             return portRepository.save(Port.builder()
                     .name("Cảng Tiên Sa Đà Nẵng")
@@ -115,7 +121,7 @@ public class ItineraryDataSeeder implements ApplicationRunner {
         if (tourRepository.count() == 0) {
             log.info("Seeding Tour #1 and its schedule...");
             LocalDate startDate = LocalDate.now().plusDays(7);
-            LocalDate endDate = startDate.plusDays(3);
+            LocalDate endDate = startDate.plusDays(2);
 
             CruiseTour tour1 = CruiseTour.builder()
                     .name("Hải Trình Kỳ Quan Hạ Long - Đà Nẵng")

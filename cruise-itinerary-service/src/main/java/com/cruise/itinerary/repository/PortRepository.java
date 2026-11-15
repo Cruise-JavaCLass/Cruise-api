@@ -24,6 +24,8 @@ public interface PortRepository extends JpaRepository<Port, Long> {
 
     Optional<Port> findByCodeIgnoreCase(String code);
 
+    Optional<Port> findByNameIgnoreCase(String name);
+
     List<Port> findByActiveTrue();
 
     @Query("SELECT p FROM Port p WHERE " +

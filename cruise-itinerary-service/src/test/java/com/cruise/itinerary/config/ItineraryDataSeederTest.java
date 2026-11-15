@@ -50,15 +50,18 @@ class ItineraryDataSeederTest {
     @DisplayName("run seeds initial data when repositories are empty")
     void testRunSeedsWhenEmpty() {
         when(shipRepository.findByCode("SHIP-001")).thenReturn(Optional.empty());
+        when(shipRepository.findByName("Grand Pearl Voyager")).thenReturn(Optional.empty());
         CruiseShip mockShip = CruiseShip.builder().name("Grand Pearl Voyager").code("SHIP-001").build();
         mockShip.setId(1L);
         when(shipRepository.save(any(CruiseShip.class))).thenReturn(mockShip);
 
         when(portRepository.findByCodeIgnoreCase("VNHLG")).thenReturn(Optional.empty());
+        when(portRepository.findByNameIgnoreCase("Cảng Quốc Tế Hạ Long")).thenReturn(Optional.empty());
         Port mockPort1 = Port.builder().name("Cảng Quốc Tế Hạ Long").code("VNHLG").build();
         mockPort1.setId(1L);
 
         when(portRepository.findByCodeIgnoreCase("VNDAD")).thenReturn(Optional.empty());
+        when(portRepository.findByNameIgnoreCase("Cảng Tiên Sa Đà Nẵng")).thenReturn(Optional.empty());
         Port mockPort2 = Port.builder().name("Cảng Tiên Sa Đà Nẵng").code("VNDAD").build();
         mockPort2.setId(2L);
 
@@ -81,6 +84,34 @@ class ItineraryDataSeederTest {
         verify(stopRepository, times(2)).save(any());
         verify(deckZoneRepository, times(3)).save(any());
         verify(cancellationPolicyRepository, times(3)).save(any());
+    }
+
+    @Test
+    @DisplayName("run reuses existing port by name even if code differs")
+    void testRunReusesPortByName() {
+        CruiseShip existingShip = CruiseShip.builder().name("Grand Pearl Voyager").code("SHIP-OLD").build();
+        existingShip.setId(1L);
+        when(shipRepository.findByCode("SHIP-001")).thenReturn(Optional.empty());
+        when(shipRepository.findByName("Grand Pearl Voyager")).thenReturn(Optional.of(existingShip));
+
+        Port existingPort1 = Port.builder().name("Cảng Quốc Tế Hạ Long").code("VN-HLG-OLD").build();
+        existingPort1.setId(10L);
+        when(portRepository.findByCodeIgnoreCase("VNHLG")).thenReturn(Optional.empty());
+        when(portRepository.findByNameIgnoreCase("Cảng Quốc Tế Hạ Long")).thenReturn(Optional.of(existingPort1));
+
+        Port existingPort2 = Port.builder().name("Cảng Tiên Sa Đà Nẵng").code("VN-DAD-OLD").build();
+        existingPort2.setId(20L);
+        when(portRepository.findByCodeIgnoreCase("VNDAD")).thenReturn(Optional.empty());
+        when(portRepository.findByNameIgnoreCase("Cảng Tiên Sa Đà Nẵng")).thenReturn(Optional.of(existingPort2));
+
+        when(tourRepository.count()).thenReturn(1L);
+        when(deckZoneRepository.findByShipIdOrderByDeckNumberAsc(1L)).thenReturn(Collections.emptyList());
+        when(cancellationPolicyRepository.count()).thenReturn(1L);
+
+        dataSeeder.run(new DefaultApplicationArguments(new String[0]));
+
+        verify(shipRepository, never()).save(any());
+        verify(portRepository, never()).save(any());
     }
 
     @Test
