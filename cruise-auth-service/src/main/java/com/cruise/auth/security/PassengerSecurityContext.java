@@ -2,10 +2,8 @@ package com.cruise.auth.security;
 
 import com.cruise.common.enums.Role;
 import com.cruise.common.security.VerifiedCaller;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
+import lombok.AccessLevel;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -21,9 +19,6 @@ import java.util.List;
  */
 @Getter
 @Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
 public class PassengerSecurityContext implements Authentication {
 
     private Long userId;
@@ -31,8 +26,22 @@ public class PassengerSecurityContext implements Authentication {
     private Role role;
     private Long passengerId;
 
-    @Builder.Default
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
     private boolean authenticated = true;
+
+    public PassengerSecurityContext() {
+        this.authenticated = true;
+    }
+
+    @lombok.Builder
+    public PassengerSecurityContext(Long userId, String username, Role role, Long passengerId, Boolean authenticated) {
+        this.userId = userId;
+        this.username = username;
+        this.role = role;
+        this.passengerId = passengerId;
+        this.authenticated = authenticated != null ? authenticated : true;
+    }
 
     /**
      * Constructor tiện lợi khởi tạo từ VerifiedCaller (chưa gắn target passengerId).
