@@ -26,6 +26,10 @@ public interface UserPassengerBindingRepository extends JpaRepository<UserPassen
 
     Optional<UserPassengerBinding> findByPassengerIdAndActiveTrue(Long passengerId);
 
+    Optional<UserPassengerBinding> findByUserIdAndPassengerId(Long userId, Long passengerId);
+
+    Optional<UserPassengerBinding> findByUserIdAndPassengerIdAndActiveTrue(Long userId, Long passengerId);
+
     List<UserPassengerBinding> findByCabinNumber(String cabinNumber);
 
     List<UserPassengerBinding> findByVerificationStatus(VerificationStatus verificationStatus);
