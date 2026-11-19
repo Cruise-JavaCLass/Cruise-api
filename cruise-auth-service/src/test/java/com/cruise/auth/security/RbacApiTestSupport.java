@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
-abstract class RbacApiTestSupport {
+public abstract class RbacApiTestSupport {
     @Autowired protected MockMvc mvc;
     @Autowired protected UserRepository users;
     @Autowired protected JwtService jwt;

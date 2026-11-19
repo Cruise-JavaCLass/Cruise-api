@@ -1,5 +1,6 @@
 package com.cruise.auth.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -14,5 +15,12 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public ObjectMapper objectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.findAndRegisterModules();
+        return mapper;
     }
 }
