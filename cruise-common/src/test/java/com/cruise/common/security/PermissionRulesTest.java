@@ -79,11 +79,17 @@ class PermissionRulesTest {
     }
 
     @Test
-    void passengerSelfServiceEndpointsRequireAuthenticatedAndDenyMutations() {
-        var readRule = policy.requirement("GET", "/api/v1/passenger/me/profile");
-        assertThat(readRule.mode()).isEqualTo(AccessRequirement.Mode.AUTHENTICATED);
+    void passengerEndpointsRequireAuthenticatedAndDenyMutations() {
+        var readSelfRule = policy.requirement("GET", "/api/v1/passenger/me/profile");
+        assertThat(readSelfRule.mode()).isEqualTo(AccessRequirement.Mode.AUTHENTICATED);
+
+        var readFolioRule = policy.requirement("GET", "/api/v1/passenger/5001/folio");
+        assertThat(readFolioRule.mode()).isEqualTo(AccessRequirement.Mode.AUTHENTICATED);
 
         var writeRule = policy.requirement("POST", "/api/v1/passenger/me/profile");
         assertThat(writeRule.mode()).isEqualTo(AccessRequirement.Mode.DENY);
+
+        var writeFolioRule = policy.requirement("POST", "/api/v1/passenger/5001/folio");
+        assertThat(writeFolioRule.mode()).isEqualTo(AccessRequirement.Mode.DENY);
     }
 }
