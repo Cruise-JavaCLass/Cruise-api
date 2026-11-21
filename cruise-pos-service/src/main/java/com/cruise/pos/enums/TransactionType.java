@@ -3,5 +3,6 @@ package com.cruise.pos.enums;
 public enum TransactionType {
     CHARGE,
     VOID,
-    REFUND
+    REFUND,
+    REFUND_ADJUSTMENT
 }
