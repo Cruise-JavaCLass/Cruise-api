@@ -23,9 +23,13 @@ class CrossRoleItineraryApiTest {
     @MockitoBean AccessTokenVerifier verifier;
 
     @ParameterizedTest @EnumSource(Role.class)
-    void allRolesCanReadButOnlyAuthorizedFleetRolesReachMutationValidation(Role role) throws Exception {
+    void fleetReadAndMutationPermissionsRemainExplicitForEveryRole(Role role) throws Exception {
         when(verifier.verify("token")).thenReturn(Optional.of(new VerifiedCaller(5L, "actor", role)));
-        mvc.perform(get("/api/itinerary/ships").header("Authorization", "Bearer token")).andExpect(status().isOk());
+        boolean canRead = Set.of(Role.SYSTEM_ADMIN, Role.OPERATIONS_MANAGER,
+                Role.ITINERARY_COORDINATOR, Role.ACTIVITY_MANAGER, Role.SHORE_EXCURSION_MANAGER,
+                Role.POS_STAFF, Role.FINANCE_FRONT_DESK, Role.PASSENGER).contains(role);
+        mvc.perform(get("/api/itinerary/ships").header("Authorization", "Bearer token"))
+                .andExpect(status().is(canRead ? 200 : 403));
         boolean allowed = Set.of(Role.SYSTEM_ADMIN, Role.OPERATIONS_MANAGER, Role.ITINERARY_COORDINATOR).contains(role);
         mvc.perform(post("/api/itinerary/ships").header("Authorization", "Bearer token")
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
