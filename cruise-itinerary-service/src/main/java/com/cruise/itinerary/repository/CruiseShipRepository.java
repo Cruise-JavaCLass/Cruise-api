@@ -45,9 +45,9 @@ public interface CruiseShipRepository extends JpaRepository<CruiseShip, Long> {
     @Query("SELECT s FROM CruiseShip s WHERE " +
             "(:activeOnly IS NULL OR s.active = :activeOnly) AND " +
             "(:status IS NULL OR s.status = :status) AND " +
-            "(:keyword IS NULL OR LOWER(s.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-            "OR LOWER(s.code) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-            "OR LOWER(s.operator) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+            "(:keyword IS NULL OR LOWER(s.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) " +
+            "OR LOWER(s.code) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) " +
+            "OR LOWER(s.operator) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')))")
     Page<CruiseShip> searchShips(
             @Param("keyword") String keyword,
             @Param("status") ShipStatus status,
