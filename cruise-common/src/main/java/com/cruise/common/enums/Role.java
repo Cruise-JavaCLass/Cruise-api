@@ -11,5 +11,6 @@ public enum Role {
     POS_STAFF,                  // Nhân viên bán hàng & dịch vụ trên tàu
     FINANCE_FRONT_DESK,         // Bộ phận tài chính & lễ tân
     OPERATIONS_MANAGER,         // Quản lý vận hành
-    SYSTEM_ADMIN                // Quản trị viên hệ thống
+    SYSTEM_ADMIN,               // Quản trị viên hệ thống
+    SAFETY_OFFICER              // Cán bộ an toàn và điểm danh cứu sinh
 }

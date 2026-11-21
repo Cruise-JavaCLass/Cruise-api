@@ -23,6 +23,7 @@ public final class ServiceAccessPolicy implements AccessPolicy {
         // These endpoints prove credentials/token in their payload, and retain their existing 405 contract.
         if (PUBLIC_AUTH.contains(path)) return publicAccess();
         if (SESSION.contains(path)) return authenticated();
+        if (under(path, "/api/v1/safety")) return require(SAFETY_MANAGE);
         if (under(path, "/api/auth/users") || under(path, "/api/auth/roles")) return require(USERS_MANAGE);
         if (under(path, "/api/admin/audit")) return require(SECURITY_AUDIT_READ);
         if (under(path, "/api/admin/pos/terminals")) return require(TERMINALS_MANAGE);
