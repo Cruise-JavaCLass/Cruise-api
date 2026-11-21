@@ -2,40 +2,55 @@
 -- Seed Data for Cruise Itinerary Service (KAN-699)
 -- Purpose: Pre-populates default cruise ships, ports, tour #1, daily
 --          itineraries, stops, deck zones, and maritime policies.
--- Resolves parents by business codes and derives child dates from stored tour.
+-- Resolves parents by business codes/names and derives child dates from stored tour.
+-- Serialized within a single transaction with SHARE ROW EXCLUSIVE table locks.
 -- =========================================================================
+
+BEGIN;
+
+-- Lock tables against concurrent inserts before updating and resetting sequences
+LOCK TABLE cruise_ships, ports, cruise_tours, daily_itineraries, cruise_stops, ship_deck_zones, system_cancellation_policies IN SHARE ROW EXCLUSIVE MODE;
 
 -- 1. Cruise Ships
 INSERT INTO cruise_ships (
     name, code, operator, capacity, crew_capacity, total_cabins, total_decks,
     manufacturing_year, length_meters, beam_meters, draft_meters, status,
     description, amenities, image_url, active, created_at, updated_at
-) VALUES (
+)
+SELECT
     'Grand Pearl Voyager', 'SHIP-001', 'Paradise Cruises', 2500, 800, 1200, 14,
     2022, 315.5, 38.0, 8.5, 'ACTIVE',
     'Flagship luxury cruise liner operating coastal Vietnam routes.',
     'Spa, Infinity Pool, Casino, Theater, Fitness Center, 5 Restaurants',
     'https://images.unsplash.com/photo-1548574505-5e239809ee19', true, NOW(), NOW()
-) ON CONFLICT (code) DO NOTHING;
+WHERE NOT EXISTS (
+    SELECT 1 FROM cruise_ships WHERE code = 'SHIP-001' OR name = 'Grand Pearl Voyager'
+);
 
 -- 2. Ports of Call
 INSERT INTO ports (
     name, code, country, city, timezone, latitude, longitude,
     description, active, created_at, updated_at
-) VALUES (
+)
+SELECT
     'Cảng Quốc Tế Hạ Long', 'VNHLG', 'Việt Nam', 'Quảng Ninh', 'Asia/Ho_Chi_Minh',
     20.9500000, 107.0300000, 'Cảng tàu khách quốc tế chuyên dụng tại Vịnh Hạ Long',
     true, NOW(), NOW()
-) ON CONFLICT (code) DO NOTHING;
+WHERE NOT EXISTS (
+    SELECT 1 FROM ports WHERE code = 'VNHLG' OR name = 'Cảng Quốc Tế Hạ Long'
+);
 
 INSERT INTO ports (
     name, code, country, city, timezone, latitude, longitude,
     description, active, created_at, updated_at
-) VALUES (
+)
+SELECT
     'Cảng Tiên Sa Đà Nẵng', 'VNDAD', 'Việt Nam', 'Đà Nẵng', 'Asia/Ho_Chi_Minh',
     16.1200000, 108.2200000, 'Cảng biển nước sâu phục vụ tàu du lịch tại Đà Nẵng',
     true, NOW(), NOW()
-) ON CONFLICT (code) DO NOTHING;
+WHERE NOT EXISTS (
+    SELECT 1 FROM ports WHERE code = 'VNDAD' OR name = 'Cảng Tiên Sa Đà Nẵng'
+);
 
 -- 3. Cruise Tour #1 (linked to SHIP-001)
 INSERT INTO cruise_tours (
@@ -53,7 +68,8 @@ SELECT
     'https://images.unsplash.com/photo-1507525428034-b723cf961d3e', 'PUBLISHED', true,
     NULL, NOW(), NOW()
 FROM cruise_ships s
-WHERE s.code = 'SHIP-001'
+WHERE s.code = 'SHIP-001' OR s.name = 'Grand Pearl Voyager'
+LIMIT 1
 ON CONFLICT (code) DO NOTHING;
 
 -- 4. Daily Itineraries for Tour #1 (derived from stored start_date)
@@ -71,10 +87,11 @@ SELECT
     true, NOW(), NOW()
 FROM cruise_tours t
 CROSS JOIN ports p
-WHERE t.code = 'TOUR-001' AND p.code = 'VNHLG'
+WHERE t.code = 'TOUR-001' AND (p.code = 'VNHLG' OR p.name = 'Cảng Quốc Tế Hạ Long')
   AND NOT EXISTS (
       SELECT 1 FROM daily_itineraries di WHERE di.tour_id = t.id AND di.day_number = 1
-  );
+  )
+LIMIT 1;
 
 INSERT INTO daily_itineraries (
     tour_id, day_number, itinerary_date, title, description,
@@ -108,10 +125,11 @@ SELECT
     true, NOW(), NOW()
 FROM cruise_tours t
 CROSS JOIN ports p
-WHERE t.code = 'TOUR-001' AND p.code = 'VNDAD'
+WHERE t.code = 'TOUR-001' AND (p.code = 'VNDAD' OR p.name = 'Cảng Tiên Sa Đà Nẵng')
   AND NOT EXISTS (
       SELECT 1 FROM daily_itineraries di WHERE di.tour_id = t.id AND di.day_number = 3
-  );
+  )
+LIMIT 1;
 
 -- 5. Cruise Stops for Tour #1 (derived from stored start_date)
 INSERT INTO cruise_stops (
@@ -126,10 +144,11 @@ SELECT
     'Điểm khởi hành hành trình tại Hạ Long', true, NOW(), NOW()
 FROM cruise_tours t
 CROSS JOIN ports p
-WHERE t.code = 'TOUR-001' AND p.code = 'VNHLG'
+WHERE t.code = 'TOUR-001' AND (p.code = 'VNHLG' OR p.name = 'Cảng Quốc Tế Hạ Long')
   AND NOT EXISTS (
       SELECT 1 FROM cruise_stops cs WHERE cs.tour_id = t.id AND cs.stop_order = 1
-  );
+  )
+LIMIT 1;
 
 INSERT INTO cruise_stops (
     tour_id, port_id, stop_order, arrival_time, departure_time,
@@ -143,10 +162,11 @@ SELECT
     'Điểm kết thúc hành trình tại Đà Nẵng', true, NOW(), NOW()
 FROM cruise_tours t
 CROSS JOIN ports p
-WHERE t.code = 'TOUR-001' AND p.code = 'VNDAD'
+WHERE t.code = 'TOUR-001' AND (p.code = 'VNDAD' OR p.name = 'Cảng Tiên Sa Đà Nẵng')
   AND NOT EXISTS (
       SELECT 1 FROM cruise_stops cs WHERE cs.tour_id = t.id AND cs.stop_order = 2
-  );
+  )
+LIMIT 1;
 
 -- 6. Ship Deck Zones for Ship #1
 INSERT INTO ship_deck_zones (
@@ -156,10 +176,11 @@ INSERT INTO ship_deck_zones (
 SELECT
     s.id, 5, 'Starlight Theater', 'DECK5-THEATER', 800, 'THEATER', false, false, NOW(), NOW()
 FROM cruise_ships s
-WHERE s.code = 'SHIP-001'
+WHERE (s.code = 'SHIP-001' OR s.name = 'Grand Pearl Voyager')
   AND NOT EXISTS (
       SELECT 1 FROM ship_deck_zones z WHERE z.ship_id = s.id AND z.zone_code = 'DECK5-THEATER'
-  );
+  )
+LIMIT 1;
 
 INSERT INTO ship_deck_zones (
     ship_id, deck_number, zone_name, zone_code, max_safety_capacity,
@@ -168,10 +189,11 @@ INSERT INTO ship_deck_zones (
 SELECT
     s.id, 7, 'Main Pool Deck', 'DECK7-POOL', 450, 'POOL_DECK', true, false, NOW(), NOW()
 FROM cruise_ships s
-WHERE s.code = 'SHIP-001'
+WHERE (s.code = 'SHIP-001' OR s.name = 'Grand Pearl Voyager')
   AND NOT EXISTS (
       SELECT 1 FROM ship_deck_zones z WHERE z.ship_id = s.id AND z.zone_code = 'DECK7-POOL'
-  );
+  )
+LIMIT 1;
 
 -- 7. System Cancellation Policies
 INSERT INTO system_cancellation_policies (
@@ -204,3 +226,5 @@ SELECT setval(pg_get_serial_sequence('daily_itineraries', 'id'), COALESCE((SELEC
 SELECT setval(pg_get_serial_sequence('cruise_stops', 'id'), COALESCE((SELECT MAX(id) FROM cruise_stops), 1));
 SELECT setval(pg_get_serial_sequence('ship_deck_zones', 'id'), COALESCE((SELECT MAX(id) FROM ship_deck_zones), 1));
 SELECT setval(pg_get_serial_sequence('system_cancellation_policies', 'id'), COALESCE((SELECT MAX(id) FROM system_cancellation_policies), 1));
+
+COMMIT;
