@@ -26,6 +26,16 @@ public class AllAboardWatchdogController {
                 .body(ApiResponse.ok("Gangway movement recorded successfully", log));
     }
 
+    @GetMapping
+    public ResponseEntity<ApiResponse<AllAboardStatusDto>> getDefaultWatchdogStatus(
+            @RequestParam(required = false) Long tourId,
+            @RequestParam(required = false) Long portCallId
+    ) {
+        Long targetTourId = tourId != null ? tourId : 1L;
+        Long targetPortCallId = portCallId != null ? portCallId : 1L;
+        return getAllAboardStatus(targetTourId, targetPortCallId);
+    }
+
     @GetMapping("/status")
     public ResponseEntity<ApiResponse<AllAboardStatusDto>> getAllAboardStatus(
             @RequestParam Long tourId,

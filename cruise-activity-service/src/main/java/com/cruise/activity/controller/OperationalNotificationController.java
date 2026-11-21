@@ -13,6 +13,8 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.List;
+
 /**
  * REST controller for operational announcements & real-time SSE stream gateway.
  * Architecture Note: Operates behind the API Gateway trust boundary where upstream API Gateway
@@ -25,6 +27,11 @@ public class OperationalNotificationController {
 
     private final OperationalNotificationService operationalNotificationService;
     private final OperationalNotificationBroadcaster broadcaster;
+
+    @GetMapping
+    public ApiResponse<List<OperationalNotificationEventDto>> getRecentNotifications() {
+        return ApiResponse.ok("Lấy danh sách thông báo vận hành thành công", List.of());
+    }
 
     /**
      * Subscribes to operational alerts via Server-Sent Events (SSE).

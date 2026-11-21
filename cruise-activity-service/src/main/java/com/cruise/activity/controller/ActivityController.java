@@ -34,6 +34,14 @@ public class ActivityController {
         ));
     }
 
+    @GetMapping
+    public ApiResponse<List<OnboardActivityResponse>> getAllActivities(
+            @RequestParam(required = false) Long tourId
+    ) {
+        Long targetTourId = tourId != null ? tourId : 1L;
+        return ApiResponse.ok("Lấy danh sách hoạt động thành công", activityService.getActivitiesByTour(targetTourId));
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<OnboardActivityResponse> createActivity(
