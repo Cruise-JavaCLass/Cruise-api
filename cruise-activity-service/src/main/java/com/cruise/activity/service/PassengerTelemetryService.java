@@ -78,6 +78,13 @@ public class PassengerTelemetryService {
         return Optional.ofNullable(getLastKnownLocations(List.of(passengerId)).get(passengerId));
     }
     public void invalidateConfiguration() { knownBeacons.clear(); knownZones.clear(); }
+    public void acknowledgePersisted(List<PassengerLocationLog> logs) {
+        logs.forEach(log -> lastAccepted.remove(log.getPassengerId(),log));
+    }
+    public void evictExpiredLocations() {
+        Instant cutoff=clock.instant().minus(ttl);
+        latest.entrySet().removeIf(entry->!entry.getValue().getRecordedAt().isAfter(cutoff));
+    }
     private boolean fresh(PassengerLocationLog log) { return log.getRecordedAt().plus(ttl).isAfter(clock.instant()); }
     private LastKnownLocation location(PassengerLocationLog log) {
         return new LastKnownLocation(log.getPassengerId(),log.getDeckNumber(),log.getZoneCode(),log.getRssiSignalStrength(),log.getRecordedAt(),fresh(log));

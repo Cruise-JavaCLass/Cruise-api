@@ -12,6 +12,10 @@ import java.util.List;
 @RestController @RequestMapping("/api/v1/safety/muster") @RequiredArgsConstructor
 public class MusterSafetyController {
     private final MusterDrillService service;
+    @PostMapping("/drill/{id}/close")
+    public ApiResponse<LiveDashboard> close(@PathVariable Long id) {
+        return ApiResponse.ok("Muster drill closed",service.closeDrill(id));
+    }
     @PostMapping("/drill/start") @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<LiveDashboard> start(@Valid @RequestBody DrillStartRequest request,Principal actor) {
         return ApiResponse.ok("Muster drill started",service.triggerEmergencyAlarm(request.drillType(),request.tourId(),actor.getName()));

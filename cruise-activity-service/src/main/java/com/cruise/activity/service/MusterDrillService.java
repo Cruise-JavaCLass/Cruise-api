@@ -24,6 +24,13 @@ public class MusterDrillService {
     private final MusterRosterEntryRepository roster;
     private final PassengerTelemetryService telemetry;
     private final Clock clock;
+    private final SolasMusterEmergencyService legacyEmergency;
+
+    @Transactional
+    public LiveDashboard closeDrill(Long drillId) {
+        legacyEmergency.setAllClear(drillId);
+        return getLiveDashboard(drillId,null);
+    }
 
     @Transactional
     public LiveDashboard triggerEmergencyAlarm(SolasEmergencyType drillType,Long tourId,String actor) {
