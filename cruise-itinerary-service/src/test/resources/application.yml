@@ -14,3 +14,8 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: false
+
+app:
+  seeder:
+    enabled: false
+
