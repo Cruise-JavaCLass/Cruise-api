@@ -17,6 +17,13 @@ import java.time.Instant;
 @Builder
 public class SolasMusterIncident extends BaseEntity {
 
+    @Column(name = "tour_id")
+    private Long tourId;
+
+    // NULL on legacy/closed incidents; unique active scope prevents concurrent duplicate starts.
+    @Column(name = "active_tour_id", unique = true)
+    private Long activeTourId;
+
     @Column(name = "incident_code", nullable = false, unique = true, length = 64)
     private String incidentCode;
 

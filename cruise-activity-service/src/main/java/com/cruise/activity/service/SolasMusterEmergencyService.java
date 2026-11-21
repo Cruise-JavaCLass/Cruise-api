@@ -112,6 +112,7 @@ public class SolasMusterEmergencyService {
         }
 
         incident.setStatus(MusterStatus.ALL_CLEAR);
+        incident.setActiveTourId(null);
         incident.setAllClearAt(Instant.now());
         incident = incidentRepository.save(incident);
         log.info("SOLAS Emergency Incident {} marked as ALL_CLEAR", incident.getIncidentCode());
