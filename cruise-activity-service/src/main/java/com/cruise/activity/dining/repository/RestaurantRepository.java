@@ -8,6 +8,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface RestaurantRepository extends JpaRepository<Restaurant, Long> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from Restaurant r where r.id=:id")
+    java.util.Optional<Restaurant> findByIdForUpdate(@Param("id") Long id);
 
     @Query("""
         SELECT r FROM Restaurant r

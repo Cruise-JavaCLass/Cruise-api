@@ -24,12 +24,19 @@ public class DiningReservationService {
     private final DiningReservationRepository reservationRepository;
     private final DiningTableRepository tableRepository;
     private final DietaryProfileRepository dietaryProfileRepository;
+    private final com.cruise.activity.repository.PassengerRepository passengerRepository;
+    private final com.cruise.activity.dining.repository.RestaurantRepository restaurantRepository;
 
     @Transactional
     public DiningReservationResponse makeReservation(
             CreateReservationRequest request,
             Long passengerId
     ) {
+        // Serialize both a passenger's overlapping requests and table allocation across passengers.
+        passengerRepository.findByIdForUpdate(passengerId)
+                .orElseThrow(() -> new IllegalArgumentException("Passenger not found"));
+        restaurantRepository.findByIdForUpdate(request.getRestaurantId())
+                .orElseThrow(() -> new IllegalArgumentException("Restaurant not found"));
         List<DiningReservation> conflicts =
                 reservationRepository.findConflictingReservations(
                         passengerId, request.getReservationTime());
