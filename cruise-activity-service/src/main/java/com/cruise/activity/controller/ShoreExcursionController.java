@@ -29,6 +29,14 @@ public class ShoreExcursionController {
 
     private final ShoreExcursionService excursionService;
 
+    @GetMapping
+    public ApiResponse<List<ShoreExcursionResponse>> getAllExcursions(
+            @RequestParam(required = false) Long tourId
+    ) {
+        Long targetTourId = tourId != null ? tourId : 1L;
+        return ApiResponse.ok("Lấy danh sách tour bờ thành công", excursionService.getExcursionsByTour(targetTourId));
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<ShoreExcursionResponse> createExcursion(

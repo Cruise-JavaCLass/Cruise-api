@@ -100,4 +100,79 @@ class CruiseAreaPolicyControllerTest {
                 .andExpect(jsonPath("$.data[0].policyName").value("Excursion Standard 24h"))
                 .andExpect(jsonPath("$.data[0].refundPercentage").value(100));
     }
+
+    @Test
+    @DisplayName("GET /api/admin/cruise-area-policy returns general maritime policies")
+    void testGetMaritimePoliciesRoot() throws Exception {
+        SystemCancellationPolicyDto policy = SystemCancellationPolicyDto.builder()
+                .id(1L)
+                .policyName("Maritime Cabotage Policy")
+                .serviceType("MARITIME")
+                .hoursBeforeCutoff(48)
+                .refundPercentage(100)
+                .cancellationFee(BigDecimal.ZERO)
+                .isActive(true)
+                .build();
+
+        when(areaPolicyService.getCancellationPolicies(null)).thenReturn(List.of(policy));
+
+        mockMvc.perform(get("/api/admin/cruise-area-policy"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].policyName").value("Maritime Cabotage Policy"));
+    }
+
+    @Test
+    @DisplayName("GET /api/admin/cruise-area-policy?serviceType=MARITIME filters maritime policies")
+    void testGetMaritimePoliciesWithServiceType() throws Exception {
+        SystemCancellationPolicyDto policy = SystemCancellationPolicyDto.builder()
+                .id(1L)
+                .policyName("Maritime Safety Policy")
+                .serviceType("MARITIME")
+                .hoursBeforeCutoff(72)
+                .refundPercentage(80)
+                .cancellationFee(BigDecimal.ZERO)
+                .isActive(true)
+                .build();
+
+        when(areaPolicyService.getCancellationPolicies("MARITIME")).thenReturn(List.of(policy));
+
+        mockMvc.perform(get("/api/admin/cruise-area-policy").param("serviceType", "MARITIME"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].policyName").value("Maritime Safety Policy"));
+    }
+
+    @Test
+    @DisplayName("POST /api/admin/cruise-area-policy/cancellation-policies creates policy")
+    void testCreateCancellationPolicy() throws Exception {
+        SystemCancellationPolicyDto requestDto = SystemCancellationPolicyDto.builder()
+                .policyName("Special Seasonal Policy")
+                .serviceType("TOUR")
+                .hoursBeforeCutoff(48)
+                .refundPercentage(90)
+                .cancellationFee(BigDecimal.ZERO)
+                .isActive(true)
+                .build();
+
+        SystemCancellationPolicyDto createdDto = SystemCancellationPolicyDto.builder()
+                .id(99L)
+                .policyName("Special Seasonal Policy")
+                .serviceType("TOUR")
+                .hoursBeforeCutoff(48)
+                .refundPercentage(90)
+                .cancellationFee(BigDecimal.ZERO)
+                .isActive(true)
+                .build();
+
+        when(areaPolicyService.createCancellationPolicy(any())).thenReturn(createdDto);
+
+        mockMvc.perform(post("/api/admin/cruise-area-policy/cancellation-policies")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requestDto)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(99L))
+                .andExpect(jsonPath("$.data.policyName").value("Special Seasonal Policy"));
+    }
 }

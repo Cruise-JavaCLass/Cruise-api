@@ -33,6 +33,11 @@ public class RfidCardManagementController {
         return ResponseEntity.ok(ApiResponse.ok("RFID card quarantined and blacklisted successfully", response));
     }
 
+    @GetMapping
+    public ResponseEntity<ApiResponse<RfidInventoryDashboardDto>> getDefaultRfidDashboard() {
+        return getDashboard();
+    }
+
     @GetMapping("/dashboard")
     public ResponseEntity<ApiResponse<RfidInventoryDashboardDto>> getDashboard() {
         RfidInventoryDashboardDto metrics = rfidService.getDashboardMetrics();

@@ -16,6 +16,11 @@ public class OperationsDashboardController {
 
     private final OperationsDashboardService dashboardService;
 
+    @GetMapping
+    public ApiResponse<OperationsKpiSummaryDto> getDashboardSummary() {
+        return getOperationsKpis();
+    }
+
     /**
      * Aggregates fleet-wide operational KPIs and summary statistics.
      */

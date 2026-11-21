@@ -16,6 +16,11 @@ public class SolasMusterEmergencyController {
 
     private final SolasMusterEmergencyService emergencyService;
 
+    @GetMapping
+    public ApiResponse<SolasMusterIncidentDto> getMusterStatus() {
+        return getActiveIncident();
+    }
+
     @GetMapping("/active")
     public ApiResponse<SolasMusterIncidentDto> getActiveIncident() {
         return emergencyService.getActiveMusterIncident()

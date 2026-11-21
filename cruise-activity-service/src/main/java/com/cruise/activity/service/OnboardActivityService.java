@@ -39,7 +39,7 @@ public class OnboardActivityService {
         );
 
         OnboardActivity activity = OnboardActivity.builder()
-                .tourId(request.getTourId())
+                .tourId(request.getTourId() != null ? request.getTourId() : 1L)
                 .dayNumber(request.getDayNumber() != null ? request.getDayNumber() : 1)
                 .title(request.getTitle())
                 .description(request.getDescription())
