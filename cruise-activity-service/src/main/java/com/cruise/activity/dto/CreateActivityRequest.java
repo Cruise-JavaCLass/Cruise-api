@@ -15,6 +15,7 @@ import lombok.experimental.SuperBuilder;
 @AllArgsConstructor
 public class CreateActivityRequest extends BaseActivityRequest {
 
-    @NotNull(message = "Tour ID không được để trống")
-    private Long tourId;
+    @com.fasterxml.jackson.annotation.JsonAlias({"tourId", "tour_id"})
+    @Builder.Default
+    private Long tourId = 1L;
 }

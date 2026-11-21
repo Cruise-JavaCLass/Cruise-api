@@ -24,6 +24,7 @@ public abstract class BaseActivityRequest {
 
     private Integer dayNumber;
 
+    @com.fasterxml.jackson.annotation.JsonAlias({"title", "name"})
     @NotBlank(message = "Tên hoạt động không được để trống")
     private String title;
 
@@ -43,12 +44,14 @@ public abstract class BaseActivityRequest {
     @NotNull(message = "Thời gian kết thúc không được để trống")
     private LocalTime endTime;
 
+    @com.fasterxml.jackson.annotation.JsonAlias({"maxCapacity", "capacity"})
     @PositiveOrZero(message = "Sức chứa tối đa không được âm")
     private Integer maxCapacity;
 
     @PositiveOrZero(message = "Giá dịch vụ không được âm")
     private BigDecimal price;
 
+    @com.fasterxml.jackson.annotation.JsonAlias({"isIncluded", "requiresRegistration"})
     private Boolean isIncluded;
 
     private ActivityStatus status;

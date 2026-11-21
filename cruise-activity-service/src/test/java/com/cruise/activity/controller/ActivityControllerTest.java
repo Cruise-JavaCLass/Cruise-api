@@ -87,6 +87,18 @@ class ActivityControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/activities: returns list of activities for default tour")
+    void testGetAllActivitiesRoot() throws Exception {
+        when(activityService.getActivitiesByTour(1L)).thenReturn(List.of(sampleResponse));
+
+        mockMvc.perform(get("/api/activities").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].title").value("Yoga Bình Minh"));
+    }
+
+    @Test
     @DisplayName("POST /api/activities: creates new activity successfully")
     void createActivity_Success() throws Exception {
         String jsonPayload = """

@@ -20,6 +20,23 @@ public class PassengerCatalogController {
 
     private final PassengerCatalogService catalogService;
 
+    @GetMapping
+    public ApiResponse<Page<PassengerCatalogItemResponse>> getCatalog(
+            @RequestParam(required = false) Long tourId,
+            @RequestParam(required = false) Integer dayNumber,
+            @RequestParam(required = false) Long portId,
+            @RequestParam(required = false) CatalogItemType itemType,
+            @RequestParam(required = false) Boolean isIncluded,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        Long targetTourId = tourId != null ? tourId : 1L;
+        Pageable pageable = PageRequest.of(page, size);
+        return ApiResponse.ok("Lấy danh mục hoạt động và tour bờ thành công",
+                catalogService.searchCatalog(targetTourId, dayNumber, portId, itemType, isIncluded, keyword, pageable));
+    }
+
     @GetMapping("/tour/{tourId}")
     public ApiResponse<Page<PassengerCatalogItemResponse>> searchCatalog(
             @PathVariable Long tourId,
