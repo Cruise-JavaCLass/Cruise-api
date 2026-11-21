@@ -47,6 +47,7 @@ public final class ServiceAccessPolicy implements AccessPolicy {
         if (under(path, "/api/service-recovery")) return require(FINANCE_MANAGE);
         if (under(path, "/api/pos") || under(path, "/api/v1/pos")) {
             String posPath = path.replaceFirst("^/api/v1/pos", "/api/pos");
+            if (under(posPath, "/api/pos/sync/conflicts")) return require(FINANCE_MANAGE);
             if (under(posPath, "/api/pos/reports")) return require(REPORTS_READ);
             if (under(posPath, "/api/pos/auth/manifest")) return require(POS_OPERATE);
             if (!read && posPath.matches("/api/pos/transactions/[^/]+/(refund|void)")) return require(FINANCE_MANAGE);

@@ -14,6 +14,21 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @Slf4j
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public org.springframework.http.ResponseEntity<ApiResponse<Void>> handleHttpStatus(org.springframework.web.server.ResponseStatusException ex) {
+        return org.springframework.http.ResponseEntity.status(ex.getStatusCode()).body(ApiResponse.error(ex.getReason()));
+    }
+    @ExceptionHandler(org.springframework.web.bind.MissingRequestHeaderException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> handleMissingHeader(org.springframework.web.bind.MissingRequestHeaderException ex) {
+        return ApiResponse.error("Missing required header: "+ex.getHeaderName());
+    }
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResponse<Void> handleDuplicateSyncClaim(org.springframework.dao.DataIntegrityViolationException ex) {
+        return ApiResponse.error("Concurrent or conflicting database write; retry the original batch");
+    }
+
     @ExceptionHandler(ResourceNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public ApiResponse<Void> handleNotFound(ResourceNotFoundException ex) {
