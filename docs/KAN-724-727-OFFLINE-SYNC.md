@@ -52,3 +52,5 @@ GET conflicts nhận `status=PENDING|APPROVED|REJECTED`, `page`, `size` (tối �
 `OfflineSyncReplayTest` dùng service và repository thật trên H2: 10 giao dịch rồi replay, đóng gói lại, 20 yêu cầu replay đồng thời, mất phản hồi, rollback toàn batch, payload mismatch, UUID không đúng phiên bản, folio đóng, duyệt/từ chối thủ công, credit limit, heartbeat và terminal scope. Controller test kiểm tra thiếu header, thiếu token, body rỗng, giả vai trò và quyền tài chính. Migration PostgreSQL: `docs/db/KAN-724-offline-sync.sql`.
 
 Không thay đổi database thật hoặc hệ thống terminal trong quá trình làm code. H2 không thay thế kiểm thử khóa/hiệu năng trên PostgreSQL production.
+
+Kiểm tra chạy JAR với `pos.security.enabled=true` còn bao phủ luồng đăng nhập/introspection thật và duyệt conflict. `AuthPrincipal` triển khai `Principal.getName()` để audit ghi đúng username, thay vì chuỗi mô tả object bị vượt độ dài cột. `OfflineSyncSecurityIntegrationTest` chạy cả hai lớp filter, kiểm tra username đã xác thực và tiếp tục chặn cashier giả quyền tài chính.
