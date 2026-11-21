@@ -41,7 +41,9 @@ public class OfflineSyncProcessingService {
             throw badRequest("Batch ID and 1 to 250 transactions are required");
         }
         List<OfflineTransactionDto> items=input.stream().map(codec::normalize).toList();
-        for (OfflineTransactionDto item:items) if (!validator.validate(item).isEmpty()) throw badRequest("Invalid offline transaction fields");
+        for (OfflineTransactionDto item:items) {
+            if (!validator.validate(item).isEmpty() || item.transaction().getItems().stream().anyMatch(Objects::isNull)) throw badRequest("Invalid offline transaction fields");
+        }
         PosTerminal terminal=requireTerminal(terminalId);
         for (OfflineTransactionDto item:items) if (!terminal.getStationId().equals(item.transaction().getStationId())) throw badRequest("Transaction station does not match terminal");
         String requestHash=codec.hash(items);
