@@ -1,8 +1,10 @@
 package com.cruise.auth.service;
 
 import com.cruise.auth.dto.BookedActivityItemDto;
+import com.cruise.auth.dto.BoardingPassPayload;
 import com.cruise.auth.dto.FolioLineItemDto;
 import com.cruise.auth.dto.ItineraryStopItemDto;
+import com.cruise.auth.dto.PassengerBoardingPassResponse;
 import com.cruise.auth.dto.PassengerSelfActivitiesResponse;
 import com.cruise.auth.dto.PassengerSelfFolioResponse;
 import com.cruise.auth.dto.PassengerSelfItineraryResponse;
@@ -27,7 +29,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Service xử lý các tính năng tự phục vụ của hành khách (Passenger Self-Service - KAN-721).
+ * Service xử lý các tính năng tự phục vụ của hành khách (Passenger Self-Service - KAN-721, KAN-722).
  */
 @Slf4j
 @Service
@@ -37,6 +39,7 @@ public class PassengerSelfServiceService {
 
     private final UserRepository userRepository;
     private final UserPassengerBindingRepository bindingRepository;
+    private final BoardingPassCryptoService boardingPassCryptoService;
 
     /**
      * Xác thực và phân giải bản ghi liên kết User - Passenger hợp lệ cho caller.
@@ -215,6 +218,30 @@ public class PassengerSelfServiceService {
                 .cabinNumber(binding.getCabinNumber())
                 .currentStatus("CRUISING")
                 .portsOfCall(portsOfCall)
+                .build();
+    }
+
+    /**
+     * Lấy thẻ lên tàu điện tử kèm mã QR bảo mật động của hành khách (KAN-722).
+     */
+    public PassengerBoardingPassResponse getMyBoardingPass(VerifiedCaller caller) {
+        UserPassengerBinding binding = resolveVerifiedBinding(caller);
+        String musterStation = resolveMusterStation(binding.getCabinNumber());
+        String voyageCode = binding.getBookingReference();
+
+        long validUntilTimestamp = System.currentTimeMillis() + (86400L * 1000L); // 24 giờ
+        BoardingPassPayload payload = BoardingPassPayload.builder()
+                .passengerId(binding.getPassengerId())
+                .cabinNumber(binding.getCabinNumber())
+                .musterStation(musterStation)
+                .voyageCode(voyageCode)
+                .validUntilTimestamp(validUntilTimestamp)
+                .build();
+
+        String qrPayload = boardingPassCryptoService.generateBoardingPassQr(payload);
+        return PassengerBoardingPassResponse.builder()
+                .qrPayload(qrPayload)
+                .payload(payload)
                 .build();
     }
 

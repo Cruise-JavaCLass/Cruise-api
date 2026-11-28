@@ -128,6 +128,24 @@ class PassengerSelfServiceControllerTest extends RbacApiTestSupport {
                     .andExpect(jsonPath("$.data.portsOfCall").isArray())
                     .andExpect(jsonPath("$.data.portsOfCall", hasSize(greaterThanOrEqualTo(1))));
         }
+
+        @Test
+        @DisplayName("GET /boarding-pass trả về 200 OK kèm mã QR bảo mật HMAC-SHA256 và BoardingPassPayload")
+        void shouldReturnSelfBoardingPassSuccessfully() throws Exception {
+            User userA = createPassengerUser("passenger.bp", "passenger.bp@test.com", "CAB-402");
+            createBinding(userA.getId(), 5005L, "CRUISE-2026-BP", "CAB-402", VerificationStatus.VERIFIED, true);
+            String token = bearer(userA);
+
+            mvc.perform(get("/api/v1/passenger/me/boarding-pass").header("Authorization", token))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true))
+                    .andExpect(jsonPath("$.data.qrPayload").isNotEmpty())
+                    .andExpect(jsonPath("$.data.payload.passengerId").value(5005))
+                    .andExpect(jsonPath("$.data.payload.cabinNumber").value("CAB-402"))
+                    .andExpect(jsonPath("$.data.payload.musterStation").value("Muster Station A - Deck 4"))
+                    .andExpect(jsonPath("$.data.payload.voyageCode").value("CRUISE-2026-BP"))
+                    .andExpect(jsonPath("$.data.payload.validUntilTimestamp").isNumber());
+        }
     }
 
     @Nested
@@ -141,6 +159,7 @@ class PassengerSelfServiceControllerTest extends RbacApiTestSupport {
             mvc.perform(get("/api/v1/passenger/me/folio")).andExpect(status().isUnauthorized());
             mvc.perform(get("/api/v1/passenger/me/activities")).andExpect(status().isUnauthorized());
             mvc.perform(get("/api/v1/passenger/me/itinerary")).andExpect(status().isUnauthorized());
+            mvc.perform(get("/api/v1/passenger/me/boarding-pass")).andExpect(status().isUnauthorized());
         }
 
         @Test

@@ -1,5 +1,6 @@
 package com.cruise.auth.controller;
 
+import com.cruise.auth.dto.PassengerBoardingPassResponse;
 import com.cruise.auth.dto.PassengerSelfActivitiesResponse;
 import com.cruise.auth.dto.PassengerSelfFolioResponse;
 import com.cruise.auth.dto.PassengerSelfItineraryResponse;
@@ -63,5 +64,12 @@ public class PassengerSelfServiceController {
         VerifiedCaller caller = extractCaller(request);
         log.info("Passenger {} (userId={}) fetching self itinerary", caller.username(), caller.userId());
         return ApiResponse.ok(passengerSelfService.getMyItinerary(caller));
+    }
+
+    @GetMapping("/boarding-pass")
+    public ApiResponse<PassengerBoardingPassResponse> getMyBoardingPass(HttpServletRequest request) {
+        VerifiedCaller caller = extractCaller(request);
+        log.info("Passenger {} (userId={}) fetching self boarding pass", caller.username(), caller.userId());
+        return ApiResponse.ok(passengerSelfService.getMyBoardingPass(caller));
     }
 }
