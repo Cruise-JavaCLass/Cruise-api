@@ -29,9 +29,9 @@ public interface PortRepository extends JpaRepository<Port, Long> {
     List<Port> findByActiveTrue();
 
     @Query("SELECT p FROM Port p WHERE " +
-           "(:keyword IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR LOWER(p.code) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR LOWER(p.city) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
+           "(:keyword IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) " +
+           "OR LOWER(p.code) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) " +
+           "OR LOWER(p.city) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))) " +
            "AND (:activeOnly IS NULL OR p.active = :activeOnly)")
     Page<Port> searchPorts(@Param("keyword") String keyword,
                            @Param("activeOnly") Boolean activeOnly,

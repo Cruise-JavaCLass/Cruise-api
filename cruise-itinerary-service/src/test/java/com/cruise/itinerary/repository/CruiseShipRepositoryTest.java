@@ -188,5 +188,13 @@ class CruiseShipRepositoryTest {
         );
         assertThat(searchByOperator.getTotalElements()).isEqualTo(1);
         assertThat(searchByOperator.getContent().get(0).getName()).isEqualTo("Ocean Majestic");
+
+        Page<CruiseShip> searchWithNullKeyword = shipRepository.searchShips(
+                null,
+                null,
+                true,
+                PageRequest.of(0, 10)
+        );
+        assertThat(searchWithNullKeyword.getTotalElements()).isEqualTo(2);
     }
 }

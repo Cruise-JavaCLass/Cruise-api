@@ -40,10 +40,10 @@ public interface CruiseTourRepository extends JpaRepository<CruiseTour, Long> {
             "(:activeOnly IS NULL OR t.active = :activeOnly) AND " +
             "(:status IS NULL OR t.status = :status) AND " +
             "(:shipId IS NULL OR (s IS NOT NULL AND s.id = :shipId)) AND " +
-            "(:keyword IS NULL OR LOWER(t.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-            "OR LOWER(t.code) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-            "OR LOWER(t.departurePort) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-            "OR LOWER(t.destinationPort) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+            "(:keyword IS NULL OR LOWER(t.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) " +
+            "OR LOWER(t.code) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) " +
+            "OR LOWER(t.departurePort) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) " +
+            "OR LOWER(t.destinationPort) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')))")
     Page<CruiseTour> searchTours(
             @Param("keyword") String keyword,
             @Param("status") TourStatus status,
