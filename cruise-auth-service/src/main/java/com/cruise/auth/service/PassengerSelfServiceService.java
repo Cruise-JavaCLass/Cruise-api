@@ -89,24 +89,34 @@ public class PassengerSelfServiceService {
      */
     public PassengerSelfFolioResponse getMyFolio(VerifiedCaller caller) {
         UserPassengerBinding binding = resolveVerifiedBinding(caller);
+        return getFolioByPassengerId(binding.getPassengerId());
+    }
+
+    /**
+     * Lấy thông tin Folio theo passengerId (cho nhân viên được ủy quyền hoặc chính hành khách sở hữu - KAN-723).
+     */
+    public PassengerSelfFolioResponse getFolioByPassengerId(Long passengerId) {
+        UserPassengerBinding binding = bindingRepository.findByPassengerId(passengerId).orElse(null);
+        String cabinNumber = binding != null ? binding.getCabinNumber() : "CAB-" + passengerId;
+        String bookingReference = binding != null ? binding.getBookingReference() : "CRZ-PASS-" + passengerId;
 
         List<FolioLineItemDto> transactions = List.of(
                 FolioLineItemDto.builder()
-                        .transactionId("TXN-" + binding.getPassengerId() + "-01")
+                        .transactionId("TXN-" + passengerId + "-01")
                         .description("Welcome Cocktail & Dining")
                         .amount(new BigDecimal("120.00"))
                         .category("BEVERAGE_DINING")
                         .postedAt(LocalDateTime.now().minusDays(2))
                         .build(),
                 FolioLineItemDto.builder()
-                        .transactionId("TXN-" + binding.getPassengerId() + "-02")
+                        .transactionId("TXN-" + passengerId + "-02")
                         .description("Ocean Spa Treatment")
                         .amount(new BigDecimal("185.50"))
                         .category("SPA_WELLNESS")
                         .postedAt(LocalDateTime.now().minusDays(1))
                         .build(),
                 FolioLineItemDto.builder()
-                        .transactionId("TXN-" + binding.getPassengerId() + "-03")
+                        .transactionId("TXN-" + passengerId + "-03")
                         .description("Boutique Souvenir Shop")
                         .amount(new BigDecimal("40.00"))
                         .category("RETAIL")
@@ -119,9 +129,9 @@ public class PassengerSelfServiceService {
         BigDecimal remainingBalance = creditLimit.subtract(totalCharges);
 
         return PassengerSelfFolioResponse.builder()
-                .passengerId(binding.getPassengerId())
-                .cabinNumber(binding.getCabinNumber())
-                .bookingReference(binding.getBookingReference())
+                .passengerId(passengerId)
+                .cabinNumber(cabinNumber)
+                .bookingReference(bookingReference)
                 .currency("USD")
                 .creditLimit(creditLimit)
                 .totalCharges(totalCharges)
